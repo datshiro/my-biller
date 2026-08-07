@@ -1,5 +1,7 @@
 # my-biller
 
+**<https://my-biller.pages.dev>**
+
 PWA bán hàng cho quán nhỏ: lên đơn → xuất **phiếu bán hàng** gửi khách qua Zalo → tự ra doanh thu,
 chi phí, công nợ, báo cáo. Chạy hoàn toàn trên máy người bán, **không backend, không đăng nhập, không
 mạng vẫn bán được**. Tiếng Việt, VND.
