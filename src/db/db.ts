@@ -1,0 +1,70 @@
+import Dexie, { type Table } from 'dexie'
+import type {
+  Customer,
+  Expense,
+  ExpenseCategory,
+  Item,
+  ItemGroup,
+  Order,
+  OrderLine,
+  Payment,
+  SettingRow,
+} from '@/domain/schema'
+
+type Stamped = { createdAt?: number; updatedAt?: number }
+
+/**
+ * `createdAt` chỉ được đặt khi bản ghi chưa có — nhập file sao lưu phải giữ nguyên mốc thời gian gốc,
+ * không được đóng dấu ngày nhập lên toàn bộ dữ liệu cũ.
+ */
+function stampTimestamps<T extends Stamped>(table: Table<T, number>): void {
+  table.hook('creating', (_primKey, obj) => {
+    const now = Date.now()
+    const row = obj as Stamped
+    row.createdAt ??= now
+    row.updatedAt ??= now
+  })
+
+  table.hook('updating', (modifications) =>
+    'updatedAt' in (modifications as object) ? undefined : { updatedAt: Date.now() },
+  )
+}
+
+export class BillerDb extends Dexie {
+  settings!: Table<SettingRow, string>
+  itemGroups!: Table<ItemGroup, number>
+  items!: Table<Item, number>
+  customers!: Table<Customer, number>
+  orders!: Table<Order, number>
+  orderLines!: Table<OrderLine, number>
+  payments!: Table<Payment, number>
+  expenseCategories!: Table<ExpenseCategory, number>
+  expenses!: Table<Expense, number>
+
+  constructor(name = 'my-biller') {
+    super(name)
+
+    // KHÔNG BAO GIỜ sửa version(1). Đổi schema về sau phải thêm version(n+1).stores(...).upgrade(...)
+    // vì app không có backend để migrate hộ — dữ liệu nằm trên máy người dùng.
+    this.version(1).stores({
+      settings: 'key',
+      itemGroups: '++id, name, sortOrder',
+      items: '++id, name, groupId, isActive',
+      customers: '++id, name, phone',
+      orders: '++id, &code, customerId, soldAt, status',
+      orderLines: '++id, orderId, itemId',
+      payments: '++id, orderId, customerId, paidAt',
+      expenseCategories: '++id, name',
+      expenses: '++id, categoryId, spentAt',
+    })
+
+    stampTimestamps(this.itemGroups)
+    stampTimestamps(this.items)
+    stampTimestamps(this.customers)
+    stampTimestamps(this.orders)
+    stampTimestamps(this.expenseCategories)
+    stampTimestamps(this.expenses)
+  }
+}
+
+export const db = new BillerDb()

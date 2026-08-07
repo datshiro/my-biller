@@ -1,0 +1,3 @@
+# SPA: mọi đường dẫn con đều do react-router xử lý. Thiếu dòng này thì mở thẳng
+# /bao-cao hay bấm F5 trên bản deploy sẽ ra 404 của Cloudflare.
+/*  /index.html  200

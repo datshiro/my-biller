@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.local
+.DS_Store
+.vite/
+test-results/
+playwright-report/
+.playwright-mcp/
+
+# working artifacts, never committed
+plans/
+journals/
+
+# ảnh chụp lúc kiểm thử — wireframe thật là docs/wireframe/index.html
+docs/wireframes/

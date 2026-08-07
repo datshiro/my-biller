@@ -1,0 +1,52 @@
+/* Bản in dùng chính DOM của phiếu — trình duyệt tự render nên dấu tiếng Việt luôn đúng và
+   không cần thư viện PDF nào (lý do đầy đủ ở docs/tech-stack.md).
+
+   Màn phiếu nằm NGOÀI AppLayout nên ở đây chỉ phải dọn đúng những phần tử của chính nó;
+   không có bottom nav hay vùng cuộn của app chen vào bản in. */
+
+@media print {
+  html,
+  body {
+    height: auto;
+    background: #fff;
+  }
+
+  /* Vùng cuộn của màn phiếu: bỏ giới hạn chiều cao, nếu không phiếu dài sẽ bị cắt ở trang 1. */
+  .receipt-screen,
+  .receipt-scroll {
+    display: block;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Trên màn hình phiếu nằm trong một cái khung có viền cho ra dáng tờ giấy. In ra giấy thật thì
+     khung đó thừa — và nếu để nguyên `w-fit` của nó thì nội dung tràn ra ngoài viền. */
+  .receipt-frame {
+    width: auto;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* Phiếu dài chia thành nhiều trang: mỗi trang ra một tờ giấy riêng, khớp với các tấm ảnh gửi khách. */
+  .receipt-frame + .receipt-frame {
+    break-before: page;
+  }
+
+  /* Bề ngang 360px là để ảnh PNG ổn định; in ra giấy thì cứ trải hết khổ.
+     Giữ nguyên padding của phiếu — bỏ đi thì chữ dính sát mép. */
+  .receipt-view {
+    width: auto !important;
+    max-width: none;
+    margin: 0;
+  }
+
+  @page {
+    margin: 8mm;
+  }
+}

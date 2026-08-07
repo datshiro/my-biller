@@ -1,0 +1,3 @@
+# Sổ bán hàng của một người, không phải trang web công khai — đừng lập chỉ mục.
+User-agent: *
+Disallow: /
