@@ -1,0 +1,540 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-biller đã được deploy thế nào</title>
+
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --panel: #ffffff;
+    --panel-2: #f3f1ec;
+    --ink: #16130f;
+    --muted: #6b6459;
+    --line: #ddd8ce;
+    --accent: #0B7A42;
+    --accent-soft: #e6f2ea;
+    --warn: #9a3412;
+    --warn-soft: #fdf0e7;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14120f;
+      --panel: #1c1a16;
+      --panel-2: #242019;
+      --ink: #ece7de;
+      --muted: #a49b8c;
+      --line: #353027;
+      --accent: #4ade80;
+      --accent-soft: #16281d;
+      --warn: #fbbf24;
+      --warn-soft: #2a2113;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14120f; --panel: #1c1a16; --panel-2: #242019; --ink: #ece7de;
+    --muted: #a49b8c; --line: #353027; --accent: #4ade80; --accent-soft: #16281d;
+    --warn: #fbbf24; --warn-soft: #2a2113;
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfaf8; --panel: #ffffff; --panel-2: #f3f1ec; --ink: #16130f;
+    --muted: #6b6459; --line: #ddd8ce; --accent: #0B7A42; --accent-soft: #e6f2ea;
+    --warn: #9a3412; --warn-soft: #fdf0e7;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 96px; }
+
+  header { border-bottom: 3px solid var(--accent); padding-bottom: 20px; margin-bottom: 36px; }
+  h1 { font-size: clamp(26px, 6vw, 38px); line-height: 1.15; margin: 0 0 10px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0; font-size: 15px; }
+
+  h2 {
+    font-size: clamp(19px, 4.4vw, 24px); margin: 52px 0 14px; letter-spacing: -0.01em;
+    padding-left: 12px; border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 17px; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 7px; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: var(--mono); font-size: 0.88em;
+    background: var(--panel-2); padding: 2px 6px; border-radius: 4px;
+    border: 1px solid var(--line); word-break: break-word;
+  }
+  pre {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; margin: 0 0 16px;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 13px; line-height: 1.6; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; margin: 0 0 18px;
+  }
+  .note { background: var(--accent-soft); border-color: var(--accent); }
+  .warn { background: var(--warn-soft); border-color: var(--warn); }
+  .warn strong, .warn h3 { color: var(--warn); }
+  .card > :last-child { margin-bottom: 0; }
+  .card h3 { margin-top: 0; }
+
+  .tbl { overflow-x: auto; margin: 0 0 18px; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--panel-2); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  .fig { margin: 0 0 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .fig svg { display: block; min-width: 460px; width: 100%; height: auto; }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+
+  .yn { font-weight: 700; color: var(--accent); }
+  .yn-no { font-weight: 700; color: var(--warn); }
+
+  .qa { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 22px; }
+  .qa:first-of-type { border-top: 0; padding-top: 0; }
+  .q { font-weight: 600; font-size: 17px; margin-bottom: 8px; }
+
+  .toc { background: var(--panel-2); border-radius: 10px; padding: 16px 20px; margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <h1>my-biller đã được deploy thế nào</h1>
+  <p class="sub">
+    Giải thích cho người lần đầu dùng Wrangler và Cloudflare Pages · 8/8/2026 ·
+    app đang chạy tại <a href="https://an-quynh.pages.dev">an-quynh.pages.dev</a>
+  </p>
+</header>
+
+<div class="toc">
+  <ol>
+    <li><a href="#tomtat">Tóm tắt 30 giây</a></li>
+    <li><a href="#sodo">Toàn cảnh: file đi từ máy anh/chị tới điện thoại khách</a></li>
+    <li><a href="#khainiem">Bốn khái niệm dễ nhầm (chính chỗ vừa nhầm hôm nay)</a></li>
+    <li><a href="#lenh">Từng lệnh đã chạy làm gì</a></li>
+    <li><a href="#request">Đường đi của một lần mở app</a></li>
+    <li><a href="#tienbac">Vì sao không tốn tiền</a></li>
+    <li><a href="#hanche">Hạn chế của cách này</a></li>
+    <li><a href="#tenmien">Tên miền: vĩnh viễn không? đổi được không?</a></li>
+    <li><a href="#lenhhaydung">Bảng lệnh hay dùng</a></li>
+  </ol>
+</div>
+
+<h2 id="tomtat">1. Tóm tắt 30 giây</h2>
+
+<p>
+  App này <strong>không có máy chủ</strong>. Toàn bộ nó chỉ là 17 file tĩnh — một file HTML, một file
+  JavaScript, một file CSS, mấy cái icon và font. "Deploy" nghĩa là copy 17 file đó lên mạng lưới máy
+  chủ của Cloudflare rải khắp thế giới, rồi ai mở link cũng tải được.
+</p>
+
+<p>
+  Không có cơ sở dữ liệu nào trên mạng. Dữ liệu bán hàng nằm trong <strong>IndexedDB</strong> — một kho
+  lưu trữ ngay bên trong trình duyệt trên máy người bán. Cloudflare không nhìn thấy, không giữ, không
+  sao lưu hộ.
+</p>
+
+<div class="card note">
+  <p style="margin:0">
+    Hệ quả quan trọng nhất của kiến trúc này: <strong>đơn hàng của anh/chị chưa bao giờ rời khỏi cái
+    điện thoại</strong>. Vừa là điểm mạnh (riêng tư tuyệt đối, mất mạng vẫn bán, không tốn phí server),
+    vừa là điểm yếu (mất máy là mất sạch, trừ khi có file sao lưu).
+  </p>
+</div>
+
+<h2 id="sodo">2. Toàn cảnh</h2>
+
+<figure class="fig">
+<svg viewBox="0 0 720 260" role="img" aria-label="Sơ đồ: mã nguồn được build thành file tĩnh, wrangler đẩy lên mạng lưới Cloudflare, điện thoại tải về từ máy chủ gần nhất">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.85">
+    <rect x="8"   y="70" width="150" height="90" rx="8"/>
+    <rect x="212" y="70" width="150" height="90" rx="8"/>
+    <rect x="416" y="40" width="150" height="150" rx="8"/>
+    <rect x="620" y="70" width="92"  height="90" rx="8"/>
+  </g>
+  <g font-size="13" font-weight="700" fill="currentColor" text-anchor="middle">
+    <text x="83"  y="96">Máy anh/chị</text>
+    <text x="287" y="96">dist/ — 17 file</text>
+    <text x="491" y="66">Cloudflare</text>
+    <text x="666" y="96">Điện thoại</text>
+  </g>
+  <g font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">
+    <text x="83"  y="118">mã nguồn React</text>
+    <text x="83"  y="134">src/ · 159 file</text>
+    <text x="287" y="118">index.html, .js, .css</text>
+    <text x="287" y="134">icon, font, sw.js</text>
+    <text x="491" y="86">~330 thành phố</text>
+    <text x="491" y="112">Hà Nội · TP.HCM</text>
+    <text x="491" y="130">Singapore · Tokyo…</text>
+    <text x="491" y="156">mỗi nơi giữ 1 bản</text>
+    <text x="666" y="118">tải bản gần</text>
+    <text x="666" y="134">nhất về máy</text>
+  </g>
+  <g stroke="currentColor" stroke-width="1.6" marker-end="url(#ar)" fill="none">
+    <path d="M162,115 L206,115"/>
+    <path d="M366,115 L410,115"/>
+    <path d="M570,115 L614,115"/>
+  </g>
+  <g font-size="11" font-family="ui-monospace, monospace" fill="currentColor" text-anchor="middle" opacity="0.9">
+    <text x="184" y="106">npm run</text>
+    <text x="184" y="140">build</text>
+    <text x="388" y="106">wrangler</text>
+    <text x="388" y="140">deploy</text>
+    <text x="592" y="106">HTTPS</text>
+    <text x="592" y="140">1 lần</text>
+  </g>
+  <text x="360" y="228" font-size="12" fill="currentColor" text-anchor="middle" opacity="0.75">
+    Sau lần tải đầu, service worker giữ 14 file trong máy — từ đó mở app không cần chạm tới Cloudflare nữa.
+  </text>
+</svg>
+<figcaption>Ba mũi tên = ba bước. Chỉ mũi tên giữa mới là "deploy".</figcaption>
+</figure>
+
+<h2 id="khainiem">3. Bốn khái niệm dễ nhầm</h2>
+
+<p>
+  Hôm nay đã dính đúng cái bẫy này, nên đọc kỹ phần này nhất. Bốn thứ dưới đây <strong>độc lập với
+  nhau</strong>, đổi cái này không kéo theo cái kia:
+</p>
+
+<div class="tbl">
+<table>
+  <thead>
+    <tr><th>Khái niệm</th><th>Của app này</th><th>Là gì</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Account</strong></td>
+      <td><code>850dd5bc…</code></td>
+      <td>Tài khoản Cloudflare. Mọi thứ nằm trong đây.</td>
+    </tr>
+    <tr>
+      <td><strong>Project</strong></td>
+      <td><code>an-quynh</code></td>
+      <td>Cái "thư mục" chứa các bản deploy. Đây là tên dùng trong lệnh <code>--project-name</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Deployment</strong></td>
+      <td><code>c649c6c3</code>…</td>
+      <td>Một lần đẩy file lên. Mỗi lần deploy đẻ ra một bản mới, bản cũ vẫn nằm đó.</td>
+    </tr>
+    <tr>
+      <td><strong>Subdomain</strong></td>
+      <td><code>an-quynh.pages.dev</code></td>
+      <td>Địa chỉ công khai. <strong>Ghim từ lúc tạo project, không đổi theo tên project.</strong></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="card warn">
+  <h3>Bằng chứng thật, xảy ra ngay hôm nay</h3>
+  <p>
+    Project ban đầu tạo tên <code>my-biller</code> nên được subdomain
+    <code>my-biller.pages.dev</code>. Sau đó đổi tên project trong dashboard thành
+    <code>an-quynh</code>, kỳ vọng địa chỉ đổi theo. Đo được:
+  </p>
+  <ul>
+    <li><code>my-biller.pages.dev</code> → <strong>vẫn chạy</strong>, HTTP 200</li>
+    <li><code>an-quynh.pages.dev</code> → <strong>không có cả bản ghi DNS</strong></li>
+    <li><code>--project-name my-biller</code> → <em>Project not found</em></li>
+    <li><code>--project-name an-quynh</code> → deploy được, nhưng vẫn ra <code>my-biller.pages.dev</code></li>
+  </ul>
+  <p>
+    Nói cách khác: <strong>đổi tên project chỉ đổi cái nhãn để quản lý, không đổi địa chỉ web.</strong>
+    Địa chỉ được cấp <em>lúc tạo</em> và ở lại đó vĩnh viễn.
+  </p>
+  <p style="margin-bottom:0">
+    Cách gỡ đã dùng: đổi tên project cũ sang <code>my-biller-cu</code> để nhả tên
+    <code>an-quynh</code> ra, rồi <em>tạo project mới</em> đúng tên <code>an-quynh</code> — lúc này mới
+    được cấp <code>an-quynh.pages.dev</code>. Xem chi tiết ở phần 8.
+  </p>
+</div>
+
+<h2 id="lenh">4. Từng lệnh đã chạy làm gì</h2>
+
+<h3>Wrangler là gì</h3>
+<p>
+  <code>wrangler</code> là chương trình dòng lệnh chính thức của Cloudflare. Nó là <em>cái điều khiển
+  từ xa</em> — thay vì vào trang web bấm chuột, anh/chị gõ lệnh. Nó không chạy nền, không cài dịch vụ
+  gì vào máy; gọi thì nó gọi API của Cloudflare rồi thoát.
+</p>
+
+<pre><code>npm run build</code></pre>
+<p>
+  Không liên quan gì tới Cloudflare. Lệnh này lấy 159 file mã nguồn trong <code>src/</code>, kiểm kiểu
+  dữ liệu, nén và gộp lại thành 17 file trong thư mục <code>dist/</code>. Chỉ <code>dist/</code> mới
+  được đưa lên mạng.
+</p>
+
+<pre><code>npx wrangler login</code></pre>
+<p>
+  Mở trình duyệt, đăng nhập Cloudflare, rồi Cloudflare cấp cho máy này một cái "chìa" lưu ở
+  <code>~/.wrangler</code>. Chỉ làm một lần. Chìa này cho phép tạo/xoá project nên đừng đưa máy cho
+  người lạ dùng.
+</p>
+
+<pre><code>npx wrangler pages project create an-quynh --production-branch main</code></pre>
+<p>
+  Tạo cái "thư mục" trên Cloudflare và <strong>giành lấy subdomain</strong>
+  <code>an-quynh.pages.dev</code>. Thiếu bước này thì lệnh deploy báo
+  <code>Project not found [code: 8000007]</code> — vì ở chế độ không tương tác Wrangler không tự tạo.
+  Đây cũng là <em>lần duy nhất</em> quyết định được địa chỉ web; sau đó không sửa được nữa.
+</p>
+
+<pre><code>npx wrangler pages deploy dist --project-name an-quynh --branch main</code></pre>
+<p>
+  Đọc từng file trong <code>dist/</code>, tính mã băm, hỏi Cloudflare "đã có file nào trong số này
+  chưa", rồi chỉ tải lên phần còn thiếu. Lần đầu upload 17 file mất 2 giây; lần thứ hai upload
+  <em>0 file</em> vì cả 17 đã có sẵn, chỉ mất 0,5 giây.
+</p>
+<p>
+  Project vừa tạo xong thì DNS mất khoảng nửa phút mới phân giải, và vài lượt truy cập đầu còn trả
+  <strong>522</strong>. Đó là mạng lưới Cloudflare chưa kịp lan bản ghi đi khắp nơi, không phải cấu
+  hình sai — đo lại sau đó thì 50/50 lượt đều 200.
+</p>
+
+<h2 id="request">5. Đường đi của một lần mở app</h2>
+
+<figure class="fig">
+<svg viewBox="0 0 720 300" role="img" aria-label="So sánh lần mở đầu tiên qua mạng và các lần sau qua service worker">
+  <g font-size="13" font-weight="700" fill="currentColor">
+    <text x="10" y="26">Lần đầu — có mạng</text>
+    <text x="10" y="176">Lần sau — kể cả máy bay</text>
+  </g>
+  <g fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.85">
+    <rect x="10"  y="44" width="128" height="56" rx="7"/>
+    <rect x="196" y="44" width="150" height="56" rx="7"/>
+    <rect x="404" y="44" width="150" height="56" rx="7"/>
+    <rect x="10"  y="194" width="128" height="56" rx="7"/>
+    <rect x="196" y="194" width="150" height="56" rx="7"/>
+  </g>
+  <g font-size="12" fill="currentColor" text-anchor="middle">
+    <text x="74"  y="70">Điện thoại</text><text x="74" y="88" font-size="10.5" opacity="0.75">mở link</text>
+    <text x="271" y="70">Edge gần nhất</text><text x="271" y="88" font-size="10.5" opacity="0.75">Hà Nội / TP.HCM</text>
+    <text x="479" y="70">Trả 17 file</text><text x="479" y="88" font-size="10.5" opacity="0.75">+ cài service worker</text>
+    <text x="74"  y="220">Điện thoại</text><text x="74" y="238" font-size="10.5" opacity="0.75">mở từ icon</text>
+    <text x="271" y="220">Service worker</text><text x="271" y="238" font-size="10.5" opacity="0.75">14 file trong máy</text>
+  </g>
+  <g stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)" fill="none">
+    <path d="M142,72 L190,72"/>
+    <path d="M350,72 L398,72"/>
+    <path d="M142,222 L190,222"/>
+  </g>
+  <g stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.45" fill="none">
+    <path d="M350,222 L560,222"/>
+  </g>
+  <text x="470" y="216" font-size="11.5" fill="currentColor" text-anchor="middle" opacity="0.7">Không chạm tới Internet</text>
+  <text x="470" y="240" font-size="11.5" fill="currentColor" text-anchor="middle" opacity="0.7">IndexedDB đọc ngay trên máy</text>
+  <text x="10" y="130" font-size="11.5" fill="currentColor" opacity="0.75">Khoảng nửa giây. Đo được: LCP 464 ms dưới mạng 4G chậm và CPU bị bóp 4 lần.</text>
+  <text x="10" y="282" font-size="11.5" fill="currentColor" opacity="0.75">Đã kiểm trên bản deploy thật: chặn hết mạng, tải lại /bao-cao, app vẫn hiện đủ.</text>
+</svg>
+</figure>
+
+<p>
+  Cái khiến app chạy offline là <strong>service worker</strong> (<code>sw.js</code>) — một đoạn mã nhỏ
+  trình duyệt giữ lại và chạy <em>trước</em> mỗi lần app xin file. Nó đã cất sẵn 14 file trong máy, nên
+  khi app xin thì nó đưa từ kho nội bộ chứ không hỏi mạng.
+</p>
+<p>
+  App cố ý <strong>không tự cập nhật</strong>. Có bản mới thì nó hiện thanh hỏi, người dùng bấm mới tải
+  lại — vì tự reload giữa lúc đang gõ dở một đơn là mất đơn.
+</p>
+
+<h2 id="tienbac">6. Vì sao không tốn tiền</h2>
+
+<p>
+  Dịch vụ tính tiền khi có thứ gì đó <em>chạy liên tục</em> hoặc <em>tính toán theo yêu cầu</em>: máy
+  chủ bật 24/7, cơ sở dữ liệu, hàm serverless. App này không có cái nào.
+</p>
+<p>
+  Cloudflare phát file tĩnh <strong>không giới hạn băng thông</strong> ở gói miễn phí. Người dùng thứ
+  nhất hay thứ mười nghìn thì chi phí vẫn bằng nhau — vì mỗi máy tự lo phần dữ liệu của mình. Các hạn
+  mức khác đều cách app này rất xa: giới hạn 25 MB một file so với file lớn nhất 542 KB; 20.000 file
+  một lần deploy so với 17 file.
+</p>
+
+<h2 id="hanche">7. Hạn chế của cách này</h2>
+
+<div class="tbl">
+<table>
+  <thead><tr><th>Hạn chế</th><th>Vì sao</th><th>Sống chung thế nào</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Không đồng bộ giữa các máy</td>
+      <td>Không có server để đồng bộ qua</td>
+      <td>Sao lưu ra file ở máy cũ → nhập ở máy mới</td>
+    </tr>
+    <tr>
+      <td>Mất máy là mất dữ liệu</td>
+      <td>Bản duy nhất nằm trong máy</td>
+      <td>File sao lưu là lớp bảo vệ thật sự duy nhất</td>
+    </tr>
+    <tr>
+      <td>iOS có thể tự xoá dữ liệu web app không dùng tới sau ~7 ngày</td>
+      <td>Chính sách dọn dẹp của Safari</td>
+      <td>Bấm "ghim bộ nhớ" trong Cài đặt, và sao lưu đều</td>
+    </tr>
+    <tr>
+      <td>Ai có link cũng mở được</td>
+      <td>Không có tài khoản, không phân quyền</td>
+      <td>Không nghiêm trọng: họ mở ra là app trắng, dữ liệu của anh/chị không nằm trên mạng</td>
+    </tr>
+    <tr>
+      <td>Link xem trước từng bản deploy là công khai vĩnh viễn</td>
+      <td>Mỗi lần deploy đẻ một URL dạng <code>c649c6c3.an-quynh.pages.dev</code></td>
+      <td>Không sao vì trong đó không có dữ liệu, chỉ là mã app</td>
+    </tr>
+    <tr>
+      <td><code>pages.dev</code> là hạng "web miễn phí"</td>
+      <td>Cloudflare xếp nó cho dự án cá nhân, không cam kết cho việc kinh doanh trọng yếu</td>
+      <td>Nếu app trở thành sống còn thì gắn tên miền riêng</td>
+    </tr>
+    <tr>
+      <td>Cloudflare đang hướng dự án mới sang Workers</td>
+      <td>Pages vẫn chạy, nhưng tài liệu chính thức đã có hướng dẫn chuyển sang Workers</td>
+      <td>Chưa cần làm gì. Khi nào cần thì đổi vài dòng cấu hình, không phải viết lại app</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="tenmien">8. Tên miền</h2>
+
+<div class="qa">
+  <p class="q">Hỏi: <code>an-quynh.pages.dev</code> dùng được vĩnh viễn không?</p>
+  <p>
+    <span class="yn">Được</span>, chừng nào project còn tồn tại trong tài khoản Cloudflare. Không có
+    hạn dùng, không phải gia hạn, không phải trả tiền. Xoá project thì mất tên đó và người khác giành
+    được.
+  </p>
+  <p>
+    Một lưu ý thành thật: Cloudflare xếp <code>pages.dev</code> vào hạng dành cho dự án cá nhân, không
+    phải cho việc kinh doanh trọng yếu. Bán hàng thật lâu dài thì nên có tên miền riêng.
+  </p>
+</div>
+
+<div class="qa">
+  <p class="q">Hỏi: đổi <code>my-biller</code> thành tên tự chọn được không?</p>
+  <p>
+    <span class="yn">Được</span> — đã làm xong, app giờ chạy ở <code>an-quynh.pages.dev</code>. Nhưng
+    <strong>không phải bằng cách đổi tên project</strong>. Quy trình đúng, đã chạy thật:
+  </p>
+  <ol>
+    <li>
+      Đổi tên project <em>đang giữ</em> tên mình muốn sang tên khác (dashboard → Settings). Ở đây là
+      đổi <code>an-quynh</code> → <code>my-biller-cu</code> để nhả chữ <code>an-quynh</code> ra.
+      Wrangler không đổi tên được, chỉ dashboard làm được.
+    </li>
+    <li><code>npx wrangler pages project create an-quynh --production-branch main</code> — lúc này mới giành được <code>an-quynh.pages.dev</code></li>
+    <li><code>npx wrangler pages deploy dist --project-name an-quynh --branch main</code></li>
+    <li>Kiểm địa chỉ mới chạy đủ (route sâu, manifest, service worker, offline) <strong>rồi mới</strong> xoá project cũ</li>
+  </ol>
+  <p>
+    Tên là <strong>kho chung toàn cầu</strong>, ai đăng ký trước được trước. Hai mã lỗi khác nhau, phân
+    biệt cho khỏi mất công:
+  </p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Mã</th><th>Thông báo</th><th>Nghĩa</th></tr></thead>
+    <tbody>
+      <tr><td><code>8000002</code></td><td>A project with this name already exists</td><td>Trùng tên project <strong>trong tài khoản của mình</strong> — tự gỡ được</td></tr>
+      <tr><td><code>8000029</code></td><td>Subdomain is unavailable</td><td>Tên bị người khác <strong>trên toàn cầu</strong> chiếm — phải chọn tên khác</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-bottom:0">
+    Thử tạo project tên <code>test</code> thì trúng <code>8000029</code> — những từ phổ thông đã bị
+    chiếm từ lâu. Chọn tên đặc trưng.
+  </p>
+</div>
+
+<div class="card warn">
+  <h3>Cảnh báo trước khi đổi địa chỉ</h3>
+  <p>
+    Trình duyệt gắn IndexedDB <strong>theo từng địa chỉ web</strong>. <code>my-biller.pages.dev</code>
+    và <code>an-quynh.pages.dev</code> là hai địa chỉ khác nhau, nên với trình duyệt đó là
+    <strong>hai kho dữ liệu hoàn toàn tách biệt</strong>. Đổi địa chỉ mà không làm gì thêm thì mở link
+    mới lên sẽ thấy app trắng trơn, mọi đơn hàng cũ "biến mất" (thật ra vẫn nằm ở địa chỉ cũ).
+  </p>
+  <p>
+    Lần đổi hôm nay <strong>không mất gì</strong>, vì app chưa cài lên điện thoại nào nên chưa có dữ
+    liệu thật. Đây chính là lý do nên chốt địa chỉ sớm, trước khi bắt đầu bán.
+  </p>
+  <p style="margin-bottom:0">
+    Đúng quy trình: ở địa chỉ cũ vào <strong>Thêm → Cài đặt → Sao lưu ra file</strong>, rồi mở địa chỉ
+    mới và <strong>Nhập từ file</strong>. Xong xuôi mới gỡ app cũ khỏi màn hình chính.
+    Lý do tính năng sao lưu tồn tại chính là những lúc thế này.
+  </p>
+</div>
+
+<div class="qa">
+  <p class="q">Hỏi: dùng tên miền riêng được không?</p>
+  <p>
+    <span class="yn">Được</span>, và gắn vào Cloudflare Pages thì <strong>miễn phí</strong> — chỉ tốn
+    tiền mua tên miền, khoảng 250–400k một năm tuỳ đuôi. Mua ở đâu cũng được, rồi trỏ nameserver về
+    Cloudflare, vào project → Custom domains → thêm tên miền. Chứng chỉ HTTPS Cloudflare tự cấp.
+  </p>
+  <p style="margin-bottom:0">
+    Vẫn áp dụng cảnh báo ở trên: đổi sang tên miền riêng cũng là đổi địa chỉ → phải sao lưu và nhập
+    lại. Nếu đã tính dùng tên miền riêng thì <strong>làm sớm</strong>, lúc còn ít dữ liệu.
+  </p>
+</div>
+
+<h2 id="lenhhaydung">9. Bảng lệnh hay dùng</h2>
+
+<div class="card note">
+  <p style="margin:0">
+    Tên project và địa chỉ web bây giờ khớp nhau: <code>an-quynh</code> →
+    <code>an-quynh.pages.dev</code>. Project cũ <code>my-biller-cu</code> vẫn còn và vẫn phục vụ
+    <code>my-biller.pages.dev</code> cho tới khi xoá.
+  </p>
+</div>
+
+<pre><code># Cập nhật app sau khi sửa mã
+npm run build
+npx wrangler pages deploy dist --project-name an-quynh --branch main
+
+# Xem có những project nào
+npx wrangler pages project list
+
+# Xem lịch sử các bản đã deploy
+npx wrangler pages deployment list --project-name an-quynh
+
+# Xem đang đăng nhập bằng tài khoản nào
+npx wrangler whoami
+
+# Xoá project cũ khi đã chắc chắn không cần nữa
+npx wrangler pages project delete my-biller-cu</code></pre>
+
+<p>
+  Lỡ deploy nhầm bản lỗi thì vào dashboard → project → Deployments → chọn bản cũ →
+  <em>Rollback to this deployment</em>. Các bản cũ không bị xoá nên quay lại được ngay, không cần build lại.
+</p>
+
+<footer>
+  Mọi con số và kết luận trong trang này đều đo trên bản deploy thật ngày 8/8/2026 chứ không trích
+  tài liệu — kể cả mấy chỗ làm hỏng việc rồi mới sửa. Xem thêm <code>docs/deploy.md</code> (các bước
+  deploy) và <code>README.md</code> (kiến trúc, bất biến dữ liệu).
+</footer>
+
+</div>
