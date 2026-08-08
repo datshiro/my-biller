@@ -215,7 +215,7 @@ describe('cleanPriceRows', () => {
     expect(dropped).toBe(2)
   })
 
-  it('trùng cặp thì giữ dòng cuối — bulkPut cũng để dòng sau đè dòng trước', () => {
+  it('trùng cặp thì giữ dòng cuối — để nguyên thì bulkPut ném ConstraintError, huỷ cả lượt nhập', () => {
     const { rows, dropped } = cleanPriceRows(withPrices([price(), price({ id: 2, unitPrice: 40_000 })]))
 
     expect(rows).toEqual([price({ id: 2, unitPrice: 40_000 })])

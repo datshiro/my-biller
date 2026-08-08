@@ -155,8 +155,11 @@ type PriceRow = BackupData['customerPrices'][number]
  * đụng một đồng nào. Vì vậy nó **không** nằm trong `validateBackupIntegrity`: chặn cả file vì nó thì
  * đường ra duy nhất là sửa tay JSON, cái giá đó lớn hơn nhiều lần cái hại.
  *
- * Bỏ dòng, đếm, rồi nói ra ở cửa xác nhận trước khi ghi đè. Trùng cặp thì giữ dòng cuối — `bulkPut`
- * cũng để dòng sau đè dòng trước.
+ * Bỏ dòng, đếm, rồi nói ra ở cửa xác nhận trước khi ghi đè.
+ *
+ * Trùng cặp thì giữ dòng cuối. Đây **không** phải chuyện thẩm mỹ: hai dòng khác `id` mà cùng cặp
+ * khách–món sẽ đụng index unique `&[customerId+itemId]`, và `bulkPut` ném `ConstraintError` — huỷ cả
+ * lượt nhập, không riêng dòng đó. Lọc ở đây là thứ giữ cho lần nhập còn sống.
  */
 export function cleanPriceRows(data: BackupData): { rows: PriceRow[]; dropped: number } {
   const items = idsOf(data.items)
@@ -178,5 +181,5 @@ export function cleanPriceRows(data: BackupData): { rows: PriceRow[]; dropped: n
 export function describeDroppedPrices(data: BackupData): string {
   const { dropped } = cleanPriceRows(data)
   if (dropped === 0) return ''
-  return ` Có ${dropped} dòng giá riêng ghi cho món hoặc khách không còn trong file — nhập vào sẽ bỏ những dòng đó.`
+  return ` Có ${dropped} dòng giá riêng sẽ bị bỏ khi nhập: món hoặc khách không còn trong file, hoặc trùng cặp khách–món.`
 }

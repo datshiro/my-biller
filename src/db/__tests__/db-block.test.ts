@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import Dexie from 'dexie'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BillerDb } from '../db'
 import {
@@ -78,27 +79,103 @@ describe('bản JS cũ gặp dữ liệu mới hơn', () => {
   })
 
   /**
-   * Ca này khoá một hành vi **trái với giả định ban đầu của plan**. Plan viết rằng bản JS cũ mở lại một
-   * DB đã lên version cao hơn sẽ ăn `VersionError` rồi màn trắng. Đo ra thì không: Dexie 4 mở kho mà
-   * không nêu version, nên nó mở được, đọc được và ghi được những bảng nó biết. (`fake-indexeddb` có
-   * thi hành `VersionError` khi nêu version thấp hơn — đã kiểm riêng — nên kết quả này là do Dexie,
-   * không phải do thư viện giả dễ dãi.)
+   * Bản cũ **mở được** kho mới — Dexie thử `open(name, verno*10)`, ăn `VersionError`, rồi tự mở lại
+   * không nêu version. Nó không sập; nó chạy tiếp mà mù một bảng. Đó mới là chỗ chết người, vì
+   * `collectBackup` và `replaceAllData` đều duyệt `db.tables`: file sao lưu thiếu hẳn bảng mới nhưng
+   * vẫn được đóng dấu "đã sao lưu", và lần nhập sau đó để bảng mới sống sót rồi bám sang bản ghi khác
+   * cùng số id. Ca dưới chứng minh cơ chế đó bằng một Dexie khai đúng schema cũ.
    *
-   * Hệ quả: phát hành `version(2)` **không** làm hỏng bản cũ ở lần mở lại. Đừng khôi phục lại
-   * `blockedBy` hay cửa chặn phát hành dựa trên giả định cũ mà không đo lại.
+   * Vì vậy `BillerDb` phải **chặn ngay ở `ready`**. Đừng đổi ca này thành "mở được thì thôi": lần đo
+   * trên Chrome thật cho thấy giá sỉ của một khách nhảy sang khách khác, món khác, không một lỗi nào.
    */
-  it('bản cũ mở lại DB đã lên version cao hơn vẫn đọc ghi được — không VersionError, không màn trắng', async () => {
-    const moi = new BillerDbBanSau('block-reopen')
+  it('gặp bảng lạ trong kho thì chặn ngay, không đọc không ghi', async () => {
+    const moi = new BillerDbBanSau('block-stale-guard')
     await moi.open()
-    await moi.items.add({ name: 'phở' } as never)
     moi.close()
 
-    const cu = new BillerDb('block-reopen')
-    await expect(cu.open()).resolves.toBeDefined()
-    await expect(cu.items.count()).resolves.toBe(1)
-    await expect(cu.items.add({ name: 'bún' } as never)).resolves.toBeGreaterThan(0)
-    expect(getDbBlock()).toBeNull()
+    const cu = new BillerDb('block-stale-guard')
+    await expect(cu.open()).rejects.toThrow(/cũ hơn dữ liệu trong máy/)
+    expect(getDbBlock()).toBe('stale-app')
 
     cu.close()
+  })
+
+  /**
+   * Đường đi thật của mọi máy đang có app: kho ở v1 (9 bảng), bản mới khai v2 (10 bảng). Cửa chặn mà
+   * bắt nhầm ca này là app chết ngay lần cập nhật đầu tiên, trên đúng những máy có dữ liệu thật.
+   */
+  it('kho v1 cũ gặp bản mới → nâng cấp bình thường, không chặn', async () => {
+    const cu = new Dexie('block-upgrade-path')
+    cu.version(1).stores({
+      settings: 'key',
+      itemGroups: '++id, name, sortOrder',
+      items: '++id, name, groupId, isActive',
+      customers: '++id, name, phone',
+      orders: '++id, &code, customerId, soldAt, status',
+      orderLines: '++id, orderId, itemId',
+      payments: '++id, orderId, customerId, paidAt',
+      expenseCategories: '++id, name',
+      expenses: '++id, categoryId, spentAt',
+    })
+    await cu.open()
+    await cu.table('items').add({ name: 'phở' })
+    cu.close()
+
+    const moi = new BillerDb('block-upgrade-path')
+    await expect(moi.open()).resolves.toBeDefined()
+    expect(getDbBlock()).toBeNull()
+    await expect(moi.items.count()).resolves.toBe(1)
+    await expect(moi.customerPrices.count()).resolves.toBe(0)
+
+    moi.close()
+  })
+
+  it('kho đúng bằng schema mình khai thì mở bình thường — cửa chặn không được bắt nhầm', async () => {
+    const local = new BillerDb('block-no-false-positive')
+    await expect(local.open()).resolves.toBeDefined()
+    await expect(local.items.add({ name: 'phở' } as never)).resolves.toBeGreaterThan(0)
+    expect(getDbBlock()).toBeNull()
+
+    local.close()
+  })
+
+  /**
+   * Cơ chế mất tiền, dựng lại bằng một Dexie khai đúng schema **trước khi có bảng giá**. Không có
+   * `BillerDb` ở đây: cửa chặn ở trên tồn tại chính vì hành vi dưới đây là hành vi mặc định.
+   */
+  it('không có cửa chặn thì dòng giá bám sang khách khác — đây là thứ đang được ngăn', async () => {
+    const V1 = { items: '++id, name', customers: '++id, name' }
+
+    const moi = new Dexie('block-money')
+    moi.version(1).stores(V1)
+    moi.version(2).stores({ customerPrices: '++id, &[customerId+itemId]' })
+    await moi.open()
+    await moi.table('customers').add({ id: 1, name: 'Chị Hoa' })
+    await moi.table('items').add({ id: 1, name: 'Phở' })
+    await moi.table('customerPrices').add({ id: 1, customerId: 1, itemId: 1, unitPrice: 45_000 })
+    moi.close()
+
+    const cu = new Dexie('block-money')
+    cu.version(1).stores(V1)
+    await cu.open()
+    expect(cu.tables.some((table) => table.name === 'customerPrices')).toBe(false)
+
+    // Đúng cái `replaceAllData` làm: xoá theo `db.tables` rồi nạp lại file — bảng giá không bị đụng.
+    await cu.transaction('rw', cu.tables, async () => {
+      await Promise.all(cu.tables.map((table) => table.clear()))
+      await cu.table('customers').bulkPut([{ id: 1, name: 'Anh Tuấn KHÁC HẲN' }])
+      await cu.table('items').bulkPut([{ id: 1, name: 'Bún KHÁC HẲN' }])
+    })
+    cu.close()
+
+    const kiem = new Dexie('block-money')
+    kiem.version(1).stores(V1)
+    kiem.version(2).stores({ customerPrices: '++id, &[customerId+itemId]' })
+    await kiem.open()
+    expect(await kiem.table('customerPrices').toArray()).toEqual([
+      { id: 1, customerId: 1, itemId: 1, unitPrice: 45_000 },
+    ])
+    expect((await kiem.table('customers').get(1))?.name).toBe('Anh Tuấn KHÁC HẲN')
+    kiem.close()
   })
 })

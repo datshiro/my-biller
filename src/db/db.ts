@@ -84,9 +84,34 @@ export class BillerDb extends Dexie {
       blockDb('stale-app')
     })
 
-    // Bản mới đang chờ nâng version mà một tab cũ còn giữ kết nối: lượt nâng cấp treo vô hạn (đo trên
-    // Chrome thật — trình duyệt không tự đóng hộ). Phải nói ra, không thì người bán ngồi nhìn màn đứng.
+    // Bản mới đang chờ nâng version mà một kết nối cũ không chịu đóng: lượt nâng cấp treo vô hạn (đo
+    // trên Chrome thật — 30s vẫn treo, trình duyệt không đóng hộ). Dexie tự đóng kết nối của nó nên
+    // hai bản app của chính mình không kẹt nhau; cái này là bảo hiểm cho một kết nối không phải Dexie
+    // hoặc một tab đã đơ. Phải nói ra, không thì người bán ngồi nhìn màn đứng.
     this.on('blocked', () => blockDb('other-tab'))
+
+    // Bản JS cũ **mở được** kho đã lên version cao hơn. Đo trên Chrome thật: Dexie thử
+    // `open(name, verno*10)`, ăn `VersionError`, rồi tự mở lại **không nêu version** và chạy tiếp với
+    // đúng những bảng nó khai — không thấy bảng nào sinh sau. Hậu quả không phải màn trắng mà là mất
+    // tiền trong im lặng:
+    //   · `collectBackup` gom theo `db.tables` → file sao lưu thiếu hẳn bảng mới, mà vẫn đóng dấu
+    //     `lastBackupAt` như một file lành;
+    //   · `replaceAllData` xoá cũng theo `db.tables` → bảng mới sống sót qua lần nhập, rồi dòng của nó
+    //     bám sang bản ghi khác vừa nhận đúng số id đó. Đo được: giá sỉ 45.000 của một khách nhảy sang
+    //     khách khác, món khác, không một lỗi nào.
+    // Nên thấy kho có bảng mình không biết thì dừng hẳn, đừng đọc đừng ghi.
+    //
+    // So theo **tên bảng thật**, không so số version: Dexie có đường sửa schema mở lại ở
+    // `idbdb.version + 1`, nên một bản v1 hoàn toàn hợp lệ có thể nằm ở version thật 11 — lấy
+    // `11 > 1*10` làm dấu hiệu là chặn nhầm chính mình.
+    this.on('ready', () => {
+      const daKhai = new Set(this.tables.map((table) => table.name))
+      const laHoac = [...this.backendDB().objectStoreNames].filter((name) => !daKhai.has(name))
+      if (laHoac.length === 0) return
+
+      blockDb('stale-app')
+      throw new Error(`App cũ hơn dữ liệu trong máy (chưa biết bảng: ${laHoac.join(', ')}).`)
+    })
   }
 }
 
