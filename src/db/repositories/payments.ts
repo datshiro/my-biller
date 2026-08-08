@@ -7,11 +7,14 @@ import { PaymentSchema, type Payment } from '@/domain/schema'
 export type PaymentInput = Pick<Payment, 'orderId' | 'amount' | 'method' | 'paidAt' | 'note'>
 
 /**
- * Chỉ file này được ghi bảng `payments`, và luôn cập nhật `orders.paidAmount` trong cùng transaction.
- * Bất biến: với mọi đơn, `paidAmount === Σ payments.amount`.
+ * Bất biến: với mọi đơn, `paidAmount === Σ payments.amount`. Ba chỗ ghi bảng `payments` — hàm này,
+ * `collectDebt` bên dưới, và `orders.ts` (lúc tạo đơn có trả tiền / lúc huỷ đơn) — đều ghi cùng
+ * transaction với `orders.paidAmount`, nên tìm chỗ ghi tiền thì phải ngó cả hai file.
  */
 export async function addOrderPayment(input: PaymentInput): Promise<number> {
   return db.transaction('rw', db.orders, db.payments, async () => {
+    if (input.amount <= 0) throw new Error('Số tiền thu phải lớn hơn 0.')
+
     const order = await db.orders.get(input.orderId)
     if (!order) throw new Error(`Không tìm thấy đơn #${input.orderId}`)
     if (order.status === 'void') throw new Error(`Đơn ${order.code} đã huỷ — không thu thêm được.`)
@@ -62,6 +65,9 @@ export type CollectDebtInput = Pick<Payment, 'customerId' | 'amount' | 'method' 
  */
 export async function collectDebt(input: CollectDebtInput): Promise<number[]> {
   return db.transaction('rw', db.orders, db.payments, async () => {
+    // Thu 0 đồng mà lặng lẽ trả `[]` thì màn hình báo "đã thu xong" trong khi không có gì được ghi.
+    if (input.amount <= 0) throw new Error('Số tiền thu phải lớn hơn 0.')
+
     const orders = await db.orders.where('customerId').equals(input.customerId).toArray()
 
     const open = orders.flatMap((order) =>

@@ -68,11 +68,13 @@ describe('addOrderPayment', () => {
     ).rejects.toThrow(/đã huỷ/)
   })
 
-  it('từ chối số tiền 0 hoặc âm', async () => {
+  it('từ chối số tiền 0 hoặc âm bằng câu người bán đọc được, không phải lỗi thô của zod', async () => {
     const { id } = await createOrder(draft(100_000))
-    await expect(
-      addOrderPayment({ orderId: id, amount: 0, method: 'cash', paidAt: soldAt, note: '' }),
-    ).rejects.toThrow()
+    for (const amount of [0, -1000]) {
+      await expect(
+        addOrderPayment({ orderId: id, amount, method: 'cash', paidAt: soldAt, note: '' }),
+      ).rejects.toThrow('Số tiền thu phải lớn hơn 0.')
+    }
   })
 })
 
