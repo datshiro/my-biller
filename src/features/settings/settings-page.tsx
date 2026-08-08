@@ -49,7 +49,11 @@ export function SettingsPage() {
     setError(null)
     setNotice(null)
     try {
-      setNotice(`Đã tải ${await exportBackup(Date.now())} về máy.`)
+      const { filename, importable, problem } = await exportBackup(Date.now())
+      if (importable) setNotice(`Đã tải ${filename} về máy.`)
+      // Nói thẳng là file này không dùng để phục hồi được. Im lặng ở đây thì người bán yên tâm với
+      // một file rỗng nghĩa, và chỉ biết vào đúng lúc mất dữ liệu.
+      else setError(`Đã tải ${filename} về máy, nhưng file này KHÔNG nhập lại được: ${problem} Sổ vẫn tính là chưa sao lưu.`)
     } catch (caught) {
       setError(message(caught))
     } finally {

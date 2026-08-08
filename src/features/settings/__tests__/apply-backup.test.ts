@@ -79,9 +79,13 @@ describe('exportBackup', () => {
     await sellOnCredit(110_000, 110_000)
     expect((await getAppState()).lastBackupAt).toBeNull()
 
-    const filename = await exportBackup(NOW)
+    const outcome = await exportBackup(NOW)
 
-    expect(filename).toBe('my-biller-backup-260807-1400.json')
+    expect(outcome).toEqual({
+      filename: 'my-biller-backup-260807-1400.json',
+      importable: true,
+      problem: null,
+    })
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
 })
@@ -124,10 +128,26 @@ describe('exportSafetyCopy', () => {
     expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
   })
 
-  it('nhưng sao lưu thường vẫn chạy được với bản ghi lạ — không khoá đường xuất dữ liệu', async () => {
+  it('sao lưu thường vẫn ra file với bản ghi lạ — không khoá đường xuất dữ liệu', async () => {
     await sellOnCredit(110_000, 110_000)
     await addOddItem()
 
-    await expect(exportBackup(NOW)).resolves.toBe('my-biller-backup-260807-1400.json')
+    const outcome = await exportBackup(NOW)
+
+    expect(outcome.filename).toBe('my-biller-backup-260807-1400.json')
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+  })
+
+  it('nhưng file lạ đó không được tính là đã sao lưu', async () => {
+    await sellOnCredit(110_000, 110_000)
+    await addOddItem()
+
+    const outcome = await exportBackup(NOW)
+
+    expect(outcome.importable).toBe(false)
+    expect(outcome.problem).toMatch(/data\.items\.\d+\.unitPrice/)
+    // Mốc sao lưu tắt banner nhắc. Đóng dấu nó ở đây là bảo người bán "xong rồi" cho một file mà
+    // `parseBackupFile` sẽ từ chối — họ chỉ biết vào đúng lúc cần phục hồi.
+    expect((await getAppState()).lastBackupAt).toBeNull()
   })
 })

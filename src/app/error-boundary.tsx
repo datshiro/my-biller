@@ -23,8 +23,13 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   private rescue = async (): Promise<void> => {
     this.setState({ rescuing: true, rescue: null })
     try {
-      const filename = await exportBackup(Date.now())
-      this.setState({ rescuing: false, rescue: `Đã tải ${filename}. Kiểm lại trong thư mục Tải về.` })
+      const { filename, importable, problem } = await exportBackup(Date.now())
+      this.setState({
+        rescuing: false,
+        rescue: importable
+          ? `Đã tải ${filename}. Kiểm lại trong thư mục Tải về.`
+          : `Đã tải ${filename}, nhưng file này KHÔNG nhập lại được: ${problem} Giữ file lại và sửa tay chỗ đó.`,
+      })
     } catch (caught) {
       this.setState({
         rescuing: false,

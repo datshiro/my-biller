@@ -26,9 +26,41 @@ async function writeBackup(at: number, text: string): Promise<string> {
   return filename
 }
 
-/** Xuất file và ghi mốc sao lưu. Trả tên file để màn hình nói rõ vừa tạo ra cái gì. */
-export async function exportBackup(at: number): Promise<string> {
-  return writeBackup(at, await backupText(at))
+/**
+ * Kết quả một lần sao lưu. File **luôn** ra khỏi máy, nhưng "đã sao lưu" thì không phải lúc nào
+ * cũng đúng — `importable` là thứ phân biệt hai chuyện đó.
+ */
+export type BackupOutcome = {
+  filename: string
+  /** File này nhập lại được. Chỉ khi đó mới có nghĩa là người bán thật sự có đường về. */
+  importable: boolean
+  /** Chỗ hỏng khiến file không nhập lại được, để màn hình chỉ đúng chỗ cần sửa tay. */
+  problem: string | null
+}
+
+/**
+ * Xuất file sao lưu.
+ *
+ * File vẫn tải về kể cả khi có bản ghi lạ (bản build cũ, sửa tay qua DevTools) — đó là dữ liệu của
+ * người bán, và `parseBackupFile` lúc nhập lại sẽ chỉ đúng dòng cần sửa. Nhưng **mốc sao lưu thì
+ * không**: `lastBackupAt` là thứ tắt banner nhắc sao lưu, nên đóng dấu nó cho một file mà
+ * `parseBackupFile` sẽ từ chối là hứa với người bán một đường về không tồn tại — và họ chỉ phát
+ * hiện ra đúng vào lúc cần phục hồi.
+ */
+export async function exportBackup(at: number): Promise<BackupOutcome> {
+  const text = await backupText(at)
+  const filename = backupFilename(at)
+  downloadJson(filename, text)
+
+  let problem: string | null = null
+  try {
+    parseBackupFile(text)
+  } catch (caught) {
+    problem = caught instanceof Error ? caught.message : 'Không rõ vì sao.'
+  }
+
+  if (problem === null) await saveAppState({ lastBackupAt: at })
+  return { filename, importable: problem === null, problem }
 }
 
 /**
