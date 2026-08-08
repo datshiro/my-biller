@@ -67,6 +67,19 @@ export const CustomerSchema = z.object({
   updatedAt: Timestamp,
 })
 
+/**
+ * Giá riêng của một khách cho một mặt hàng. `0` là **giá thật** (hàng biếu, khuyến mãi), không phải
+ * "chưa đặt" — chưa đặt thì đơn giản là không có dòng nào ở đây.
+ */
+export const CustomerPriceSchema = z.object({
+  id: Id.optional(),
+  customerId: Id,
+  itemId: Id,
+  unitPrice: Money,
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+})
+
 export const OrderSchema = z.object({
   id: Id.optional(),
   code: z.string().min(1),
@@ -134,6 +147,7 @@ export const BackupDataSchema = z.object({
   itemGroups: z.array(ItemGroupSchema.extend({ id: Id })),
   items: z.array(ItemSchema.extend({ id: Id })),
   customers: z.array(CustomerSchema.extend({ id: Id })),
+  customerPrices: z.array(CustomerPriceSchema.extend({ id: Id })),
   orders: z.array(OrderSchema.extend({ id: Id })),
   orderLines: z.array(OrderLineSchema.extend({ id: Id })),
   payments: z.array(PaymentSchema.extend({ id: Id })),
@@ -142,16 +156,30 @@ export const BackupDataSchema = z.object({
 })
 
 /**
+ * File `version: 1` ra đời trước bảng giá riêng nên thiếu hẳn khoá `customerPrices`. Bù vào đây, trước
+ * khi schema soi `data` — chứ **không** cho trường đó một `.default([])`: `.default()` nuốt luôn file v2
+ * bị lược mất bảng giá, và khi đó `version` chỉ còn là chữ trang trí.
+ */
+function fillPriceBookOfV1(raw: unknown): unknown {
+  const file = raw as { version?: unknown; data?: object } | null
+  if (file?.version !== 1 || typeof file.data !== 'object' || file.data === null) return raw
+  return { ...file, data: { customerPrices: [], ...file.data } }
+}
+
+/**
  * Đúng 5 trường này — Phase 9 dùng lại y nguyên.
  * Khi đổi schema sau này, `version` là chỗ rẽ nhánh để file sao lưu cũ vẫn nhập được.
  */
-export const BackupFileSchema = z.object({
-  app: z.literal('my-biller'),
-  version: z.literal(1),
-  appVersion: z.string(),
-  exportedAt: z.string(),
-  data: BackupDataSchema,
-})
+export const BackupFileSchema = z.preprocess(
+  fillPriceBookOfV1,
+  z.object({
+    app: z.literal('my-biller'),
+    version: z.union([z.literal(1), z.literal(2)]),
+    appVersion: z.string(),
+    exportedAt: z.string(),
+    data: BackupDataSchema,
+  }),
+)
 
 export type ShopSettings = z.infer<typeof ShopSettingsSchema>
 export type AppState = z.infer<typeof AppStateSchema>
@@ -159,6 +187,7 @@ export type SettingRow = z.infer<typeof SettingRowSchema>
 export type ItemGroup = z.infer<typeof ItemGroupSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Customer = z.infer<typeof CustomerSchema>
+export type CustomerPrice = z.infer<typeof CustomerPriceSchema>
 export type Order = z.infer<typeof OrderSchema>
 export type OrderLine = z.infer<typeof OrderLineSchema>
 export type Payment = z.infer<typeof PaymentSchema>

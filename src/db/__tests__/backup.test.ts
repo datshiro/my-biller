@@ -6,6 +6,7 @@ import { recalcAll } from '../recalc'
 import { createExpense, createExpenseCategory } from '../repositories/expenses'
 import { createGroup, createItem } from '../repositories/items'
 import { createCustomer } from '../repositories/customers'
+import { savePriceBook } from '../repositories/customer-prices'
 import { createOrder } from '../repositories/orders'
 import { addOrderPayment } from '../repositories/payments'
 import { saveShop } from '../repositories/settings'
@@ -43,6 +44,7 @@ async function seedShop() {
     isActive: 1,
     note: 'Không hành',
   })
+  await savePriceBook(customerId, [{ itemId, unitPrice: 45_000 }])
   const categoryId = await createExpenseCategory({ name: 'Nguyên liệu' })
   await createExpense({ categoryId, amount: 300_000, note: 'Chợ', spentAt: soldAt })
 
@@ -72,7 +74,7 @@ describe('collectBackup', () => {
     const file = await collectBackup(exportedAt)
 
     expect(file.app).toBe('my-biller')
-    expect(file.version).toBe(1)
+    expect(file.version).toBe(2)
     expect(file.exportedAt).toBe(new Date(exportedAt).toISOString())
     expect(Object.entries(file.data).filter(([, rows]) => rows.length === 0)).toEqual([])
   })
@@ -167,5 +169,21 @@ describe('replaceAllData', () => {
     await replaceAllData(empty)
 
     expect(await countAllRecords()).toBe(0)
+  })
+
+  /**
+   * Rác trong bảng giá **không** chặn cả file: dòng mồ côi không bao giờ được đọc nên không đụng tới
+   * đồng nào, mà chặn thì đường ra duy nhất là sửa tay JSON. Bỏ dòng, và số dòng bỏ đã được nói ra ở
+   * cửa xác nhận trước đó.
+   */
+  it('dòng giá mồ côi trong file bị bỏ, phần còn lại vẫn nhập bình thường', async () => {
+    await seedShop()
+    const data = (await collectBackup(exportedAt)).data
+    const mồCôi = { id: 99, customerId: 404, itemId: 404, unitPrice: 1_000, createdAt: soldAt, updatedAt: soldAt }
+
+    await replaceAllData({ ...data, customerPrices: [...data.customerPrices, mồCôi] })
+
+    expect(await db.customerPrices.count()).toBe(1)
+    expect(await db.customerPrices.get(99)).toBeUndefined()
   })
 })

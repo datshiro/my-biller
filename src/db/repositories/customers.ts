@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { deleteByCustomer } from './customer-prices'
 import { matchesCustomer } from '@/domain/customer-search'
 import { remainingOf } from '@/domain/order-status'
 import { CustomerSchema, type Customer } from '@/domain/schema'
@@ -63,5 +64,8 @@ export async function deleteCustomer(id: number): Promise<void> {
   if (orderCount > 0) {
     throw new Error(`Khách hàng này đã có ${orderCount} đơn — không xoá được. Hãy sửa thông tin thay vì xoá.`)
   }
-  await db.customers.delete(id)
+  await db.transaction('rw', db.customers, db.customerPrices, async () => {
+    await deleteByCustomer(id)
+    await db.customers.delete(id)
+  })
 }

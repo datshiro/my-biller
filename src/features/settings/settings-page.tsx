@@ -6,7 +6,7 @@ import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
 import { useAppState } from './use-settings'
-import { countRecords, describeCounts } from '@/domain/backup'
+import { countRecords, describeCounts, describeDroppedPrices } from '@/domain/backup'
 import type { BackupFile } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { StatusChip } from '@/ui/chip'
@@ -203,7 +203,7 @@ export function SettingsPage() {
       {step?.phase === 'confirm' ? (
         <ConfirmDialog
           title="Ghi đè toàn bộ dữ liệu?"
-          message={`File có ${describeCounts(countRecords(step.file.data))}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
+          message={`File có ${describeCounts(countRecords(step.file.data))}.${describeDroppedPrices(step.file.data)} Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
           confirmLabel="Tải file an toàn"
           onConfirm={() => void saveSafetyCopy(step.file)}
           onCancel={() => setStep(null)}

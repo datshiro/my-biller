@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { deleteByItem } from './customer-prices'
 import { ItemGroupSchema, ItemSchema, type Item, type ItemGroup } from '@/domain/schema'
 
 /** `note` để tuỳ chọn vì schema có `.default('')` — chỗ gọi không phải truyền chuỗi rỗng cho có. */
@@ -45,7 +46,10 @@ export async function deleteItem(id: number): Promise<void> {
   if (sold > 0) {
     throw new Error(`Mặt hàng này đã bán ${sold} lần — hãy chọn "Ngừng bán" thay vì xoá.`)
   }
-  await db.items.delete(id)
+  await db.transaction('rw', db.items, db.customerPrices, async () => {
+    await deleteByItem(id)
+    await db.items.delete(id)
+  })
 }
 
 export function listGroups(): Promise<ItemGroup[]> {

@@ -25,8 +25,18 @@ describe('BackupFileSchema', () => {
     expect(Object.keys(parsed).sort()).toEqual(['app', 'appVersion', 'data', 'exportedAt', 'version'])
   })
 
-  it('từ chối file của app khác hoặc thiếu version', () => {
+  it('từ chối file của app khác hoặc version lạ', () => {
     expect(() => BackupFileSchema.parse({ ...emptyBackup, app: 'knote' })).toThrow()
+    expect(() => BackupFileSchema.parse({ ...emptyBackup, version: 3 })).toThrow()
+  })
+
+  /**
+   * `emptyBackup` là đúng hình dạng file v1: chưa có khoá `customerPrices`. Nó phải đi qua được — và
+   * đi qua bằng **cửa rẽ theo version**, nên cùng một `data` đó gắn nhãn v2 thì phải bị từ chối. Cho
+   * `customerPrices` một `.default([])` sẽ làm cả hai ca cùng qua, và `version` thành chữ trang trí.
+   */
+  it('v1 thiếu bảng giá thì bù rỗng, v2 thiếu bảng giá thì từ chối', () => {
+    expect(BackupFileSchema.parse(emptyBackup).data.customerPrices).toEqual([])
     expect(() => BackupFileSchema.parse({ ...emptyBackup, version: 2 })).toThrow()
   })
 })

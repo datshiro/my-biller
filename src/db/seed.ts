@@ -1,3 +1,4 @@
+import { startOfDay } from 'date-fns'
 import { db } from './db'
 import { createOrder } from './repositories/orders'
 import { createCustomer } from './repositories/customers'
@@ -26,6 +27,10 @@ export async function seedDemoData(): Promise<void> {
   const anh = await createCustomer({ name: 'Anh Hùng', phone: '0912 345 678', address: '', note: 'Khách quen, hay ghi sổ' })
 
   const now = Date.now()
+  // Đơn "hôm nay" phải rơi vào hôm nay kể cả khi chạy lúc 0-2h sáng: `now - 2h` lúc 00:55 là 22:55 hôm
+  // qua, và mọi ca kiểm tra theo ngày trong `test:live` đọc ra số 0.
+  const homNay = Math.max(startOfDay(now).getTime(), now - 2 * 60 * 60 * 1000)
+
   await createOrder({
     customerId: null,
     customerName: 'Khách lẻ',
@@ -49,7 +54,7 @@ export async function seedDemoData(): Promise<void> {
     ],
     discount: 5_000,
     surcharge: 0,
-    soldAt: now - 2 * 60 * 60 * 1000,
+    soldAt: homNay,
     note: 'Ghi sổ',
     payment: { amount: 50_000, method: 'cash', note: 'Trả trước' },
   })
