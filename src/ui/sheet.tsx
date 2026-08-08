@@ -17,20 +17,50 @@ export function Sheet({
 }) {
   const panel = useRef<HTMLDivElement>(null)
 
+  // Chỉ lấy focus đúng lúc mở. Gộp chung với listener Escape thì mỗi lần màn ngoài vẽ lại,
+  // `onClose` là hàm mới nên effect chạy lại và giật focus ra khỏi ô người dùng đang gõ dở.
+  useEffect(() => {
+    panel.current?.focus()
+  }, [])
+
+  // Khai `aria-modal` thì Tab cũng phải ở lại trong sheet, nếu không thì control cuối cùng đưa người
+  // dùng ra thẳng lưới mặt hàng phía sau mà không có dấu hiệu gì.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !panel.current) return
+
+      const stops = panel.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      const first = stops[0]
+      const last = stops[stops.length - 1]
+      if (!first || !last) return
+
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || active === panel.current)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
-    panel.current?.focus()
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      {/* Lớp phủ nằm trước panel trong DOM nên nếu nhận được focus thì Shift+Tab từ đầu sheet sẽ rơi
+          vào một nút đóng. Nút ✕ trong panel đã là đường đóng cho bàn phím; lớp này chỉ để chạm. */}
       <button
         type="button"
-        aria-label="Đóng"
+        tabIndex={-1}
+        aria-hidden="true"
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
