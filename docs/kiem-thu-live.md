@@ -14,8 +14,8 @@ mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra fil
 
 ```bash
 npm run test:live                              # cả 113 ca
+npm run test:regression                        # chỉ các ca chốt chặn hồi quy — vòng nhanh lúc đang sửa
 ./robot/run.sh robot/tests/ban-hang.robot      # một màn
-./robot/run.sh -i regression robot/tests       # chỉ các ca chốt chặn hồi quy
 ./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
 ```
 
@@ -72,6 +72,56 @@ robot/
 ```
 
 ## Viết thêm ca mới
+
+> **Quy ước bắt buộc của repo:** thêm hoặc sửa một tính năng / một hàm là **phải** có ca ở đây ngay
+> trong lần làm đó, rồi chạy lại hồi quy. Điều kiện đầy đủ ở [`CLAUDE.md`](../CLAUDE.md).
+
+### Mẫu ca mới
+
+Ca mới nằm trong suite của **màn mà người bán chạm vào**, không mở file mới cho mỗi thay đổi. Nếu tính
+năng thật sự sinh ra một màn mới thì mới thêm file, và cập nhật cây thư mục ở mục [Cấu trúc](#cấu-trúc).
+
+Suite mới bắt đầu bằng đúng khối này — `Test Setup` là chỗ mọi ca lấy bộ mẫu làm điểm xuất phát:
+
+```robotframework
+*** Settings ***
+Documentation       <Màn gì> — <làm đúng việc gì>. <Hỏng thì người bán mất gì.>
+Resource            ../resources/app.resource
+Suite Setup         Mở Trình Duyệt Cho Suite
+Suite Teardown      Đóng Trình Duyệt Cuối Suite
+Test Setup          Mở Phiên Có Dữ Liệu Mẫu
+Test Teardown       Đóng Phiên
+Test Tags           <ten-man>
+```
+
+Một ca thường:
+
+```robotframework
+Câu tiếng Việt tả hành vi, đọc lên là hiểu, không nhắc tên hàm
+    [Documentation]    Chỉ viết khi có cái người sau không tự suy ra được: vì sao con số này,
+    ...    hoặc lỗi cũ nào đang bị khoá lại ở đây.
+    Mở Màn    /duong-dan
+    ${trước}=    Đọc Ô Tổng    <NHÃN>
+
+    <hành động>
+
+    Chờ Thấy Chữ    <thứ hiện ra>
+    ${sau}=    Đọc Ô Tổng    <NHÃN>
+    Should Be Equal    ${sau}    <mong đợi>    <câu báo lỗi nói ra cái gì sai>
+
+    # Ca dính tới tiền: đối chiếu thêm với sổ thật, đừng chỉ tin màn hình.
+    ${dòng}=    Đọc Bảng    orders
+    Should Be Equal As Integers    ${dòng}[0][total]    <số>
+```
+
+Bốn chỗ hay bị làm ẩu:
+
+- **Tên ca là câu tả hành vi**, không phải tên hàm. Người không đọc code phải hiểu được ca vừa hỏng.
+- **Câu báo lỗi ở `Should Be Equal`** phải nói ra cái gì sai. `report.html` chỉ hiện đúng câu đó.
+- **`[Documentation]` chỉ khi cần** — đừng chép lại tên ca.
+- **Thẻ `regression`** dành cho ca khoá một lỗi đã từng cắn, không phải cho mọi ca mới.
+
+### Cách viết bên trong ca
 
 Bám nhãn, đừng bám id. `TextField`/`MoneyInput` sinh id bằng `useId()` nên id đổi mỗi lần render —
 `Điền Ô` và `Đọc Ô` trong `app.resource` đã tìm ô theo nhãn hiển thị.

@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:live": "./robot/run.sh"
+    "test:live": "./robot/run.sh",
+    "test:regression": "./robot/run.sh -i regression robot/tests"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
