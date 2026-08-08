@@ -35,7 +35,9 @@ dọn_dẹp() {
   wait "${server_pid}" 2>/dev/null || true
   # `npm run dev` đẻ ra tiến trình `vite` con; giết mỗi npm là bỏ lại một tiến trình ma giữ cổng.
   # Chỉ dọn khi chính script này dựng server, không đụng vào server của người đang code.
-  lsof -ti ":${PORT}" 2>/dev/null | xargs kill 2>/dev/null || true
+  # `-sTCP:LISTEN` để chỉ bắt tiến trình đang *nghe* cổng — không có nó thì `lsof -i` trả về cả
+  # trình duyệt đang nối tới, và cú dọn này giết luôn Chrome của người dùng.
+  lsof -ti ":${PORT}" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
 }
 trap dọn_dẹp EXIT
 
@@ -44,9 +46,9 @@ if curl -sf -o /dev/null "${BASE_URL}/"; then
 else
   # Cổng có thể đang bị một tiến trình chết dở giữ. Dọn đúng chủ cũ thay vì nhảy sang cổng khác —
   # nhảy cổng là cách các tiến trình ma sinh sôi.
-  if lsof -ti ":${PORT}" >/dev/null 2>&1; then
+  if lsof -ti ":${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "→ Cổng ${PORT} đang bị giữ nhưng không phục vụ được, dọn chủ cũ"
-    lsof -ti ":${PORT}" | xargs kill 2>/dev/null || true
+    lsof -ti ":${PORT}" -sTCP:LISTEN | xargs kill 2>/dev/null || true
     sleep 1
   fi
 
