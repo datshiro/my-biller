@@ -141,15 +141,6 @@ export function countRecords(data: BackupData): BackupCounts {
   }
 }
 
-/**
- * Có thứ để mất hay không. Đếm đúng bốn bảng người bán tự nhập — **không** đếm cả DB: mở màn Chi
- * phí một lần là máy tự tạo 3 loại mặc định, lấy tổng bản ghi thì máy mới tinh cũng hoá ra "có dữ
- * liệu" và lần xuất an toàn lại đẻ ra file rỗng.
- */
-export function hasMeaningfulData(counts: BackupCounts): boolean {
-  return counts.orders + counts.items + counts.customers + counts.expenses > 0
-}
-
 export function describeCounts(counts: BackupCounts): string {
   return `${counts.orders} đơn · ${counts.items} mặt hàng · ${counts.customers} khách · ${counts.expenses} khoản chi`
 }

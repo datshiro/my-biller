@@ -44,7 +44,7 @@ export function ItemListPage() {
   return (
     <ListScreen
       title="Mặt hàng"
-      count={items ? `${items.filter((item) => item.isActive === 1).length} món` : undefined}
+      count={items ? `${items.length} món` : undefined}
       cta={
         <Button size="cta" onClick={() => openForm()}>
           ＋ Thêm mặt hàng
