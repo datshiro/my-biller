@@ -87,6 +87,10 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
 
 - **iOS xoá dữ liệu của web app không dùng tới sau ~7 ngày.** Đó là lý do màn Cài đặt có nút ghim bộ
   nhớ và banner nhắc sao lưu. Sao lưu ra file vẫn là lớp bảo vệ thật sự duy nhất.
+- **Nút ghim bộ nhớ có thể bị từ chối thẳng.** Đo trên Chrome-Android: một site vừa mở lần đầu gọi
+  `navigator.storage.persist()` thì trả về `false` — Chrome chỉ cấp khi site đã có "điểm gắn bó"
+  (được cài lên màn hình chính, được bookmark, hoặc đã dùng nhiều lần). Nút bấm không hỏng; nó bị từ
+  chối, và người bán không nhận ra khác biệt. Một lý do nữa để không coi ghim bộ nhớ là lớp bảo vệ.
 - Mỗi máy một kho dữ liệu riêng. Không có đồng bộ; muốn chuyển máy thì Sao lưu ở máy cũ → Nhập ở máy
   mới.
 - Không có tài khoản, không có phân quyền. Ai cầm máy là dùng được.
@@ -112,6 +116,16 @@ Bài kiểm offline chạy trên Chrome thật giả lập Pixel 7: chặn toàn
 `OFFLINE`), rồi tải lại route sâu `/bao-cao` → render đủ; bán trọn một đơn → phiếu `PBH-260808-001`
 hiện ra và Báo cáo lên `Doanh thu 25.000`. Tức là mất mạng vẫn bán và vẫn xuất phiếu được — phần còn
 lại cần điện thoại thật chỉ là thao tác cài lên màn hình chính.
+
+Chạy thêm trên Chrome-Android thật (máy ảo Android 16, Pixel 7) qua `adb reverse` — `localhost` là
+secure context nên service worker vẫn bật được mà không cần HTTPS. Kiểm được: app render đúng,
+service worker *activated* và nắm quyền điều khiển, manifest standalone với đủ icon 192/512/maskable,
+IndexedDB ghi thật rồi tải lại trang vẫn còn, `visibilitychange` thật sự nổ khi bấm HOME rồi quay lại.
+
+**Không** kiểm được trên máy ảo, và đây là chỗ vẫn phải cần điện thoại thật: Chrome có mời cài
+("Install app / my-biller"), nhưng WebAPK không đúc được cho `localhost` vì máy chủ của Google phải
+tải được manifest qua một URL công khai. Nên câu "bản cài và bản trong Chrome dùng chung IndexedDB"
+ở mục 4 vẫn chưa có phép đo nào đứng sau. Muốn kiểm thì phải trỏ máy vào chính `an-quynh.pages.dev`.
 
 Lighthouse 12 đã bỏ hạng mục PWA, nên "installable" kiểm bằng chính các điều kiện trên chứ không phải
 bằng điểm số. `Performance` cũng không lấy được điểm từ công cụ đang dùng — số thay thế là LCP/CLS đo
