@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
+import { addDays, startOfDay } from 'date-fns'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -17,8 +18,11 @@ beforeEach(async () => {
   await Promise.all(db.tables.map((table) => table.clear()))
 })
 
-const hoursAgo = (hours: number) => Date.now() - hours * 3_600_000
-const daysAgo = (days: number) => Date.now() - days * 86_400_000
+/**
+ * Neo vào 10h sáng của ngày chứ không phải "cách đây 2 tiếng": chạy bộ test lúc 00:40 thì "cách đây
+ * 2 tiếng" rơi sang hôm qua, nhãn "Hôm nay" biến mất và test đỏ vì đồng hồ chứ không vì mã.
+ */
+const morningOf = (daysBack: number) => addDays(startOfDay(Date.now()), -daysBack).getTime() + 10 * 3_600_000
 
 const draft = (overrides: Partial<OrderDraft> = {}): OrderDraft => ({
   customerId: null,
@@ -26,7 +30,7 @@ const draft = (overrides: Partial<OrderDraft> = {}): OrderDraft => ({
   lines: [{ itemId: null, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: 30_000, qty: 2 }],
   discount: 0,
   surcharge: 0,
-  soldAt: hoursAgo(2),
+  soldAt: morningOf(0),
   note: '',
   payment: { amount: 110_000, method: 'cash', note: '' },
   ...overrides,
@@ -46,7 +50,7 @@ const renderApp = (path: string) =>
 describe('danh sách đơn', () => {
   it('gom theo ngày, mỗi nhóm có tổng tiền của ngày đó', async () => {
     await createOrder(draft())
-    await createOrder(draft({ soldAt: daysAgo(1), payment: { amount: 110_000, method: 'cash', note: '' } }))
+    await createOrder(draft({ soldAt: morningOf(1), payment: { amount: 110_000, method: 'cash', note: '' } }))
     renderApp('/don')
 
     expect(await screen.findByText(/Hôm nay ·/)).toBeDefined()
