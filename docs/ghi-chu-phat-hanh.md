@@ -1,6 +1,6 @@
 # Ghi chú phát hành
 
-## 8/8/2026 — đợt sửa lỗi sau review
+## 1.0.1 — 8/8/2026
 
 ### ⚠️ Việc phải làm sau khi cập nhật: soát lại các đơn bán nợ cũ
 
@@ -49,6 +49,17 @@ việc gì.
 - Số món ở màn Mặt hàng đếm đúng.
 - Các màn nhập liệu có chốt chống bấm lưu hai lần.
 - File sao lưu giữ `id` của bản ghi và bị chặn ngay khi ràng buộc gãy.
+- Bản sao an toàn có chỗ hỏng thì không còn khoá cứng cả hai đường. Trước đây gặp cảnh đó là kẹt:
+  không nhập được file mới mà cũng không xoá sạch được để bắt đầu lại. Giờ file vẫn tải về và app mở
+  thêm một cửa xác nhận thứ ba nói rõ file đó không dựng lại sổ được, xoá là mất hẳn.
+- Câu lỗi sao lưu không còn hiện trong khe lỗi của ô "Gõ XOA" — đọc như thể gõ sai chữ xác nhận.
+
+### Đáng biết
+
+Nhập file sao lưu sẽ **xoá phiếu thu của các đơn đã huỷ** có trong file đó. Đây là chủ ý: `paidAmount`
+của đơn phải bằng tổng phiếu thu của nó, và phiếu thu nằm lại trên đơn huỷ vẫn cộng vào "Đã thu" của
+kỳ trong khi màn chi tiết đơn không thấy nó. Cảnh này chỉ đến từ file của bản build cũ hoặc file sửa
+tay — app hiện tại không cho thu tiền trên đơn đã huỷ.
 
 ### Cập nhật có cần làm gì thêm không
 
