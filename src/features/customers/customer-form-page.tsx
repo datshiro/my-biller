@@ -7,8 +7,7 @@ import { Button } from '@/ui/button'
 import { ListSkeleton } from '@/ui/empty-state'
 import { FormScreen } from '@/ui/form-screen'
 import { TextField } from '@/ui/text-field'
-
-const message = (error: unknown) => (error instanceof Error ? error.message : 'Không lưu được. Thử lại.')
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 function CustomerForm({ customer }: { customer: Customer | null }) {
   const navigate = useNavigate()
@@ -20,13 +19,18 @@ function CustomerForm({ customer }: { customer: Customer | null }) {
   const [note, setNote] = useState(customer?.note ?? '')
 
   const [nameError, setNameError] = useState<string | undefined>()
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được khách hàng. Thử lại.')
+
+  const dirty =
+    name !== (customer?.name ?? '') ||
+    phone !== (customer?.phone ?? '') ||
+    address !== (customer?.address ?? '') ||
+    note !== (customer?.note ?? '')
 
   const trimmedPhone = phone.trim()
   const duplicate = trimmedPhone ? others.find((row) => row.phone.trim() === trimmedPhone) : undefined
 
-  const save = async () => {
+  const save = () => {
     const trimmed = name.trim()
     if (!trimmed) {
       setNameError('Nhập tên khách hàng.')
@@ -34,29 +38,26 @@ function CustomerForm({ customer }: { customer: Customer | null }) {
     }
     setNameError(undefined)
 
-    setSaving(true)
-    setSaveError(null)
-    try {
+    void run(async () => {
       const payload = { name: trimmed, phone: trimmedPhone, address: address.trim(), note: note.trim() }
-      if (customer?.id) {
-        await updateCustomer(customer.id, payload)
-        void navigate(`/them/khach-hang/${customer.id}`, { replace: true })
+      const id = customer?.id
+      if (id !== undefined) {
+        await updateCustomer(id, payload)
+        void navigate(`/them/khach-hang/${id}`, { replace: true })
       } else {
         await createCustomer(payload)
         void navigate('/them/khach-hang', { replace: true })
       }
-    } catch (error) {
-      setSaveError(message(error))
-      setSaving(false)
-    }
+    })
   }
 
   return (
     <FormScreen
       title={customer ? 'Sửa khách hàng' : 'Thêm khách hàng'}
       error={saveError}
+      dirty={dirty && !saving}
       cta={
-        <Button size="cta" disabled={saving} onClick={() => void save()}>
+        <Button size="cta" disabled={saving} onClick={save}>
           {saving ? 'Đang lưu…' : 'LƯU KHÁCH HÀNG'}
         </Button>
       }
