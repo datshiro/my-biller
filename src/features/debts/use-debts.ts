@@ -4,6 +4,7 @@ import { listOpenDebtOrders } from '@/db/repositories/orders'
 import { listCustomerPayments } from '@/db/repositories/payments'
 import { groupDebts, totalDebt, type DebtGroup } from '@/domain/debt'
 import type { Payment } from '@/domain/schema'
+import { useDayTick } from '@/ui/use-day-tick'
 
 export type DebtRow = DebtGroup & { name: string }
 
@@ -15,6 +16,7 @@ export type Debts = {
 }
 
 export function useDebts(): Debts | undefined {
+  const day = useDayTick()
   return useLiveQuery(async () => {
     const [orders, customers] = await Promise.all([listOpenDebtOrders(), listCustomers()])
     const names = new Map(customers.flatMap((c) => (c.id === undefined ? [] : [[c.id, c.name] as const])))
@@ -25,7 +27,7 @@ export function useDebts(): Debts | undefined {
       total: totalDebt(groups),
       now: Date.now(),
     }
-  })
+  }, [day])
 }
 
 /** Kèm `now` để màn hình có mốc ghi phiếu thu mà không phải xem đồng hồ trong lúc render. */

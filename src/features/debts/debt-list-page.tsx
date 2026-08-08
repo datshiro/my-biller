@@ -75,7 +75,6 @@ export function DebtListPage() {
           customerId={collecting.customerId}
           name={collecting.name}
           owed={collecting.total}
-          now={debts.now}
           onDone={() => setCollecting(null)}
           onClose={() => setCollecting(null)}
         />

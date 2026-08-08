@@ -106,8 +106,10 @@ export function ReceiptPage() {
       </header>
 
       <div className="receipt-scroll min-h-0 flex-1 overflow-y-auto">
-        {/* Hiện đúng những tấm sẽ gửi đi, không giấu bản chụp ở đâu khác — thấy sao gửi vậy. */}
-        <div className="space-y-4 py-4">
+        {/* Hiện đúng những tấm sẽ gửi đi, không giấu bản chụp ở đâu khác — thấy sao gửi vậy.
+            Cho vuốt ngang: tờ phiếu rộng cố định 360px để ảnh PNG giống nhau trên mọi máy, nên trên
+            màn 320px nó phải trượt được chứ không phải bị cắt mất mép phải. */}
+        <div className="space-y-4 overflow-x-auto py-4">
           {pages.map((pageLines, index) => (
             <div
               key={index}

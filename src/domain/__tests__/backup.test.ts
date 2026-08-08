@@ -24,6 +24,37 @@ const file = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   })
 
+type Row = Record<string, unknown>
+
+const customer = (over: Row = {}) => ({
+  id: 7, name: 'Chị Hoa', phone: '0911', address: '', note: '', createdAt: 0, updatedAt: 0, ...over,
+})
+const order = (over: Row = {}) => ({
+  id: 1, code: 'HD001', customerId: null, customerName: 'Khách lẻ', subtotal: 100_000, discount: 0,
+  surcharge: 0, total: 100_000, paidAmount: 100_000, status: 'paid', soldAt: 0, note: '',
+  createdAt: 0, updatedAt: 0, ...over,
+})
+const orderLine = (over: Row = {}) => ({
+  id: 1, orderId: 1, itemId: null, name: 'Phở', unit: 'tô', unitPrice: 100_000, costPrice: null,
+  qty: 1, amount: 100_000, ...over,
+})
+const payment = (over: Row = {}) => ({
+  id: 1, orderId: 1, customerId: null, amount: 100_000, method: 'cash', paidAt: 0, note: '', ...over,
+})
+
+/** Một file nhỏ nhưng đủ liên kết: đơn ↔ dòng hàng ↔ phiếu thu ↔ khách. */
+const wholeFile = (over: Partial<Record<keyof BackupData, unknown[]>> = {}) =>
+  file({
+    data: {
+      ...emptyData,
+      customers: [customer()],
+      orders: [order({ customerId: 7 })],
+      orderLines: [orderLine()],
+      payments: [payment({ customerId: 7 })],
+      ...over,
+    },
+  })
+
 describe('backupFilename', () => {
   it('mang ngày giờ để hai lần sao lưu trong ngày không đè lên nhau', () => {
     const at = new Date(2026, 7, 7, 14, 5).getTime()
@@ -62,6 +93,66 @@ describe('parseBackupFile', () => {
       ],
     }
     expect(() => parseBackupFile(file({ data }))).toThrow(/hỏng/)
+  })
+})
+
+/**
+ * File sao lưu là **đầu vào không tin cậy**: app dạy người bán mở nó ra sửa tay khi hỏng, và nó đi
+ * thẳng vào `bulkPut` chứ không qua `createOrder`. Mọi chốt chặn của repository phải có bản sao ở đây.
+ */
+describe('parseBackupFile — liên kết giữa các bảng', () => {
+  it('nhận file có đủ đơn ↔ dòng hàng ↔ phiếu thu ↔ khách', () => {
+    expect(parseBackupFile(wholeFile()).data.orders[0]?.id).toBe(1)
+  })
+
+  it('đơn thiếu id bị chặn — nhập vào là IndexedDB cấp số mới, dòng hàng rời khỏi đơn', () => {
+    const headless = order()
+    delete (headless as Row).id
+    expect(() => parseBackupFile(wholeFile({ orders: [headless] }))).toThrow(/data\.orders\.0\.id/)
+  })
+
+  it('hai đơn trùng id bị chặn — bulkPut sẽ để con sau đè lên con trước', () => {
+    const twins = [order({ customerId: 7 }), order({ customerId: 7, code: 'HD002' })]
+    expect(() => parseBackupFile(wholeFile({ orders: twins }))).toThrow(/hai dòng cùng mang số 1/)
+  })
+
+  it('dòng hàng trỏ tới đơn không có trong file bị chặn', () => {
+    expect(() => parseBackupFile(wholeFile({ orderLines: [orderLine({ orderId: 99 })] }))).toThrow(
+      /đơn số 99 mà file không có đơn đó/,
+    )
+  })
+
+  it('phiếu thu trỏ tới đơn không có trong file bị chặn — tiền không được treo lơ lửng', () => {
+    expect(() => parseBackupFile(wholeFile({ payments: [payment({ orderId: 99 })] }))).toThrow(
+      /phiếu thu 100.000 đ của đơn số 99/,
+    )
+  })
+
+  it('đơn ghi cho khách không có trong file bị chặn', () => {
+    expect(() => parseBackupFile(wholeFile({ customers: [] }))).toThrow(/khách số 7 mà file không có khách đó/)
+  })
+
+  it('mặt hàng thuộc nhóm không có trong file bị chặn', () => {
+    const items = [
+      { id: 1, name: 'Phở', groupId: 5, unit: 'tô', unitPrice: 50_000, costPrice: null, isActive: 1, note: '', createdAt: 0, updatedAt: 0 },
+    ]
+    expect(() => parseBackupFile(wholeFile({ items }))).toThrow(/nhóm số 5 mà file không có nhóm đó/)
+  })
+
+  it('đơn còn nợ mà không ghi khách bị chặn — nợ đó sẽ tàng hình khỏi mọi màn hình', () => {
+    const data = { orders: [order({ paidAmount: 40_000, status: 'partial' })], payments: [payment({ amount: 40_000 })] }
+    expect(() => parseBackupFile(wholeFile(data))).toThrow(/còn thiếu 60.000 đ nhưng không ghi khách nào/)
+  })
+
+  it('số còn thiếu tính theo phiếu thu chứ không theo paidAmount trong file', () => {
+    // File nói đã thu đủ nhưng chỉ kèm 1 phiếu thu 40k — `recalcAll` sau khi nhập cũng sẽ tin phiếu thu.
+    const data = { orders: [order({ paidAmount: 100_000, status: 'paid' })], payments: [payment({ amount: 40_000 })] }
+    expect(() => parseBackupFile(wholeFile(data))).toThrow(/còn thiếu 60.000 đ/)
+  })
+
+  it('đơn huỷ chưa thu đồng nào vẫn nhận được — huỷ thì không phải là nợ', () => {
+    const data = { orders: [order({ paidAmount: 0, status: 'void' })], payments: [] }
+    expect(parseBackupFile(wholeFile(data)).data.orders[0]?.status).toBe('void')
   })
 })
 

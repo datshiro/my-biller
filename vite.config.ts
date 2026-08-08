@@ -50,6 +50,8 @@ export default defineConfig({
     env: { TZ: 'Asia/Ho_Chi_Minh' },
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    coverage: { include: ['src/domain/**'], reporter: ['text', 'html'] },
+    // `src/db` cũng phải nằm trong tầm đo: đó là lớp duy nhất thật sự ghi tiền (transaction, recalc,
+    // sao lưu). Không đo thì không biết nhánh nào chưa ai chạy qua.
+    coverage: { include: ['src/domain/**', 'src/db/**'], reporter: ['text', 'html'] },
   },
 })

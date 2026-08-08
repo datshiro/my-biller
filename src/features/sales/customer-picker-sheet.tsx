@@ -8,6 +8,7 @@ import { ListRow } from '@/ui/list-row'
 import { Sheet } from '@/ui/sheet'
 import { SearchInput } from '@/ui/search-input'
 import { TextField } from '@/ui/text-field'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 type Picked = { customerId: number | null; customerName: string }
 
@@ -26,28 +27,23 @@ export function CustomerPickerSheet({
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { submitting: saving, error, setError, run } = useSubmitOnce('Không lưu được khách.')
 
   const filtered = useMemo(
     () => (customers ?? []).filter((customer) => matchesCustomer(customer, query)),
     [customers, query],
   )
 
-  const addAndPick = async () => {
+  const addAndPick = () => {
     const name = newName.trim()
     if (!name) {
       setError('Nhập tên khách.')
       return
     }
-    setSaving(true)
-    try {
+    void run(async () => {
       const id = await createCustomer({ name, phone: newPhone.trim(), address: '', note: '' })
       onPick({ customerId: id, customerName: name })
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Không lưu được khách.')
-      setSaving(false)
-    }
+    })
   }
 
   if (adding) {
@@ -56,7 +52,7 @@ export function CustomerPickerSheet({
         title="Thêm khách nhanh"
         onClose={() => setAdding(false)}
         footer={
-          <Button size="cta" disabled={saving} onClick={() => void addAndPick()}>
+          <Button size="cta" disabled={saving} onClick={addAndPick}>
             {saving ? 'Đang lưu…' : 'LƯU VÀ CHỌN'}
           </Button>
         }

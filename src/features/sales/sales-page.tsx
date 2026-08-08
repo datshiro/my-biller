@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CartLines } from './cart-lines'
 import { CustomerPickerSheet } from './customer-picker-sheet'
 import { ItemGrid } from './item-grid'
 import { LineEditSheet } from './line-edit-sheet'
-import { PaymentSheet, type PaymentChoice } from './payment-sheet'
+import { PaymentSheet, type PaymentChoice, type PayMethod } from './payment-sheet'
 import { useCart } from './use-cart'
 import { useToday } from './use-today'
 import { createOrder } from '@/db/repositories/orders'
@@ -18,9 +18,11 @@ import { Button } from '@/ui/button'
 import { EmptyState, ListSkeleton } from '@/ui/empty-state'
 import { SearchInput } from '@/ui/search-input'
 import { SelectChip } from '@/ui/chip'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 import { AdjustSheet } from './adjust-sheet'
 
-type OpenSheet = 'none' | 'payment' | 'customer' | 'adjust'
+/** `customer-for-debt` là màn chọn khách mở TỪ sheet thu tiền — chọn xong phải quay lại đúng chỗ cũ. */
+type OpenSheet = 'none' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
 
 export function SalesPage() {
   const navigate = useNavigate()
@@ -32,10 +34,10 @@ export function SalesPage() {
   const [query, setQuery] = useState('')
   const [groupId, setGroupId] = useState<number | null>(null)
   const [sheet, setSheet] = useState<OpenSheet>('none')
+  const [payMethod, setPayMethod] = useState<PayMethod>('cash')
+  const [given, setGiven] = useState<number | null>(null)
   const [editing, setEditing] = useState<CartLine | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const submittingRef = useRef(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const { submitting, error: saveError, setError: setSaveError, run } = useSubmitOnce('Không lưu được đơn. Thử lại.')
 
   const active = useMemo(() => (items ?? []).filter((item) => item.isActive === 1), [items])
 
@@ -59,6 +61,13 @@ export function SalesPage() {
     setQuery('')
   }
 
+  /** Mở thu tiền cho một lượt mới — chỉ ở đây mới được đặt lại hình thức và số tiền khách đưa. */
+  const openPayment = () => {
+    setPayMethod('cash')
+    setGiven(totals.total)
+    setSheet('payment')
+  }
+
   /** Enter ở ô tìm: gõ "2 pho" thêm 2 Phở; gõ tên thường thì thêm kết quả đầu tiên. */
   const submitQuery = () => {
     const candidates = active.flatMap((item) =>
@@ -73,15 +82,9 @@ export function SalesPage() {
     setQuery('')
   }
 
-  const finish = async (payment: PaymentChoice) => {
-    // Chốt bằng ref chứ không dựa vào `disabled`: thuộc tính disabled chỉ có hiệu lực sau khi React
-    // vẽ lại, nên hai cú chạm rơi vào cùng một nhịp sẽ lọt cả hai và tạo hai đơn trùng.
-    if (submittingRef.current) return
-    submittingRef.current = true
-
-    setSubmitting(true)
-    setSaveError(null)
-    try {
+  // Nhánh lỗi của `run` không đụng tới giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
+  const finish = (payment: PaymentChoice) =>
+    void run(async () => {
       const { id } = await createOrder({
         customerId: cart.customerId,
         customerName: cart.customerName || KHACH_LE,
@@ -105,13 +108,7 @@ export function SalesPage() {
       // Chốt xong là đưa thẳng tới phiếu để gửi khách — đó là việc kế tiếp của người bán.
       // `replace` để nút back không quay lại giỏ đã chốt.
       void navigate(`/don/${id}/phieu`, { replace: true })
-    } catch (error) {
-      // Giữ nguyên giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
-      setSaveError(error instanceof Error ? error.message : 'Không lưu được đơn. Thử lại.')
-      setSubmitting(false)
-      submittingRef.current = false
-    }
-  }
+    })
 
   return (
     <div className="flex h-full flex-col">
@@ -210,7 +207,7 @@ export function SalesPage() {
             <span className="label-xs text-muted">TỔNG CỘNG</span>
             <span className="money money-xl">{formatVnd(totals.total)}</span>
           </div>
-          <Button size="cta" onClick={() => setSheet('payment')}>
+          <Button size="cta" onClick={openPayment}>
             THU TIỀN · {count} món
           </Button>
         </div>
@@ -220,10 +217,14 @@ export function SalesPage() {
         <PaymentSheet
           total={totals.total}
           hasCustomer={cart.customerId !== null}
+          method={payMethod}
+          given={given}
+          onMethodChange={setPayMethod}
+          onGivenChange={setGiven}
           submitting={submitting}
           error={saveError}
-          onConfirm={(payment) => void finish(payment)}
-          onPickCustomer={() => setSheet('customer')}
+          onConfirm={finish}
+          onPickCustomer={() => setSheet('customer-for-debt')}
           onClose={() => {
             setSheet('none')
             setSaveError(null)
@@ -231,13 +232,16 @@ export function SalesPage() {
         />
       ) : null}
 
-      {sheet === 'customer' ? (
+      {sheet === 'customer' || sheet === 'customer-for-debt' ? (
         <CustomerPickerSheet
+          reason={sheet === 'customer-for-debt' ? 'Nợ phải có chủ — chọn khách rồi mới ghi nợ được.' : undefined}
           onPick={({ customerId, customerName }) => {
             dispatch({ type: 'setCustomer', customerId, customerName })
-            setSheet(count > 0 && customerId !== null ? 'payment' : 'none')
+            // Chọn khách từ header chỉ là gán tên, không phải ý định thu tiền: tự bật sheet thu tiền
+            // là đặt nút XONG cao 56px ngay dưới ngón tay vừa chạm.
+            setSheet(sheet === 'customer-for-debt' ? 'payment' : 'none')
           }}
-          onClose={() => setSheet('none')}
+          onClose={() => setSheet(sheet === 'customer-for-debt' ? 'payment' : 'none')}
         />
       ) : null}
 

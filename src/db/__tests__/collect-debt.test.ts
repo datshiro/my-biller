@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
 import { createCustomer } from '../repositories/customers'
 import { createOrder, listOpenDebtOrders, summarizeDebt, voidOrder } from '../repositories/orders'
-import { collectDebt, listCustomerPayments } from '../repositories/payments'
+import { addOrderPayment, collectDebt, listCustomerPayments } from '../repositories/payments'
 import { groupDebts, totalDebt } from '@/domain/debt'
 
 const day = (date: number) => new Date(2026, 7, date, 10, 0).getTime()
@@ -105,6 +105,8 @@ describe('thu nợ', () => {
   it('đơn đã huỷ không còn nợ và không nhận tiền thu', async () => {
     const cancelled = await sellOnCredit(day(1), 100_000)
     await sellOnCredit(day(2), 200_000)
+    // Thu trước một phần rồi mới huỷ: có phiếu thu để mất thì "còn 0 phiếu" mới nói lên điều gì đó.
+    await addOrderPayment({ orderId: cancelled.id, amount: 30_000, method: 'cash', paidAt: day(1), note: '' })
     await voidOrder(cancelled.id)
 
     expect((await summarizeDebt()).total).toBe(200_000)
@@ -113,6 +115,12 @@ describe('thu nợ', () => {
 
     expect(await db.payments.where('orderId').equals(cancelled.id).count()).toBe(0)
     expect((await summarizeDebt()).total).toBe(0)
+  })
+
+  it('thu 0 đồng bị từ chối, không lặng lẽ báo xong', async () => {
+    await sellOnCredit(day(1), 100_000)
+    await expect(collect(0)).rejects.toThrow('Số tiền thu phải lớn hơn 0.')
+    expect(await db.payments.count()).toBe(0)
   })
 
   it('thu quá số còn nợ vì đơn vừa bị huỷ → chặn, không tràn sang đơn khác', async () => {

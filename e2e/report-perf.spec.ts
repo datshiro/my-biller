@@ -8,6 +8,11 @@ import { expect, test, type Page } from '@playwright/test'
  * bài đo này chỉ quan tâm tới lúc đọc.
  */
 const ORDERS = 5_000
+/**
+ * Đo được ~84ms trên máy làm việc, tức còn dư hơn ba lần. Ngưỡng này không nhằm chốt một con số ms
+ * cho mọi máy — nó để bắt lỗi **đổi dáng truy vấn** (quét cả bảng, hỏi từng đơn một), thứ làm chậm
+ * gấp nhiều lần chứ không phải vài chục phần trăm.
+ */
 const BUDGET_MS = 300
 
 async function seedOrders(page: Page, count: number) {

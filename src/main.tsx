@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ErrorBoundary } from './app/error-boundary'
 import { AppRoutes } from './app/routes'
 import './styles/index.css'
 
@@ -8,6 +9,8 @@ if (!rootEl) throw new Error('Không tìm thấy #root')
 
 createRoot(rootEl).render(
   <StrictMode>
-    <AppRoutes />
+    <ErrorBoundary>
+      <AppRoutes />
+    </ErrorBoundary>
   </StrictMode>,
 )

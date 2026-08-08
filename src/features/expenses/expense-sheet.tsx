@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { MoneyInput } from '@/ui/money-input'
 import { Sheet } from '@/ui/sheet'
 import { Field, TextField } from '@/ui/text-field'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 /**
  * Đổi ngày nhưng giữ nguyên giờ phút của khoản chi: ghi lúc 23:50 rồi sửa sang hôm qua thì vẫn là
@@ -44,27 +45,35 @@ export function ExpenseSheet({
   const [amount, setAmount] = useState<number | null>(expense?.amount ?? null)
   const [categoryId, setCategoryId] = useState<number | null>(expense?.categoryId ?? null)
   const [note, setNote] = useState(expense?.note ?? '')
-  const [spentAt, setSpentAt] = useState(expense?.spentAt ?? now)
+  /** `null` = người bán chưa đụng vào ô ngày, cứ lấy theo đồng hồ. */
+  const [spentAt, setSpentAt] = useState<number | null>(expense?.spentAt ?? null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const { submitting, error, run } = useSubmitOnce('Không lưu được khoản chi. Thử lại.')
 
   // Sheet tự đưa focus vào khung của nó khi mở; effect của component cha chạy sau nên giành lại được.
   useEffect(() => amountInput.current?.focus(), [])
 
-  const inFuture = spentAt > endOfDay(now).getTime()
+  const shownSpentAt = spentAt ?? now
+  const inFuture = shownSpentAt > endOfDay(now).getTime()
   const canSave = amount !== null && amount > 0 && !inFuture
 
-  const save = async () => {
+  const save = () => {
     if (!canSave) return
-    const input = { categoryId, amount, note: note.trim(), spentAt }
-    if (expense?.id === undefined) await createExpense(input)
-    else await updateExpense(expense.id, input)
-    onClose()
+    void run(async () => {
+      // Mốc ghi vào DB đọc tại đúng lúc bấm lưu: ghi lúc 00:10 phải là 00:10 hôm nay, không phải
+      // giờ lúc mở tab.
+      const input = { categoryId, amount, note: note.trim(), spentAt: spentAt ?? Date.now() }
+      if (expense?.id === undefined) await createExpense(input)
+      else await updateExpense(expense.id, input)
+      onClose()
+    })
   }
 
-  const remove = async () => {
-    if (expense?.id !== undefined) await deleteExpense(expense.id)
-    onClose()
-  }
+  const remove = () =>
+    void run(async () => {
+      if (expense?.id !== undefined) await deleteExpense(expense.id)
+      onClose()
+    })
 
   return (
     <>
@@ -72,21 +81,24 @@ export function ExpenseSheet({
         title={expense ? 'Sửa khoản chi' : 'Ghi chi phí'}
         onClose={onClose}
         footer={
-          <div className="flex gap-3">
-            {/* Không đặt tên là "Xoá": hàng nút nhanh của ô tiền đã có một nút "Xoá" để xoá trắng
-                số đang gõ, hai nút cùng tên cạnh nhau mà một cái làm mất hẳn khoản chi thì quá dễ nhầm. */}
-            {expense ? (
-              <Button
-                variant="danger"
-                className="h-14 shrink-0 whitespace-nowrap"
-                onClick={() => setConfirmDelete(true)}
-              >
-                Xoá khoản chi
+          <div className="flex flex-col gap-2">
+            {error ? <p className="text-[15px] font-semibold text-danger">{error}</p> : null}
+            <div className="flex gap-3">
+              {/* Không đặt tên là "Xoá": hàng nút nhanh của ô tiền đã có một nút "Xoá" để xoá trắng
+                  số đang gõ, hai nút cùng tên cạnh nhau mà một cái làm mất hẳn khoản chi thì quá dễ nhầm. */}
+              {expense ? (
+                <Button
+                  variant="danger"
+                  className="h-14 shrink-0 whitespace-nowrap"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Xoá khoản chi
+                </Button>
+              ) : null}
+              <Button size="cta" disabled={!canSave || submitting} onClick={save}>
+                {submitting ? 'Đang lưu…' : 'LƯU'}
               </Button>
-            ) : null}
-            <Button size="cta" disabled={!canSave} onClick={() => void save()}>
-              LƯU
-            </Button>
+            </div>
           </div>
         }
       >
@@ -124,10 +136,10 @@ export function ExpenseSheet({
           <TextField
             label="Ngày chi"
             type="date"
-            value={format(spentAt, 'yyyy-MM-dd')}
+            value={format(shownSpentAt, 'yyyy-MM-dd')}
             max={format(now, 'yyyy-MM-dd')}
             onChange={(event) => {
-              if (event.target.value) setSpentAt(withDate(spentAt, event.target.value))
+              if (event.target.value) setSpentAt(withDate(shownSpentAt, event.target.value))
             }}
             error={inFuture ? 'Chưa tới ngày đó, không ghi trước được.' : undefined}
           />
@@ -139,7 +151,7 @@ export function ExpenseSheet({
           title="Xoá khoản chi?"
           message="Khoản chi này sẽ biến mất khỏi tổng chi của tháng."
           confirmLabel="Xoá"
-          onConfirm={() => void remove()}
+          onConfirm={remove}
           onCancel={() => setConfirmDelete(false)}
         />
       ) : null}

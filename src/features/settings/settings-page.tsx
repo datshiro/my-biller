@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router'
-import { applyBackup, exportBackup, readBackupFile } from './backup'
+import { applyBackup, exportBackup, exportSafetyCopy, readBackupFile } from './backup'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -15,6 +15,14 @@ import { ListRow } from '@/ui/list-row'
 import { ScreenHeader } from '@/ui/screen-header'
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không xong. Thử lại.')
+
+/**
+ * Nhập file đi qua hai cửa. Cửa `safety` tồn tại vì bản xuất tự động trước khi ghi đè có thể thất
+ * bại trong im lặng (webview Zalo, PWA iOS chặn tải file) — mà lúc đó thì đã không còn đường về.
+ */
+type ImportStep =
+  | { phase: 'confirm'; file: BackupFile }
+  | { phase: 'safety'; file: BackupFile; filename: string }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -34,14 +42,18 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState<BackupFile | null>(null)
+  const [step, setStep] = useState<ImportStep | null>(null)
 
   const runExport = async () => {
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
-      setNotice(`Đã tải ${await exportBackup(Date.now())} về máy.`)
+      const { filename, importable, problem } = await exportBackup(Date.now())
+      if (importable) setNotice(`Đã tải ${filename} về máy.`)
+      // Nói thẳng là file này không dùng để phục hồi được. Im lặng ở đây thì người bán yên tâm với
+      // một file rỗng nghĩa, và chỉ biết vào đúng lúc mất dữ liệu.
+      else setError(`Đã tải ${filename} về máy, nhưng file này KHÔNG nhập lại được: ${problem} Sổ vẫn tính là chưa sao lưu.`)
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -54,17 +66,30 @@ export function SettingsPage() {
     setError(null)
     setNotice(null)
     try {
-      setPending(await readBackupFile(file))
+      setStep({ phase: 'confirm', file: await readBackupFile(file) })
     } catch (caught) {
       setError(message(caught))
     }
   }
 
-  const runImport = async (file: BackupFile) => {
-    setPending(null)
+  /** Xuất bản hiện tại ra file rồi dừng lại hỏi — chưa xoá gì cả. */
+  const saveSafetyCopy = async (file: BackupFile) => {
+    setStep(null)
     setBusy(true)
     try {
-      await applyBackup(file.data, Date.now())
+      setStep({ phase: 'safety', file, filename: await exportSafetyCopy(Date.now()) })
+    } catch (caught) {
+      setError(message(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runImport = async (file: BackupFile) => {
+    setStep(null)
+    setBusy(true)
+    try {
+      await applyBackup(file.data)
       window.location.reload()
     } catch (caught) {
       setError(message(caught))
@@ -170,13 +195,23 @@ export function SettingsPage() {
 
       <DangerZone />
 
-      {pending ? (
+      {step?.phase === 'confirm' ? (
         <ConfirmDialog
           title="Ghi đè toàn bộ dữ liệu?"
-          message={`File có ${describeCounts(countRecords(pending.data))}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế. App sẽ tự tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
-          confirmLabel="Nhập và ghi đè"
-          onConfirm={() => void runImport(pending)}
-          onCancel={() => setPending(null)}
+          message={`File có ${describeCounts(countRecords(step.file.data))}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
+          confirmLabel="Tải file an toàn"
+          onConfirm={() => void saveSafetyCopy(step.file)}
+          onCancel={() => setStep(null)}
+        />
+      ) : null}
+
+      {step?.phase === 'safety' ? (
+        <ConfirmDialog
+          title="Đã thấy file trong máy chưa?"
+          message={`Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không rồi mới bấm tiếp — sau bước này dữ liệu đang có trên máy không lấy lại được.`}
+          confirmLabel="Đã thấy — ghi đè"
+          onConfirm={() => void runImport(step.file)}
+          onCancel={() => setStep(null)}
         />
       ) : null}
     </div>

@@ -65,6 +65,9 @@ Pages → Connect to Git, với:
 2. DevTools → Application → Manifest: không có lỗi; Service Worker ở trạng thái *activated*.
 3. Bấm cài lên màn hình chính, tắt máy bay… ý là **bật** chế độ máy bay, rồi mở app từ icon: phải
    lên đơn và xuất phiếu được như thường.
+4. Đọc [`ghi-chu-phat-hanh.md`](./ghi-chu-phat-hanh.md) xem bản này có việc gì người bán phải tự làm
+   trên dữ liệu cũ của họ. Deploy không đụng tới IndexedDB, nên dữ liệu do lỗi bản trước ghi sai vẫn
+   nằm nguyên ở đó — phải nhắc chủ quán, không có migration nào chữa hộ được.
 
 ## 4. Cài lên điện thoại
 

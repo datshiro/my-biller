@@ -42,8 +42,12 @@ export function OrderDetailPage() {
 
   const saveNote = async () => {
     if (noteDraft === null) return
-    await updateOrderNote(orderId, noteDraft.trim())
-    setNoteDraft(null)
+    try {
+      await updateOrderNote(orderId, noteDraft.trim())
+      setNoteDraft(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không lưu được ghi chú.')
+    }
   }
 
   const doVoid = async () => {
@@ -149,7 +153,13 @@ export function OrderDetailPage() {
       {confirming ? (
         <ConfirmDialog
           title="Huỷ đơn này?"
-          message={`${order.code} sẽ không còn tính vào doanh thu và công nợ. Các phiếu thu của đơn cũng bị xoá. Không hoàn tác được.`}
+          message={
+            // Nói thẳng số tiền sắp biến khỏi sổ. Huỷ đơn xoá luôn phiếu thu, nên tiền mặt người bán
+            // đã thực sự cầm sẽ không còn ở đâu cả — kể cả trong báo cáo của kỳ đã chốt.
+            order.paidAmount > 0
+              ? `${order.code} đã thu ${formatVnd(order.paidAmount)}. Huỷ đơn sẽ xoá luôn số đã thu đó khỏi sổ — hãy trả lại tiền cho khách trước. Đơn cũng thôi tính vào doanh thu và công nợ. Không hoàn tác được.`
+              : `${order.code} sẽ không còn tính vào doanh thu và công nợ. Không hoàn tác được.`
+          }
           confirmLabel="Huỷ đơn"
           onConfirm={() => void doVoid()}
           onCancel={() => setConfirming(false)}

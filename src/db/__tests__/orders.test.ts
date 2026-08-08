@@ -2,7 +2,14 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
 import { createItem, getItem, updateItem } from '../repositories/items'
-import { createOrder, getOrderLines, getOrderPayments, type OrderDraft } from '../repositories/orders'
+import {
+  createOrder,
+  getOrderLines,
+  getOrderPayments,
+  listOrderLinesOfOrders,
+  listOrdersByCustomer,
+  type OrderDraft,
+} from '../repositories/orders'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -47,6 +54,35 @@ describe('createOrder', () => {
   it('kẹp giảm giá ở mức tiền hàng', async () => {
     const { id } = await createOrder(draft({ discount: 999_000 }))
     expect(await db.orders.get(id)).toMatchObject({ discount: 110_000, total: 0, status: 'paid' })
+  })
+
+  /**
+   * Khác ca dưới ở chỗ giá trong draft **đã** khác giá danh mục ngay lúc ghi. Ca dưới chỉ chứng minh
+   * "bản ghi đã lưu không bị viết đè ngược"; ca này chứng minh `createOrder` chép giá từ draft chứ
+   * không tra lại bảng `items` — nếu nó tra lại thì giá vốn hôm nay sẽ chảy ngược vào đơn cũ và làm
+   * sai lợi nhuận của mọi kỳ đã chốt.
+   */
+  it('giá bán và giá vốn ghi vào dòng đơn là số trong draft, không phải số đang có trong danh mục', async () => {
+    const itemId = await createItem({
+      name: 'Phở bò',
+      groupId: null,
+      unit: 'tô',
+      unitPrice: 55_000,
+      costPrice: 30_000,
+      isActive: 1,
+    })
+
+    const { id } = await createOrder(
+      draft({ lines: [{ itemId, name: 'Phở bò hôm qua', unit: 'tô', unitPrice: 50_000, costPrice: 25_000, qty: 2 }] }),
+    )
+
+    expect((await getOrderLines(id))[0]).toMatchObject({
+      itemId,
+      name: 'Phở bò hôm qua',
+      unitPrice: 50_000,
+      costPrice: 25_000,
+      amount: 100_000,
+    })
   })
 
   it('sửa giá mặt hàng KHÔNG làm sai phiếu đã xuất', async () => {
@@ -116,6 +152,26 @@ describe('createOrder', () => {
     expect(await db.orders.get(id)).toMatchObject({ customerId: null, status: 'paid' })
   })
 
+  /** Bấm XONG hai lần bằng hai ngón, hoặc màn hình đơ rồi nhả một lượt — hai lệnh ghi cùng lúc thật. */
+  it('20 đơn ghi đồng thời: không đơn nào trùng mã, không đơn nào mất dòng hàng', async () => {
+    const created = await Promise.all(
+      Array.from({ length: 20 }, () => createOrder(draft({ payment: { amount: 110_000, method: 'cash', note: '' } }))),
+    )
+
+    const codes = created.map((order) => order.code)
+    expect(new Set(codes).size).toBe(20)
+    expect(await db.orders.count()).toBe(20)
+    for (const { id } of created) expect(await getOrderLines(id)).toHaveLength(1)
+  }, 30_000)
+
+  it('lịch sử đơn của khách xếp mới nhất lên đầu', async () => {
+    const older = await createOrder(draft({ soldAt: soldAt - 86_400_000 }))
+    const newer = await createOrder(draft({ soldAt }))
+
+    const history = await listOrdersByCustomer(1)
+    expect(history.map((order) => order.id)).toEqual([newer.id, older.id])
+  })
+
   it('300 đơn trong cùng một ngày: mã không trùng, đánh số 001..300', async () => {
     for (let i = 0; i < 300; i += 1) {
       await createOrder(draft({ soldAt: soldAt + i * 1_000 }))
@@ -132,5 +188,42 @@ describe('createOrder', () => {
     await createOrder(draft())
     const next = await createOrder(draft({ soldAt: new Date(2026, 7, 8, 9, 0).getTime() }))
     expect((await db.orders.get(next.id))?.code).toBe('PBH-260808-001')
+  })
+})
+
+/**
+ * Hàm này đổi thuật toán ở ngưỡng 200 đơn. Hai nhánh phải cho **cùng một kết quả**, nếu không thì kỳ
+ * báo cáo rộng ra vừa đủ 200 đơn là giá vốn với lợi nhuận nhảy số mà không ai biết vì sao.
+ *
+ * Ghi thẳng vào bảng chứ không qua `createOrder`: chỗ cần thử là đường đọc, mà dựng 250 đơn thật thì
+ * mất cả phút.
+ */
+describe('listOrderLinesOfOrders', () => {
+  const seedLines = (count: number) =>
+    db.orderLines.bulkAdd(
+      Array.from({ length: count }, (_, index) => ({
+        orderId: index + 1,
+        itemId: null,
+        name: `Món ${index + 1}`,
+        unit: '',
+        unitPrice: 1_000,
+        costPrice: null,
+        qty: 1,
+        amount: 1_000,
+      })),
+    )
+
+  // Mỗi ca thừa ra 50 đơn không được hỏi tới: trả cả bảng về cũng phải bị bắt.
+  it.each([
+    ['dưới ngưỡng — đi bằng anyOf', 5],
+    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 250],
+  ])('%s: chỉ trả dòng của đúng những đơn được hỏi', async (_label, asked) => {
+    await seedLines(asked + 50)
+    const wanted = Array.from({ length: asked }, (_, index) => index + 1)
+
+    const lines = await listOrderLinesOfOrders(wanted)
+
+    expect(lines).toHaveLength(asked)
+    expect([...new Set(lines.map((line) => line.orderId))].sort((a, b) => a - b)).toEqual(wanted)
   })
 })

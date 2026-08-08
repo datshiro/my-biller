@@ -26,15 +26,17 @@ export function CartLines({
 }) {
   return (
     <ul className="border-t border-line">
+      {/* Tên đứng riêng một dòng: xếp cùng hàng với hai nút ±, ô số lượng và ô thành tiền thì trên
+          máy 320px tên chỉ còn ~56px, "Phở bò tái nạm" và "Phở bò tái gầu" đều hiện thành "Phở b…". */}
       {lines.map((line) => (
-        <li key={line.key} className="flex items-center gap-2 border-b border-line px-4 py-2">
+        <li key={line.key} className="flex flex-col gap-1 border-b border-line px-4 py-2">
           <button
             type="button"
             onClick={() => onEdit(line)}
-            className="min-w-0 flex-1 text-left"
+            className="w-full min-w-0 text-left"
             aria-label={`Sửa ${line.name}`}
           >
-            <span className="block truncate text-[15px] font-semibold">{line.name}</span>
+            <span className="block text-[15px] font-semibold">{line.name}</span>
             <span className="block text-[13px] text-muted">
               {formatAmount(line.unitPrice)}
               {line.unit ? ` / ${line.unit}` : ''}
@@ -42,13 +44,15 @@ export function CartLines({
             </span>
           </button>
 
-          <StepperButton label="−" onClick={() => onBump(line.key, -1)} />
-          <span className="w-8 text-center text-[17px] font-bold tabular-nums">{formatQty(line.qty)}</span>
-          <StepperButton label="+" onClick={() => onBump(line.key, 1)} />
+          <div className="flex items-center gap-2">
+            <StepperButton label="−" onClick={() => onBump(line.key, -1)} />
+            <span className="w-8 text-center text-[17px] font-bold tabular-nums">{formatQty(line.qty)}</span>
+            <StepperButton label="+" onClick={() => onBump(line.key, 1)} />
 
-          <span className="money w-20 shrink-0 text-right text-[15px] font-bold">
-            {formatAmount(calcLineAmount(line))}
-          </span>
+            <span className="money flex-1 text-right text-[15px] font-bold">
+              {formatAmount(calcLineAmount(line))}
+            </span>
+          </div>
         </li>
       ))}
     </ul>

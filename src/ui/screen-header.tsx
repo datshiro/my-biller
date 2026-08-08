@@ -5,11 +5,14 @@ export function ScreenHeader({
   title,
   right,
   back,
+  onBack,
 }: {
   title: string
   right?: ReactNode
   /** `back` = mũi tên quay lại, `close` = dấu ✕ cho màn dạng form. */
   back?: 'back' | 'close'
+  /** Chặn đường ra, ví dụ để hỏi lại khi form còn chữ chưa lưu. Mặc định là lùi một bước lịch sử. */
+  onBack?: () => void
 }) {
   const navigate = useNavigate()
 
@@ -18,7 +21,7 @@ export function ScreenHeader({
       {back ? (
         <button
           type="button"
-          onClick={() => void navigate(-1)}
+          onClick={onBack ?? (() => void navigate(-1))}
           aria-label="Quay lại"
           className="grid size-12 shrink-0 place-items-center rounded-btn text-[22px] active:bg-surface"
         >

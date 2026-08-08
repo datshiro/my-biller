@@ -86,13 +86,43 @@ describe('bán hàng', () => {
     await userEvent.click(screen.getByRole('button', { name: /CHỌN KHÁCH ĐỂ GHI NỢ/ }))
     await userEvent.click(await screen.findByRole('button', { name: /Anh Hùng/ }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Bán nợ' }))
+    // Quay lại thu tiền thì vẫn phải đang là "Bán nợ". Không được chọn lại — chọn lại là che mất
+    // đúng cái bug này: đi chọn khách xong sheet về mặc định tiền mặt và đơn nợ bị ghi thành đã thu đủ.
+    expect(screen.getByRole('button', { name: 'Bán nợ' }).getAttribute('aria-pressed')).toBe('true')
     await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
 
     await waitFor(async () => {
       expect((await db.orders.toArray())[0]).toMatchObject({ paidAmount: 0, status: 'unpaid' })
     })
     expect(await db.payments.count()).toBe(0)
+  })
+
+  it('trả thiếu rồi mới chọn khách: số khách đã đưa giữ nguyên, phần thiếu thành nợ', async () => {
+    await seedItems()
+    const customerId = await createCustomer({ name: 'Anh Hùng', phone: '', address: '', note: '' })
+    renderSales()
+
+    await pick('Phở bò')
+    await openPayment()
+
+    const given = within(screen.getByRole('dialog')).getByLabelText('Khách đưa')
+    await userEvent.clear(given)
+    await userEvent.type(given, '20000')
+
+    await userEvent.click(screen.getByRole('button', { name: /CHỌN KHÁCH ĐỂ GHI NỢ/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Anh Hùng/ }))
+
+    expect(await screen.findByText('Còn nợ lại')).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+
+    await waitFor(async () => {
+      expect((await db.orders.toArray())[0]).toMatchObject({
+        total: 55_000,
+        paidAmount: 20_000,
+        status: 'partial',
+        customerId,
+      })
+    })
   })
 
   it('khách trả thiếu → partial, phần thiếu thành nợ của khách đó', async () => {
@@ -163,6 +193,28 @@ describe('bán hàng', () => {
     expect(await getOrderLines(order?.id ?? -1)).toMatchObject([{ unitPrice: 40_000, amount: 40_000 }])
     expect(order?.total).toBe(40_000)
     expect((await db.items.get(itemId ?? -1))?.unitPrice).toBe(55_000)
+  })
+
+  /**
+   * Nháp sống sót qua một lượt bán là mầm của đơn trùng: lần mở màn Bán hàng sau đó, đúng những món
+   * vừa bán lại nằm sẵn trong giỏ kèm banner "đã khôi phục", và người bán rất dễ bấm bán lần nữa.
+   */
+  it('bán xong thì nháp biến mất, mở lại không khôi phục đơn vừa bán', async () => {
+    await seedItems()
+    const first = renderSales()
+
+    await pick('Phở bò')
+    await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).not.toBeNull())
+
+    await openPayment()
+    await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+    await screen.findByText('Phiếu đã xuất')
+
+    expect(localStorage.getItem('my-biller:cart-draft')).toBeNull()
+
+    first.unmount()
+    renderSales()
+    expect(screen.queryByText(/Đã khôi phục đơn đang lên dở/)).toBeNull()
   })
 
   it('đơn đang lên dở được khôi phục sau khi app bị tắt', async () => {

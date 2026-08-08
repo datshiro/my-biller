@@ -31,6 +31,8 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
 
   const set = (patch: Partial<ShopSettings>) => setDraft((current) => ({ ...current, ...patch }))
 
+  const dirty = (Object.keys(shop) as (keyof ShopSettings)[]).some((key) => draft[key] !== shop[key])
+
   const save = async () => {
     setSaving(true)
     setError(null)
@@ -52,6 +54,7 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
     <FormScreen
       title="Thông tin cửa hàng"
       error={error}
+      dirty={dirty && !saving}
       cta={
         <Button size="cta" disabled={saving} onClick={() => void save()}>
           {saving ? 'Đang lưu…' : 'LƯU THÔNG TIN'}

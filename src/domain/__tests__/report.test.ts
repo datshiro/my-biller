@@ -132,6 +132,10 @@ describe('dailySeries', () => {
       { day: '2026-08-01', revenue: 0, expense: 0 },
     ])
   })
+
+  it('khoảng ngược thì trả rỗng, không vẽ chuỗi ngày chạy lùi', () => {
+    expect(dailySeries([order(at(1), 100_000)], [], at(3), at(1))).toEqual([])
+  })
 })
 
 describe('aggregate', () => {

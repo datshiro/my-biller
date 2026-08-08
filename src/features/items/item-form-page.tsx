@@ -10,10 +10,9 @@ import { ListSkeleton } from '@/ui/empty-state'
 import { FormScreen } from '@/ui/form-screen'
 import { MoneyInput } from '@/ui/money-input'
 import { Field, TextField } from '@/ui/text-field'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 const COMMON_UNITS = ['Tô', 'Ly', 'Cái', 'Kg', 'Phần', 'Chai']
-
-const message = (error: unknown) => (error instanceof Error ? error.message : 'Không lưu được. Thử lại.')
 
 function ItemForm({ item }: { item: Item | null }) {
   const navigate = useNavigate()
@@ -28,13 +27,19 @@ function ItemForm({ item }: { item: Item | null }) {
   const [customUnit, setCustomUnit] = useState(() => Boolean(item?.unit && !COMMON_UNITS.includes(item.unit)))
 
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
+  const dirty =
+    name !== (item?.name ?? '') ||
+    unitPrice !== (item?.unitPrice ?? null) ||
+    costPrice !== (item?.costPrice ?? null) ||
+    unit !== (item?.unit ?? '') ||
+    groupId !== (item?.groupId ?? null) ||
+    note !== (item?.note ?? '')
 
-  const save = async () => {
+  const save = () => {
     const trimmed = name.trim()
     const nextErrors = {
       ...(trimmed ? {} : { name: 'Nhập tên mặt hàng.' }),
@@ -43,9 +48,7 @@ function ItemForm({ item }: { item: Item | null }) {
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0 || unitPrice === null) return
 
-    setSaving(true)
-    setSaveError(null)
-    try {
+    void run(async () => {
       const payload = { name: trimmed, unitPrice, costPrice, unit: unit.trim(), groupId, note: note.trim() }
       if (item?.id) {
         await updateItem(item.id, payload)
@@ -53,38 +56,34 @@ function ItemForm({ item }: { item: Item | null }) {
         await createItem({ ...payload, isActive: 1 })
       }
       void navigate('/them/mat-hang', { replace: true })
-    } catch (error) {
-      setSaveError(message(error))
-      setSaving(false)
-    }
+    })
   }
 
-  const removeItem = async () => {
+  const removeItem = () => {
     setConfirming(false)
-    try {
+    void run(async () => {
       if (item?.id) await deleteItem(item.id)
       void navigate('/them/mat-hang', { replace: true })
-    } catch (error) {
-      setSaveError(message(error))
-    }
+    })
   }
 
-  const toggleActive = async () => {
-    if (!item?.id) return
-    try {
-      await (item.isActive === 1 ? deactivateItem(item.id) : updateItem(item.id, { isActive: 1 }))
+  const toggleActive = () => {
+    const id = item?.id
+    if (id === undefined) return
+    const selling = item?.isActive === 1
+    void run(async () => {
+      await (selling ? deactivateItem(id) : updateItem(id, { isActive: 1 }))
       void navigate('/them/mat-hang', { replace: true })
-    } catch (error) {
-      setSaveError(message(error))
-    }
+    })
   }
 
   return (
     <FormScreen
       title={item ? 'Sửa mặt hàng' : 'Thêm mặt hàng'}
       error={saveError}
+      dirty={dirty && !saving}
       cta={
-        <Button size="cta" disabled={saving} onClick={() => void save()}>
+        <Button size="cta" disabled={saving} onClick={save}>
           {saving ? 'Đang lưu…' : 'LƯU MẶT HÀNG'}
         </Button>
       }
@@ -171,7 +170,7 @@ function ItemForm({ item }: { item: Item | null }) {
 
       {item?.id ? (
         <div className="flex flex-col gap-2 border-t border-line pt-5">
-          <Button variant="secondary" onClick={() => void toggleActive()}>
+          <Button variant="secondary" disabled={saving} onClick={toggleActive}>
             {item.isActive === 1 ? 'Ngừng bán mặt hàng này' : 'Bán lại mặt hàng này'}
           </Button>
           <Button variant="danger" onClick={() => setConfirming(true)}>
@@ -188,7 +187,7 @@ function ItemForm({ item }: { item: Item | null }) {
           title="Xoá mặt hàng?"
           message={`“${item?.name}” sẽ bị xoá khỏi danh mục. Không hoàn tác được.`}
           confirmLabel="Xoá"
-          onConfirm={() => void removeItem()}
+          onConfirm={removeItem}
           onCancel={() => setConfirming(false)}
         />
       ) : null}

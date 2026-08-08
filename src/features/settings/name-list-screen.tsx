@@ -6,6 +6,7 @@ import { ListRow } from '@/ui/list-row'
 import { ListScreen } from '@/ui/list-screen'
 import { Sheet } from '@/ui/sheet'
 import { TextField } from '@/ui/text-field'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 export type NameRow = { id: number; name: string; usage: number }
 
@@ -45,28 +46,25 @@ function NameSheet({
   onClose: () => void
 }) {
   const [name, setName] = useState(row?.name ?? '')
-  const [error, setError] = useState<string | undefined>()
-  const [saving, setSaving] = useState(false)
+  const [invalid, setInvalid] = useState<string | undefined>()
+  const { submitting: saving, error: saveError, run } = useSubmitOnce()
 
-  const save = async () => {
+  const save = () => {
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Nhập tên.')
+      setInvalid('Nhập tên.')
       return
     }
     if (others.some((other) => sameName(other.name, trimmed))) {
-      setError('Tên này đã có rồi.')
+      setInvalid('Tên này đã có rồi.')
       return
     }
+    setInvalid(undefined)
 
-    setSaving(true)
-    try {
+    void run(async () => {
       await onSave(trimmed)
       onClose()
-    } catch (caught) {
-      setError(message(caught))
-      setSaving(false)
-    }
+    })
   }
 
   return (
@@ -74,7 +72,7 @@ function NameSheet({
       title={row ? 'Sửa tên' : 'Thêm mới'}
       onClose={onClose}
       footer={
-        <Button size="cta" disabled={saving} onClick={() => void save()}>
+        <Button size="cta" disabled={saving} onClick={save}>
           {saving ? 'Đang lưu…' : 'LƯU'}
         </Button>
       }
@@ -85,9 +83,9 @@ function NameSheet({
         autoFocus
         onChange={(event) => {
           setName(event.target.value)
-          setError(undefined)
+          setInvalid(undefined)
         }}
-        error={error}
+        error={invalid ?? saveError ?? undefined}
       />
 
       {row ? (

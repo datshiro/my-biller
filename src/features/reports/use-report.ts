@@ -19,6 +19,7 @@ import {
 } from '@/db/repositories/orders'
 import { normalizeName } from '@/domain/order-draft/parse-order-text'
 import { aggregate, dailySeries, type DailyPoint, type ReportNumbers } from '@/domain/report'
+import { useDayTick } from '@/ui/use-day-tick'
 
 /**
  * Kỳ mang luôn tham số của nó (`offset`, `from`/`to`) thay vì để rời bên ngoài — nhờ vậy không tồn
@@ -87,12 +88,15 @@ const MATERIAL = normalizeName('Nguyên liệu')
 
 /**
  * Số liệu của kỳ đang chọn. Kỳ nhận theo **loại + độ lệch tháng** chứ không phải mốc thời gian, nên
- * qua nửa đêm hay sang tháng mới thì lần đọc kế tiếp đã tự đúng và render không cần xem đồng hồ.
+ * chỉ cần query chạy lại là khoảng tự đúng. Nhưng nó không tự chạy lại: `useLiveQuery` chỉ thức dậy
+ * khi bảng đổi, mà quán vắng thì chẳng có gì đổi — mở kỳ "Hôm nay" lúc 23h50 rồi ngồi tới 00h20 là
+ * nhãn vẫn ghi "Hôm nay" trong khi khoảng đang là hôm qua. `useDayTick` đẩy nó chạy lại lúc sang ngày.
  *
  * Đọc theo index `soldAt` / `spentAt` / `paidAt` trong khoảng, dòng hàng lấy bằng một `anyOf` —
  * không `toArray()` cả bảng, vì bảng `orderLines` là bảng lớn nhất của app.
  */
 export function useReport(period: Period): Report | undefined {
+  const day = useDayTick()
   return useLiveQuery(async () => {
     const now = Date.now()
     const { from, to, label, canNext } = rangeOf(period, now)
@@ -139,5 +143,5 @@ export function useReport(period: Period): Report | undefined {
       now,
       maybeDoubleCounted: numbers.cogs > 0 && materialExpense,
     }
-  }, [keyOf(period)])
+  }, [keyOf(period), day])
 }

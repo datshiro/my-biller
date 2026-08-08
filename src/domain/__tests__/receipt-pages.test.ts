@@ -26,6 +26,10 @@ describe('paginateLines', () => {
     expect(pages.map((page) => page.length)).toEqual([10, 10, 10, 7])
   })
 
+  it('perPage = 0 không làm treo vòng lặp', () => {
+    expect(paginateLines(lines(3), 0).map((page) => page.length)).toEqual([1, 1, 1])
+  })
+
   it('mọi trang đều không vượt giới hạn', () => {
     for (const count of [1, 9, 10, 11, 25, 40, 100]) {
       for (const page of paginateLines(lines(count), 10)) {

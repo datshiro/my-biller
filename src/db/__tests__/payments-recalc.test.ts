@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
-import { recalcAll, recalcOrderPayment } from '../recalc'
+import { recalcAll } from '../recalc'
 import { addOrderPayment } from '../repositories/payments'
 import { createOrder, type OrderDraft } from '../repositories/orders'
 
@@ -68,11 +68,13 @@ describe('addOrderPayment', () => {
     ).rejects.toThrow(/đã huỷ/)
   })
 
-  it('từ chối số tiền 0 hoặc âm', async () => {
+  it('từ chối số tiền 0 hoặc âm bằng câu người bán đọc được, không phải lỗi thô của zod', async () => {
     const { id } = await createOrder(draft(100_000))
-    await expect(
-      addOrderPayment({ orderId: id, amount: 0, method: 'cash', paidAt: soldAt, note: '' }),
-    ).rejects.toThrow()
+    for (const amount of [0, -1000]) {
+      await expect(
+        addOrderPayment({ orderId: id, amount, method: 'cash', paidAt: soldAt, note: '' }),
+      ).rejects.toThrow('Số tiền thu phải lớn hơn 0.')
+    }
   })
 })
 
@@ -103,7 +105,7 @@ describe('recalc', () => {
     const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 30_000, method: 'cash', note: '' } }))
     await db.orders.update(id, { paidAmount: 0, status: 'unpaid' })
 
-    await recalcOrderPayment(id)
+    await recalcAll()
     expect(await db.orders.get(id)).toMatchObject({ paidAmount: 30_000, status: 'partial' })
   })
 
@@ -123,5 +125,36 @@ describe('recalc', () => {
 
     await recalcAll()
     expect((await db.orders.get(id))?.status).toBe('void')
+  })
+
+  /**
+   * Đưa `paidAmount` về 0 mà để dòng `payments` nằm lại là bất biến gãy ở chỗ không màn nào kêu: chi
+   * tiết đơn đọc `paidAmount` nên hiện đúng, còn lịch sử thu tiền của khách và tổng "Đã thu" của kỳ
+   * thì đọc thẳng bảng `payments` nên vẫn cộng số tiền đó vào.
+   */
+  it('đơn huỷ thì phiếu thu của nó cũng bị xoá, không chỉ đưa tổng về 0', async () => {
+    const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 100_000, method: 'cash', note: '' } }))
+    await db.orders.update(id, { status: 'void' })
+
+    expect(await recalcAll()).toBe(1)
+
+    expect(await db.orders.get(id)).toMatchObject({ status: 'void', paidAmount: 0 })
+    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+    await assertPaidAmountMatchesPayments()
+  })
+
+  /**
+   * Ca này bắt đúng cái bẫy: `repaired` trả `null` khi dòng đơn đã đúng, nên nếu việc dọn phiếu thu
+   * đi kèm với việc sửa dòng đơn thì đơn đã recalc một lần rồi sẽ không bao giờ được dọn nữa.
+   */
+  it('đơn huỷ đã đúng tổng nhưng còn treo phiếu thu thì vẫn được dọn', async () => {
+    const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 100_000, method: 'cash', note: '' } }))
+    await db.orders.update(id, { status: 'void', paidAmount: 0 })
+
+    expect(await recalcAll()).toBe(1)
+    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+
+    // Dọn xong thì hết việc — chạy lại không được đếm khống.
+    expect(await recalcAll()).toBe(0)
   })
 })
