@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import { blockDb } from './db-block'
 import type {
   Customer,
   Expense,
@@ -64,6 +65,18 @@ export class BillerDb extends Dexie {
     stampTimestamps(this.orders)
     stampTimestamps(this.expenseCategories)
     stampTimestamps(this.expenses)
+
+    // Một bản JS khác trên cùng máy vừa nâng version. Giữ kết nối thì bản kia treo mãi ở `blocked`;
+    // dùng tiếp thì mọi lệnh ghi đều hỏng trong khi màn hình vẫn hiện như thường. Đóng rồi chặn màn
+    // là đường duy nhất còn nói thật với người bán.
+    this.on('versionchange', () => {
+      this.close()
+      blockDb('stale-app')
+    })
+
+    // Bản mới đang chờ nâng version mà một tab cũ còn giữ kết nối: lượt nâng cấp treo vô hạn (đo trên
+    // Chrome thật — trình duyệt không tự đóng hộ). Phải nói ra, không thì người bán ngồi nhìn màn đứng.
+    this.on('blocked', () => blockDb('other-tab'))
   }
 }
 
