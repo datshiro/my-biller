@@ -95,6 +95,34 @@ describe('MoneyInput', () => {
     expect(onValue).toHaveBeenLastCalledWith(null)
   })
 
+  /**
+   * Con trỏ chỉ văng đi khi chuỗi vẽ lại **khác** chuỗi vừa gõ, tức đúng lúc ô thêm hoặc bớt một dấu
+   * chấm. Chèn một chữ số vào giữa mà số dấu chấm không đổi thì React không ghi lại DOM và con trỏ
+   * tự ở yên — ca đó không chứng minh được gì.
+   */
+  it('gõ thêm chữ số làm sinh dấu chấm thì con trỏ ở lại ngay sau chữ số vừa gõ', async () => {
+    render(<Harness onValue={vi.fn()} />)
+    await userEvent.type(priceBox(), '999')
+
+    // Đứng sau chữ số đầu rồi gõ "1": chuỗi vượt mốc nghìn nên ô chèn thêm dấu chấm.
+    await userEvent.type(priceBox(), '1', { initialSelectionStart: 1, initialSelectionEnd: 1 })
+
+    expect(priceBox().value).toBe('9.199')
+    // Không giữ chỗ thì con trỏ văng về cuối (5), người bán phải rê tay về sau mỗi phím.
+    expect(priceBox().selectionStart).toBe(3)
+  })
+
+  it('xoá một chữ số ở giữa thì con trỏ ở lại đúng chỗ vừa xoá', async () => {
+    render(<Harness onValue={vi.fn()} />)
+    await userEvent.type(priceBox(), '1500000')
+
+    // Đứng sau "1.5" rồi xoá lùi — mất chữ số "5".
+    await userEvent.type(priceBox(), '{backspace}', { initialSelectionStart: 3, initialSelectionEnd: 3 })
+
+    expect(priceBox().value).toBe('100.000')
+    expect(priceBox().selectionStart).toBe(1)
+  })
+
   it('nút Xoá đưa ô về rỗng và trả null', async () => {
     const onValue = vi.fn()
     render(<Harness onValue={onValue} />)
