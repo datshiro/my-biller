@@ -53,7 +53,8 @@ repository), và `src/domain/**` không được import React / Dexie / `@/db/*`
 Chi tiết lựa chọn công nghệ: [`docs/tech-stack.md`](docs/tech-stack.md) ·
 giao diện: [`docs/design-guidelines.md`](docs/design-guidelines.md) ·
 deploy: [`docs/deploy.md`](docs/deploy.md) ·
-kiểm thử live: [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
+kiểm thử live: [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md) ·
+ghi chú phát hành: [`docs/ghi-chu-phat-hanh.md`](docs/ghi-chu-phat-hanh.md).
 
 ## Bất biến (vi phạm = sai số tiền)
 
