@@ -5,6 +5,7 @@ import type { Payment } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { MoneyInput } from '@/ui/money-input'
 import { Sheet } from '@/ui/sheet'
+import { useSubmitOnce } from '@/ui/use-submit-once'
 
 type Method = Payment['method']
 
@@ -17,22 +18,19 @@ export function CollectDebtSheet({
   customerId,
   name,
   owed,
-  now,
   onDone,
   onClose,
 }: {
   customerId: number
   name: string
   owed: number
-  now: number
   onDone: () => void
   onClose: () => void
 }) {
   const amountInput = useRef<HTMLInputElement>(null)
   const [amount, setAmount] = useState<number | null>(owed)
   const [method, setMethod] = useState<Method>('cash')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { submitting: saving, error, run } = useSubmitOnce('Không thu được.')
 
   useEffect(() => amountInput.current?.focus(), [])
 
@@ -40,16 +38,13 @@ export function CollectDebtSheet({
   const tooMuch = taken > owed
   const left = owed - taken
 
-  const save = async () => {
+  const save = () => {
     if (taken <= 0 || tooMuch) return
-    setSaving(true)
-    try {
-      await collectDebt({ customerId, amount: taken, method, paidAt: now, note: '' })
+    // Đọc đồng hồ tại lúc bấm: `now` của query có thể đã cũ hàng tiếng và phiếu thu sẽ rơi nhầm ngày.
+    void run(async () => {
+      await collectDebt({ customerId, amount: taken, method, paidAt: Date.now(), note: '' })
       onDone()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Không thu được.')
-      setSaving(false)
-    }
+    })
   }
 
   return (
@@ -59,7 +54,7 @@ export function CollectDebtSheet({
       footer={
         <div className="flex flex-col gap-2">
           {error ? <p role="alert" className="text-[15px] font-semibold text-danger">{error}</p> : null}
-          <Button size="cta" disabled={saving || taken <= 0 || tooMuch} onClick={() => void save()}>
+          <Button size="cta" disabled={saving || taken <= 0 || tooMuch} onClick={save}>
             {saving ? 'Đang lưu…' : `THU ${formatVnd(taken)}`}
           </Button>
         </div>

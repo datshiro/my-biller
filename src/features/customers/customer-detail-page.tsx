@@ -29,7 +29,9 @@ export function CustomerDetailPage() {
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (customer === undefined) {
+  // Chặn cả `orders`: hai query này độc lập, query quét index luôn về sau, và trong khoảng đó
+  // hai ô tiền sẽ vẽ "0 đ" y như số thật — người bán đọc nhầm là khách hết nợ.
+  if (customer === undefined || orders === undefined) {
     return (
       <div className="p-4">
         <ListSkeleton rows={4} />
@@ -163,7 +165,6 @@ export function CustomerDetailPage() {
           customerId={customer.id}
           name={customer.name}
           owed={debt}
-          now={history.now}
           onDone={() => setCollecting(false)}
           onClose={() => setCollecting(false)}
         />

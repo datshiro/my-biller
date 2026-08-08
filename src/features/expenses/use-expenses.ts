@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { listExpenseCategories, listExpensesBetween } from '@/db/repositories/expenses'
 import { groupByDay, type DayGroup } from '@/domain/day-grouping'
 import type { Expense, ExpenseCategory } from '@/domain/schema'
+import { useDayTick } from '@/ui/use-day-tick'
 
 export type ExpenseMonth = {
   label: string
@@ -32,6 +33,7 @@ export function useExpenseMonth(
   monthOffset: number,
   categoryId: number | null,
 ): ExpenseMonth | undefined {
+  const day = useDayTick()
   return useLiveQuery(async () => {
     const now = Date.now()
     const month = startOfMonth(addMonths(now, monthOffset))
@@ -58,7 +60,7 @@ export function useExpenseMonth(
       todayTotal: sum(inToday.filter(matches)),
       now,
     }
-  }, [monthOffset, categoryId])
+  }, [monthOffset, categoryId, day])
 }
 
 export function useExpenseCategories(): ExpenseCategory[] | undefined {
