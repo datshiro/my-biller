@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { backupFilename, countRecords, describeCounts, parseBackupFile } from '../backup'
+import {
+  backupFilename,
+  cleanPriceRows,
+  countRecords,
+  describeCounts,
+  describeDroppedPrices,
+  parseBackupFile,
+} from '../backup'
 import type { BackupData } from '../schema'
 
 const emptyData: BackupData = {
@@ -7,6 +14,7 @@ const emptyData: BackupData = {
   itemGroups: [],
   items: [],
   customers: [],
+  customerPrices: [],
   orders: [],
   orderLines: [],
   payments: [],
@@ -40,6 +48,13 @@ const orderLine = (over: Row = {}) => ({
 })
 const payment = (over: Row = {}) => ({
   id: 1, orderId: 1, customerId: null, amount: 100_000, method: 'cash', paidAt: 0, note: '', ...over,
+})
+const item = (over: Row = {}) => ({
+  id: 3, name: 'Phở', groupId: null, unit: 'tô', unitPrice: 50_000, costPrice: null, isActive: 1,
+  note: '', createdAt: 0, updatedAt: 0, ...over,
+})
+const price = (over: Row = {}) => ({
+  id: 1, customerId: 7, itemId: 3, unitPrice: 45_000, createdAt: 0, updatedAt: 0, ...over,
 })
 
 /** Một file nhỏ nhưng đủ liên kết: đơn ↔ dòng hàng ↔ phiếu thu ↔ khách. */
@@ -76,7 +91,7 @@ describe('parseBackupFile', () => {
   })
 
   it('file của bản mới hơn bảo người dùng cập nhật, không bảo file hỏng', () => {
-    expect(() => parseBackupFile(file({ version: 2 }))).toThrow(/v2/)
+    expect(() => parseBackupFile(file({ version: 3 }))).toThrow(/v3/)
   })
 
   it('thiếu bảng thì chỉ đúng chỗ hỏng', () => {
@@ -156,6 +171,63 @@ describe('parseBackupFile — liên kết giữa các bảng', () => {
   })
 })
 
+/**
+ * Bảng giá riêng sinh sau, nên **mọi** file người bán đang giữ trong máy đều là v1 và thiếu hẳn khoá đó.
+ */
+describe('parseBackupFile — bảng giá riêng', () => {
+  const withoutPriceBook = (): Partial<BackupData> => {
+    const data: Partial<BackupData> = { ...emptyData }
+    delete data.customerPrices
+    return data
+  }
+
+  it('file v1 tạo trước khi có bảng giá vẫn nhập được, bảng giá để rỗng', () => {
+    expect(parseBackupFile(file({ data: withoutPriceBook() })).data.customerPrices).toEqual([])
+  })
+
+  it('file v2 thiếu hẳn khoá bảng giá thì bị từ chối, không im lặng thành rỗng', () => {
+    expect(() => parseBackupFile(file({ version: 2, data: withoutPriceBook() }))).toThrow(/customerPrices/)
+  })
+
+  it('dòng giá mồ côi KHÔNG chặn file — rác đó không đụng tới đồng nào', () => {
+    const data = { ...emptyData, customerPrices: [price()] }
+    expect(parseBackupFile(file({ version: 2, data })).data.customerPrices).toHaveLength(1)
+  })
+})
+
+describe('cleanPriceRows', () => {
+  const withPrices = (customerPrices: unknown[]): BackupData => ({
+    ...emptyData,
+    customers: [customer()],
+    items: [item()] as BackupData['items'],
+    customerPrices: customerPrices as BackupData['customerPrices'],
+  })
+
+  it('giữ nguyên dòng có đủ cả khách lẫn món', () => {
+    expect(cleanPriceRows(withPrices([price()]))).toEqual({ rows: [price()], dropped: 0 })
+  })
+
+  it('bỏ dòng mồ côi ở cả hai phía và đếm đúng số đã bỏ', () => {
+    const rác = [price(), price({ id: 2, itemId: 99 }), price({ id: 3, customerId: 99 })]
+    const { rows, dropped } = cleanPriceRows(withPrices(rác))
+
+    expect(rows).toEqual([price()])
+    expect(dropped).toBe(2)
+  })
+
+  it('trùng cặp thì giữ dòng cuối — bulkPut cũng để dòng sau đè dòng trước', () => {
+    const { rows, dropped } = cleanPriceRows(withPrices([price(), price({ id: 2, unitPrice: 40_000 })]))
+
+    expect(rows).toEqual([price({ id: 2, unitPrice: 40_000 })])
+    expect(dropped).toBe(1)
+  })
+
+  it('cửa xác nhận chỉ nói thêm khi thật sự có dòng bị bỏ', () => {
+    expect(describeDroppedPrices(withPrices([price()]))).toBe('')
+    expect(describeDroppedPrices(withPrices([price({ itemId: 99 })]))).toMatch(/1 dòng giá riêng/)
+  })
+})
+
 describe('countRecords', () => {
   it('đếm những thứ người bán nhận ra, không đếm bảng phụ', () => {
     const counts = countRecords({
@@ -163,7 +235,7 @@ describe('countRecords', () => {
       orders: [1, 2, 3].map(() => ({}) as never),
       items: [1, 2].map(() => ({}) as never),
     })
-    expect(counts).toEqual({ orders: 3, items: 2, customers: 0, expenses: 0 })
-    expect(describeCounts(counts)).toBe('3 đơn · 2 mặt hàng · 0 khách · 0 khoản chi')
+    expect(counts).toEqual({ orders: 3, items: 2, customers: 0, expenses: 0, customerPrices: 0 })
+    expect(describeCounts(counts)).toBe('3 đơn · 2 mặt hàng · 0 khách · 0 khoản chi · 0 giá riêng')
   })
 })

@@ -65,7 +65,7 @@ Nhập file thì phải qua đủ hai cửa xác nhận
 
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
-    Chờ Thấy Chữ    2 đơn · 4 mặt hàng · 1 khách · 1 khoản chi
+    Chờ Thấy Chữ    2 đơn · 4 mặt hàng · 1 khách · 1 khoản chi · 0 giá riêng
     Xác Nhận Trong Hộp    Tải file an toàn
 
     Chờ Hộp Xác Nhận    Đã thấy file trong máy chưa?

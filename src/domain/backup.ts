@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { formatVnd } from './money'
 import { BackupFileSchema, type BackupData, type BackupFile } from './schema'
 
-export const BACKUP_VERSION = 1
+export const BACKUP_VERSION = 2
 
 const idsOf = (rows: readonly { id: number }[]) => new Set(rows.map((row) => row.id))
 
@@ -130,6 +130,7 @@ export type BackupCounts = {
   items: number
   customers: number
   expenses: number
+  customerPrices: number
 }
 
 export function countRecords(data: BackupData): BackupCounts {
@@ -138,9 +139,44 @@ export function countRecords(data: BackupData): BackupCounts {
     items: data.items.length,
     customers: data.customers.length,
     expenses: data.expenses.length,
+    customerPrices: data.customerPrices.length,
   }
 }
 
 export function describeCounts(counts: BackupCounts): string {
-  return `${counts.orders} đơn · ${counts.items} mặt hàng · ${counts.customers} khách · ${counts.expenses} khoản chi`
+  return `${counts.orders} đơn · ${counts.items} mặt hàng · ${counts.customers} khách · ${counts.expenses} khoản chi · ${counts.customerPrices} giá riêng`
+}
+
+type PriceRow = BackupData['customerPrices'][number]
+
+/**
+ * Dòng giá riêng mồ côi (món hoặc khách không còn trong file) và dòng trùng cặp là rác **vô hại**: giá
+ * được tra theo `itemId` của dòng đang có trong giỏ, nên dòng mồ côi không bao giờ được đọc và không
+ * đụng một đồng nào. Vì vậy nó **không** nằm trong `validateBackupIntegrity`: chặn cả file vì nó thì
+ * đường ra duy nhất là sửa tay JSON, cái giá đó lớn hơn nhiều lần cái hại.
+ *
+ * Bỏ dòng, đếm, rồi nói ra ở cửa xác nhận trước khi ghi đè. Trùng cặp thì giữ dòng cuối — `bulkPut`
+ * cũng để dòng sau đè dòng trước.
+ */
+export function cleanPriceRows(data: BackupData): { rows: PriceRow[]; dropped: number } {
+  const items = idsOf(data.items)
+  const customers = idsOf(data.customers)
+  const kept = new Map<string, PriceRow>()
+
+  for (const row of data.customerPrices) {
+    if (!items.has(row.itemId) || !customers.has(row.customerId)) continue
+    kept.set(`${row.customerId}:${row.itemId}`, row)
+  }
+
+  return { rows: [...kept.values()], dropped: data.customerPrices.length - kept.size }
+}
+
+/**
+ * Con số này phải đọc được **trước** bước ghi đè: `applyBackup` xong là app tự tải lại, mọi thông báo
+ * dựng sau đó đều biến mất cùng trang.
+ */
+export function describeDroppedPrices(data: BackupData): string {
+  const { dropped } = cleanPriceRows(data)
+  if (dropped === 0) return ''
+  return ` Có ${dropped} dòng giá riêng ghi cho món hoặc khách không còn trong file — nhập vào sẽ bỏ những dòng đó.`
 }

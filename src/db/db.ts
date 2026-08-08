@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { blockDb } from './db-block'
 import type {
   Customer,
+  CustomerPrice,
   Expense,
   ExpenseCategory,
   Item,
@@ -36,6 +37,7 @@ export class BillerDb extends Dexie {
   itemGroups!: Table<ItemGroup, number>
   items!: Table<Item, number>
   customers!: Table<Customer, number>
+  customerPrices!: Table<CustomerPrice, number>
   orders!: Table<Order, number>
   orderLines!: Table<OrderLine, number>
   payments!: Table<Payment, number>
@@ -59,9 +61,17 @@ export class BillerDb extends Dexie {
       expenses: '++id, categoryId, spentAt',
     })
 
+    // Bảng thêm mới thuần, không bản ghi cũ nào cần biến đổi → không cần `.upgrade()`.
+    // `&[customerId+itemId]` là index ghép **unique**: nó chặn chứ không upsert, nên cửa ghi phải mang
+    // `id` cũ theo (`repositories/customer-prices.ts`).
+    this.version(2).stores({
+      customerPrices: '++id, &[customerId+itemId], customerId, itemId',
+    })
+
     stampTimestamps(this.itemGroups)
     stampTimestamps(this.items)
     stampTimestamps(this.customers)
+    stampTimestamps(this.customerPrices)
     stampTimestamps(this.orders)
     stampTimestamps(this.expenseCategories)
     stampTimestamps(this.expenses)

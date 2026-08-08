@@ -1,5 +1,4 @@
 import 'fake-indexeddb/auto'
-import Dexie from 'dexie'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BillerDb } from '../db'
 import {
@@ -50,14 +49,26 @@ describe('lỗi nào là lỗi kho dữ liệu không mở được', () => {
   })
 })
 
+/**
+ * "Bản build sau" = đúng schema hiện tại cộng thêm một version. Kế thừa `BillerDb` thay vì tự khai lại
+ * các bảng: Dexie **xoá** mọi object store không có trong schema được khai, nên một fixture khai thiếu
+ * bảng sẽ âm thầm phá dữ liệu và biến ca test thành vô nghĩa. Kế thừa cũng để hai ca dưới không mục
+ * mỗi lần app lên version mới.
+ */
+class BillerDbBanSau extends BillerDb {
+  constructor(name: string) {
+    super(name)
+    this.version(this.verno + 1).stores({ tuongLai: '++id' })
+  }
+}
+
 describe('bản JS cũ gặp dữ liệu mới hơn', () => {
   it('tab đang mở nhận versionchange → đóng kết nối và chặn màn', async () => {
     const local = new BillerDb('block-versionchange')
     await local.open()
 
     // Đúng cái xảy ra khi người bán bấm cập nhật ở một tab khác.
-    const bumped = new Dexie('block-versionchange')
-    bumped.version(2).stores({ settings: 'key' })
+    const bumped = new BillerDbBanSau('block-versionchange')
     await bumped.open()
 
     await vi.waitFor(() => expect(getDbBlock()).toBe('stale-app'))
@@ -76,12 +87,10 @@ describe('bản JS cũ gặp dữ liệu mới hơn', () => {
    * Hệ quả: phát hành `version(2)` **không** làm hỏng bản cũ ở lần mở lại. Đừng khôi phục lại
    * `blockedBy` hay cửa chặn phát hành dựa trên giả định cũ mà không đo lại.
    */
-  it('bản cũ mở lại DB đã lên v2 vẫn đọc ghi được — không VersionError, không màn trắng', async () => {
-    const moi = new Dexie('block-reopen')
-    moi.version(1).stores({ items: '++id, name, groupId, isActive' })
-    moi.version(2).stores({ customerPrices: '++id, &[customerId+itemId]' })
+  it('bản cũ mở lại DB đã lên version cao hơn vẫn đọc ghi được — không VersionError, không màn trắng', async () => {
+    const moi = new BillerDbBanSau('block-reopen')
     await moi.open()
-    await moi.table('items').add({ name: 'phở' })
+    await moi.items.add({ name: 'phở' } as never)
     moi.close()
 
     const cu = new BillerDb('block-reopen')
