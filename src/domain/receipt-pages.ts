@@ -12,9 +12,11 @@ export const LINES_PER_PAGE = 10
  * Luôn trả về ít nhất một trang, kể cả khi không có dòng nào.
  */
 export function paginateLines<T>(lines: readonly T[], perPage = LINES_PER_PAGE): T[][] {
-  if (lines.length <= perPage) return [[...lines]]
+  // `perPage = 0` làm bước nhảy của vòng lặp thành 0 → chạy mãi cho tới khi hết bộ nhớ.
+  const limit = Math.max(1, Math.floor(perPage))
+  if (lines.length <= limit) return [[...lines]]
 
-  const pageCount = Math.ceil(lines.length / perPage)
+  const pageCount = Math.ceil(lines.length / limit)
   const size = Math.ceil(lines.length / pageCount)
   const pages: T[][] = []
   for (let start = 0; start < lines.length; start += size) {

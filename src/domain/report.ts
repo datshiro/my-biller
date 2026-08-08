@@ -97,6 +97,10 @@ export function dailySeries(
   from: number,
   to: number,
 ): DailyPoint[] {
+  // date-fns v4 nhận cả khoảng ngược và trả chuỗi ngày đảo chiều; biểu đồ chạy lùi thời gian còn khó
+  // nhận ra hơn là biểu đồ trống.
+  if (from > to) return []
+
   const revenueByDay = new Map<string, number>()
   for (const order of orders.filter(isCounted)) {
     const day = format(order.soldAt, 'yyyy-MM-dd')
