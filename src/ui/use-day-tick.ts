@@ -11,18 +11,45 @@ export function useDayTick(): number {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
+    let day = startOfDay(Date.now()).getTime()
+
+    /** Chỉ nhích khi ngày thật sự đổi — nhích thừa là bắt mọi `useLiveQuery` phụ thuộc chạy lại. */
+    const bump = () => {
+      const today = startOfDay(Date.now()).getTime()
+      if (today === day) return
+      day = today
+      setTick((previous) => previous + 1)
+    }
+
     const schedule = () => {
       const now = Date.now()
       timer = setTimeout(
         () => {
-          setTick((previous) => previous + 1)
+          bump()
           schedule()
         },
         Math.max(1_000, addDays(startOfDay(now), 1).getTime() - now),
       )
     }
     schedule()
-    return () => clearTimeout(timer)
+
+    /**
+     * Điện thoại bóp timer của trang đang chạy nền, nên chỉ trông vào `setTimeout` là quán đóng cửa
+     * lúc 22h, sáng mở app ra vẫn thấy "HÔM NAY" kèm doanh thu hôm qua. Lúc trang hiện lại là lúc
+     * duy nhất chắc chắn có người đang nhìn, nên đối chiếu ngày ngay tại đó và hẹn lại giờ.
+     */
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      bump()
+      clearTimeout(timer)
+      schedule()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   return tick
