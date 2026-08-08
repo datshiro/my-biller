@@ -70,7 +70,8 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
  * đơn được hỏi, còn đọc cả bảng là một lượt `getAll` rồi lọc trong bộ nhớ — đắt cố định theo cỡ
  * bảng, không phụ thuộc kỳ báo cáo.
  *
- * Đo trên Chrome, CPU throttle ×6 (thay cho điện thoại rẻ tiền), `orderLines` 24.000 dòng:
+ * Đo trên Chrome desktop, CPU throttle ×6 — mức bóp này là chỗ **thay cho điện thoại rẻ tiền**, và
+ * là con số bi quan nhất đang có. `orderLines` 24.000 dòng:
  *
  * | số đơn hỏi | `anyOf` | đọc cả bảng |
  * |---|---|---|
@@ -81,14 +82,21 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
  * Chỗ giao nhau **không phải một con số tuyệt đối** mà là một tỷ lệ: đo ở ba cỡ bảng (2.000 / 5.400 /
  * 24.000 dòng) thì nó rơi vào 10–17% số dòng đang có. Ngưỡng cũ 200 nằm dưới xa mọi vạch đó, nên hai
  * kỳ hay xem nhất — "7 ngày qua" và "Tháng" của quán đông khách — đều bị đẩy sang đường chậm gấp ba.
+ * 1.500 chọn theo bảng này.
  *
- * Đo lại trên Chrome-Android thật (máy ảo Android 16) thì tỷ lệ giao nhau còn nới ra 25–35%: ở bảng
- * 24.000 dòng, hỏi 3.200 đơn vẫn là 33ms bằng `anyOf` so với 75ms đọc cả bảng. Nghĩa là 1.500 an toàn
- * hơn trên máy thật so với những gì bảng số throttle ở trên gợi ý, chứ không mạo hiểm hơn.
+ * Chạy lại trên Chrome trong **máy ảo** Android 16 thì cùng hình dạng đó giữ nguyên trên IndexedDB
+ * của Android, chứ không phải một engine khác hẳn — đó là tất cả những gì lượt chạy ấy chứng minh.
+ * Nó **không** nói gì về máy chậm: máy ảo chạy trên CPU của máy dev nên nhanh hơn cột throttle ở trên
+ * khoảng 3–4 lần (3.200 đơn: 33ms so với 119ms). Số đẹp hơn là vì phần cứng khoẻ hơn, không phải vì
+ * ngưỡng an toàn hơn. **Vẫn chưa đo trên điện thoại thật** — muốn xê dịch con số này thì đo ở đó đã.
  *
- * Vẫn giữ một hằng số thay vì đi đếm bảng trước mỗi lần đọc: `count()` mất 1–6ms (Android: 1–7ms),
- * tức đắt gấp đôi cả lượt đọc của một kỳ hẹp. 1.500 là chỗ sai ít nhất cho cả bảng nhỏ lẫn bảng lớn —
- * lệch nhiều nhất khoảng 50ms ở dải 2–4 tháng của quán một năm tuổi.
+ * Cách dựng lại hai bảng số trên: chạy `npm run dev`, mở app, rồi trong console gọi thẳng
+ * `db.orderLines` (bulkAdd n dòng, `anyOf` so với `toArray().filter`, lấy trung vị 5 lượt), bóp CPU
+ * bằng `Emulation.setCPUThrottlingRate` của DevTools.
+ *
+ * Vẫn giữ một hằng số thay vì đi đếm bảng trước mỗi lần đọc: `count()` mất 1–7ms, tức đắt gấp đôi cả
+ * lượt đọc của một kỳ hẹp. 1.500 là chỗ sai ít nhất cho cả bảng nhỏ lẫn bảng lớn — lệch nhiều nhất
+ * khoảng 50ms ở dải 2–4 tháng của quán một năm tuổi.
  */
 const WIDE_QUERY = 1_500
 

@@ -78,6 +78,10 @@ Pages → Connect to Git, với:
 Sau khi cài, mở app **từ icon** chứ đừng mở lại bằng trình duyệt: hai đường đó dùng chung IndexedDB
 trên Android, nhưng trên iOS thì bản cài và bản trong Safari có thể là hai kho dữ liệu khác nhau.
 
+> Câu "dùng chung IndexedDB trên Android" ở trên **chưa có phép đo nào đứng sau** — xem cuối mục
+> [Số đo tham chiếu](#số-đo-tham-chiếu-đo-trên-máy-dev). Cứ làm theo hướng dẫn này, nhưng đừng dựa vào
+> nó để hứa với chủ quán rằng mở nhầm đường thì dữ liệu vẫn còn nguyên.
+
 ## 5. Cập nhật app
 
 Service worker chạy ở chế độ `prompt`: có bản mới thì app hiện thanh hỏi, người dùng bấm mới tải lại.
