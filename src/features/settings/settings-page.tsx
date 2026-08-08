@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router'
-import { applyBackup, exportBackup, readBackupFile } from './backup'
+import { applyBackup, exportBackup, exportSafetyCopy, readBackupFile } from './backup'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -73,7 +73,7 @@ export function SettingsPage() {
     setStep(null)
     setBusy(true)
     try {
-      setStep({ phase: 'safety', file, filename: await exportBackup(Date.now()) })
+      setStep({ phase: 'safety', file, filename: await exportSafetyCopy(Date.now()) })
     } catch (caught) {
       setError(message(caught))
     } finally {

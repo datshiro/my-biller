@@ -16,14 +16,35 @@ function downloadJson(filename: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** Xuất file và ghi mốc sao lưu. Trả tên file để màn hình nói rõ vừa tạo ra cái gì. */
-export async function exportBackup(at: number): Promise<string> {
-  const file = await collectBackup(at)
+// Xuống dòng, thụt lề: file sao lưu phải đọc và sửa tay được, đây là lối thoát cuối cùng khi hỏng.
+const backupText = async (at: number) => JSON.stringify(await collectBackup(at), null, 2)
+
+async function writeBackup(at: number, text: string): Promise<string> {
   const filename = backupFilename(at)
-  // Xuống dòng, thụt lề: file sao lưu phải đọc và sửa tay được, đây là lối thoát cuối cùng khi hỏng.
-  downloadJson(filename, JSON.stringify(file, null, 2))
+  downloadJson(filename, text)
   await saveAppState({ lastBackupAt: at })
   return filename
+}
+
+/** Xuất file và ghi mốc sao lưu. Trả tên file để màn hình nói rõ vừa tạo ra cái gì. */
+export async function exportBackup(at: number): Promise<string> {
+  return writeBackup(at, await backupText(at))
+}
+
+/**
+ * Bản sao an toàn cho hai bước không quay lại được: ghi đè khi nhập file, và xoá sạch.
+ *
+ * Khác `exportBackup` ở chỗ nó **đọc lại** đúng nội dung vừa ghi ra. `collectBackup` cố ý khoan dung
+ * để một bản ghi lạ không làm chết cả lần sao lưu, nhưng `parseBackupFile` thì nghiêm ngặt — nên có
+ * đúng một loại file vừa xuất được vừa không nhập lại được. Đưa file đó ra rồi xoá sạch là dựng một
+ * cái bẫy: người bán thấy file trong máy, tin là còn đường về, mà không còn.
+ *
+ * Hỏng thì ném lỗi nêu đúng bản ghi hỏng và **không tải gì cả** — thà chặn còn hơn xoá.
+ */
+export async function exportSafetyCopy(at: number): Promise<string> {
+  const text = await backupText(at)
+  parseBackupFile(text)
+  return writeBackup(at, text)
 }
 
 /** Chỉ đọc và kiểm file — **không** chạm vào DB. Sai định dạng thì ném lỗi ở đây, trước mọi thứ khác. */

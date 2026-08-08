@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { exportBackup, wipeEverything } from './backup'
+import { exportSafetyCopy, wipeEverything } from './backup'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { Sheet } from '@/ui/sheet'
@@ -23,7 +23,7 @@ export function DangerZone() {
     setBusy(true)
     setError(null)
     try {
-      setSaved(await exportBackup(Date.now()))
+      setSaved(await exportSafetyCopy(Date.now()))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không sao lưu được. Chưa xoá gì cả.')
     } finally {
