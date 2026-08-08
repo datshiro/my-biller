@@ -109,13 +109,13 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
 
 ## Số đo tham chiếu (đo trên máy dev)
 
-Bundle và precache đo lại ở bản 1.0.1; LCP với Lighthouse vẫn là số của 1.0.0 — chưa đo lại trên bản
-deploy mới, đừng đọc chúng như số của 1.0.1.
+Bundle và precache đo lại ở bản đang chạy (`a2c8d08`, 1.0.2 + giá sỉ Phase 1); LCP với Lighthouse vẫn là
+số của 1.0.0 — chưa đo lại trên bản deploy mới, đừng đọc chúng như số của bản này.
 
 | Hạng mục | Kết quả |
 |---|---|
-| Bundle (1.0.1) | 552 KB thô · **168 KB gzip** (JS) + 5 KB gzip (CSS) |
-| Precache của service worker (1.0.1) | 17 file · 633 KB |
+| Bundle (`a2c8d08`) | 544 KB thô · **164 KB gzip** (JS) + 5 KB gzip (CSS) |
+| Precache của service worker (`a2c8d08`) | 17 file · 638 KB |
 | LCP (1.0.0; Chrome, CPU ×4 + Slow 4G) | **464 ms** · CLS 0.00 |
 | Lighthouse mobile (1.0.0) | Accessibility 100 · Best Practices 100 · SEO 91 |
 | PWA installable | manifest hợp lệ (name, short_name, start_url, standalone, icon 192/512 + maskable) + service worker *activated* |
@@ -123,6 +123,16 @@ deploy mới, đừng đọc chúng như số của 1.0.1.
 Kiểm trên chính `an-quynh.pages.dev` (8/8/2026): `/`, `/bao-cao`, `/don/1/phieu`,
 `/manifest.webmanifest`, `/sw.js` — 50/50 lượt đều 200, manifest đúng `application/manifest+json`;
 service worker *activated*, nắm quyền điều khiển sau lần reload đầu, precache 14 file.
+
+Đo lại sau lần deploy 9/8/2026 (`a2c8d08`, deployment `2538bdb0`): `/bao-cao` mở thẳng trả 200 và render
+màn Báo cáo; service worker *activated*, scope `/`, nắm quyền sau lần tải lại; manifest `standalone`,
+`start_url: /`, 3 icon, không lỗi. Bundle trên mạng **trùng byte** với `dist/` đã qua cổng kiểm
+(`sha256 b148b823…c389`, 556 597 byte) — dùng cách này để biết production đúng là bản đã test, thay vì
+tin vào việc lệnh deploy chạy xong không báo lỗi. Kho dữ liệu dựng đúng schema mới: `my-biller@20`,
+10 bảng, có `customerPrices`.
+
+Trình duyệt báo 14 file trong cache còn `sw.js` khai 17 — chênh này có từ lần deploy trước, không phải
+do bản này. Bài kiểm offline bên dưới vẫn chạy được, nên nó chưa cắn ai; ai đụng tới precache thì soi lại.
 
 Bài kiểm offline chạy trên Chrome thật giả lập Pixel 7: chặn toàn bộ mạng (`fetch` ra ngoài trả
 `OFFLINE`), rồi tải lại route sâu `/bao-cao` → render đủ; bán trọn một đơn → phiếu `PBH-260808-001`
