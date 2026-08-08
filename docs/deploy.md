@@ -91,10 +91,18 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
 
 - **iOS xoá dữ liệu của web app không dùng tới sau ~7 ngày.** Đó là lý do màn Cài đặt có nút ghim bộ
   nhớ và banner nhắc sao lưu. Sao lưu ra file vẫn là lớp bảo vệ thật sự duy nhất.
-- **Nút ghim bộ nhớ có thể bị từ chối thẳng.** Đo trên Chrome-Android: một site vừa mở lần đầu gọi
-  `navigator.storage.persist()` thì trả về `false` — Chrome chỉ cấp khi site đã có "điểm gắn bó"
-  (được cài lên màn hình chính, được bookmark, hoặc đã dùng nhiều lần). Nút bấm không hỏng; nó bị từ
-  chối, và người bán không nhận ra khác biệt. Một lý do nữa để không coi ghim bộ nhớ là lớp bảo vệ.
+- **Nút ghim bộ nhớ bị từ chối cho tới khi site được bookmark.** Đo trên Chrome-Android, bốn lượt
+  trên máy vừa xoá sạch dữ liệu Chrome:
+
+  | lượt | tình huống | `navigator.storage.persist()` |
+  |---|---|---|
+  | A | vừa mở lần đầu | `false` |
+  | C | để nguyên 4 phút, chưa bookmark | `false` |
+  | E | bookmark (đã xác nhận nút đổi thành *Edit bookmark*) | **`true`** |
+
+  Lượt C loại trừ khả năng "cứ chờ là được". Chỉ **một** thao tác bookmark là đủ, không cần cài lên
+  màn hình chính. Trước đó nút bấm không hỏng — nó bị Chrome từ chối, mà người bán không nhận ra khác
+  biệt vì màn hình vẫn hiện y như cũ. Đáng cân nhắc cho màn Cài đặt tự nói ra điều này.
 - Mỗi máy một kho dữ liệu riêng. Không có đồng bộ; muốn chuyển máy thì Sao lưu ở máy cũ → Nhập ở máy
   mới.
 - Không có tài khoản, không có phân quyền. Ai cầm máy là dùng được.
@@ -126,10 +134,25 @@ secure context nên service worker vẫn bật được mà không cần HTTPS. 
 service worker *activated* và nắm quyền điều khiển, manifest standalone với đủ icon 192/512/maskable,
 IndexedDB ghi thật rồi tải lại trang vẫn còn, `visibilitychange` thật sự nổ khi bấm HOME rồi quay lại.
 
-**Không** kiểm được trên máy ảo, và đây là chỗ vẫn phải cần điện thoại thật: Chrome có mời cài
-("Install app / my-biller"), nhưng WebAPK không đúc được cho `localhost` vì máy chủ của Google phải
-tải được manifest qua một URL công khai. Nên câu "bản cài và bản trong Chrome dùng chung IndexedDB"
-ở mục 4 vẫn chưa có phép đo nào đứng sau. Muốn kiểm thì phải trỏ máy vào chính `an-quynh.pages.dev`.
+Chạy lại lần nữa, lần này trỏ thẳng vào `https://an-quynh.pages.dev` chứ không qua `localhost`. Chrome
+mời cài đàng hoàng ("Install app / my-biller — Bán hàng"), bấm Install, nhưng không gói nào sinh ra.
+Logcat nói rõ vì sao:
+
+```
+Finsky: installPackage: com.android.chrome (org.chromium.webapk.a0fc74e8ccf979ace_v2)
+Finsky: WebAPK service unknown_account
+```
+
+Google **đã** nhận yêu cầu và **đã** cấp tên gói — tức là phía máy chủ không có vấn đề gì. Play từ
+chối cài vì máy ảo không đăng nhập tài khoản Google nào (`dumpsys account` đếm được 0). Điện thoại
+thật của chủ quán luôn có tài khoản, nên đây là giới hạn của máy ảo chứ không phải của app.
+
+> Ghi chú sửa lại: bản trước của tài liệu này đoán rằng lượt cài qua `localhost` hỏng vì máy chủ
+> Google không tải được manifest. Lượt đo trên đây cho thấy nguyên nhân nhiều khả năng vẫn là thiếu
+> tài khoản — máy ảo lúc đó cũng chưa có tài khoản nào. Đừng dựa vào lời giải thích cũ.
+
+Hệ quả: câu "bản cài và bản trong Chrome dùng chung IndexedDB" ở mục 4 **vẫn chưa có phép đo nào đứng
+sau**. Muốn kiểm thì phải đăng nhập một tài khoản Google vào máy ảo, hoặc dùng điện thoại thật.
 
 Lighthouse 12 đã bỏ hạng mục PWA, nên "installable" kiểm bằng chính các điều kiện trên chứ không phải
 bằng điểm số. `Performance` cũng không lấy được điểm từ công cụ đang dùng — số thay thế là LCP/CLS đo
