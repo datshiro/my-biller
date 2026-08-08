@@ -37,7 +37,9 @@ export function ExpenseListPage() {
   const month = useExpenseMonth(monthOffset, categoryId)
   const categories = useExpenseCategories()
 
-  useEffect(() => void ensureDefaultExpenseCategories(), [])
+  useEffect(() => {
+    ensureDefaultExpenseCategories().catch((caught: unknown) => console.error('Không tạo được loại chi mặc định:', caught))
+  }, [])
 
   const categoryNames = useMemo(
     () => new Map((categories ?? []).map((category) => [category.id, category.name])),
