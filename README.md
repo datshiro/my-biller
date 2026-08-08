@@ -30,8 +30,10 @@ Màn **Thêm** có nút *Nạp dữ liệu mẫu* (chỉ hiện ở bản dev) �
 | `npm run lint` | ESLint |
 | `npm test` | Vitest (unit + component) |
 | `npm run test:e2e` | Playwright trên Chrome thật, cổng 5174 |
+| `npm run test:live` | Robot Framework: từng tính năng trên app thật, cổng 5175 |
 
 `npm run test:e2e` cần Chrome của máy: `npx playwright install chrome`.
+`npm run test:live` cần cài thêm một lần — xem [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
 
 ## Kiến trúc
 
@@ -50,7 +52,8 @@ repository), và `src/domain/**` không được import React / Dexie / `@/db/*`
 
 Chi tiết lựa chọn công nghệ: [`docs/tech-stack.md`](docs/tech-stack.md) ·
 giao diện: [`docs/design-guidelines.md`](docs/design-guidelines.md) ·
-deploy: [`docs/deploy.md`](docs/deploy.md).
+deploy: [`docs/deploy.md`](docs/deploy.md) ·
+kiểm thử live: [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
 
 ## Bất biến (vi phạm = sai số tiền)
 
