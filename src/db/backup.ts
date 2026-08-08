@@ -21,13 +21,20 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
         db.expenses.toArray(),
       ])
 
-    return BackupFileSchema.parse({
-      app: 'my-biller',
-      version: 1,
+    const file = {
+      app: 'my-biller' as const,
+      version: 1 as const,
       appVersion: APP_VERSION,
       exportedAt: new Date(exportedAt).toISOString(),
       data: { settings, itemGroups, items, customers, orders, orderLines, payments, expenseCategories, expenses },
-    })
+    }
+
+    // Cho schema soi nhưng **không** cho nó chặn. Một bản ghi lạ (bản build cũ, sửa tay qua DevTools)
+    // mà làm ném ở đây là khoá luôn cả đường tự cứu: `applyBackup` xuất file an toàn trước khi nhập,
+    // nên sao lưu chết kéo theo nhập file cũng chết. Thà ra file có một dòng lạ — dòng đó vẫn là
+    // dữ liệu của người bán, và lúc nhập lại thì `parseBackupFile` chỉ đúng chỗ cần sửa tay.
+    const checked = BackupFileSchema.safeParse(file)
+    return checked.success ? checked.data : (file as BackupFile)
   })
 }
 

@@ -124,16 +124,21 @@ export const ExpenseSchema = z.object({
   updatedAt: Timestamp,
 })
 
+/**
+ * Trong DB `id` do IndexedDB cấp nên lúc tạo mới còn trống, nhưng trong **file sao lưu** thì bắt buộc:
+ * `orderLines.orderId` và `payments.orderId` trỏ theo id, thiếu id là lúc nhập lại IndexedDB cấp số
+ * mới và dòng hàng rời khỏi đơn của nó.
+ */
 export const BackupDataSchema = z.object({
   settings: z.array(SettingRowSchema),
-  itemGroups: z.array(ItemGroupSchema),
-  items: z.array(ItemSchema),
-  customers: z.array(CustomerSchema),
-  orders: z.array(OrderSchema),
-  orderLines: z.array(OrderLineSchema),
-  payments: z.array(PaymentSchema),
-  expenseCategories: z.array(ExpenseCategorySchema),
-  expenses: z.array(ExpenseSchema),
+  itemGroups: z.array(ItemGroupSchema.extend({ id: Id })),
+  items: z.array(ItemSchema.extend({ id: Id })),
+  customers: z.array(CustomerSchema.extend({ id: Id })),
+  orders: z.array(OrderSchema.extend({ id: Id })),
+  orderLines: z.array(OrderLineSchema.extend({ id: Id })),
+  payments: z.array(PaymentSchema.extend({ id: Id })),
+  expenseCategories: z.array(ExpenseCategorySchema.extend({ id: Id })),
+  expenses: z.array(ExpenseSchema.extend({ id: Id })),
 })
 
 /**
