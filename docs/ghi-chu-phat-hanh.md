@@ -1,5 +1,21 @@
 # Ghi chú phát hành
 
+## 1.0.2 — 8/8/2026
+
+### Đã sửa
+
+- **Mở app buổi sáng vẫn thấy "HÔM NAY" kèm doanh thu hôm qua.** App chỉ hẹn giờ đúng nửa đêm để đổi
+  ngày, mà điện thoại thì bóp giờ hẹn của trang đang chạy nền — đóng cửa lúc 22h, sáng mở lại thì giờ
+  hẹn đó chưa chắc đã nổ. Giờ mỗi lần app hiện lại màn hình là nó đối chiếu ngày ngay.
+- **Báo cáo kỳ rộng nhanh hơn.** "7 ngày qua" và "Tháng" của quán đông khách trước đây bị đẩy sang
+  đường đọc chậm gấp ba. Chỉ là tốc độ — số liệu không đổi.
+
+### Cập nhật có cần làm gì thêm không
+
+Không. Bản này không đụng tới dữ liệu đã lưu và không có gì phải soát lại.
+
+Nếu chưa cập nhật lên 1.0.1 thì đọc tiếp mục dưới — **1.0.1 có việc phải làm bằng tay**.
+
 ## 1.0.1 — 8/8/2026
 
 ### ⚠️ Việc phải làm sau khi cập nhật: soát lại các đơn bán nợ cũ

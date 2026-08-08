@@ -66,14 +66,39 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
 }
 
 /**
- * Ngưỡng đổi cách truy vấn. `anyOf` bắt Dexie duyệt con trỏ theo từng khoá nên chi phí tăng theo
- * N×(số dòng), còn đọc cả bảng là **một** `getAll` rồi lọc trong bộ nhớ. Kỳ báo cáo rộng (cả năm)
- * rơi vào vế sau; một ngày vài chục đơn thì `anyOf` vẫn rẻ hơn nhiều so với đọc cả bảng.
+ * Ngưỡng đổi cách truy vấn. `anyOf` bắt Dexie duyệt con trỏ theo từng khoá nên chi phí tăng theo số
+ * đơn được hỏi, còn đọc cả bảng là một lượt `getAll` rồi lọc trong bộ nhớ — đắt cố định theo cỡ
+ * bảng, không phụ thuộc kỳ báo cáo.
  *
- * Con số 200 chọn theo *hình dạng* của hai thuật toán, chưa đo trên điện thoại thật — đo lại trước
- * khi tin vào nó.
+ * Đo trên Chrome desktop, CPU throttle ×6 — mức bóp này là chỗ **thay cho điện thoại rẻ tiền**, và
+ * là con số bi quan nhất đang có. `orderLines` 24.000 dòng:
+ *
+ * | số đơn hỏi | `anyOf` | đọc cả bảng |
+ * |---|---|---|
+ * | 200 | 9ms | 99ms |
+ * | 900 | 34ms | 98ms |
+ * | 3.200 | 119ms | 109ms |
+ *
+ * Chỗ giao nhau **không phải một con số tuyệt đối** mà là một tỷ lệ: đo ở ba cỡ bảng (2.000 / 5.400 /
+ * 24.000 dòng) thì nó rơi vào 10–17% số dòng đang có. Ngưỡng cũ 200 nằm dưới xa mọi vạch đó, nên hai
+ * kỳ hay xem nhất — "7 ngày qua" và "Tháng" của quán đông khách — đều bị đẩy sang đường chậm gấp ba.
+ * 1.500 chọn theo bảng này.
+ *
+ * Chạy lại trên Chrome trong **máy ảo** Android 16 thì cùng hình dạng đó giữ nguyên trên IndexedDB
+ * của Android, chứ không phải một engine khác hẳn — đó là tất cả những gì lượt chạy ấy chứng minh.
+ * Nó **không** nói gì về máy chậm: máy ảo chạy trên CPU của máy dev nên nhanh hơn cột throttle ở trên
+ * khoảng 3–4 lần (3.200 đơn: 33ms so với 119ms). Số đẹp hơn là vì phần cứng khoẻ hơn, không phải vì
+ * ngưỡng an toàn hơn. **Vẫn chưa đo trên điện thoại thật** — muốn xê dịch con số này thì đo ở đó đã.
+ *
+ * Cách dựng lại hai bảng số trên: chạy `npm run dev`, mở app, rồi trong console gọi thẳng
+ * `db.orderLines` (bulkAdd n dòng, `anyOf` so với `toArray().filter`, lấy trung vị 5 lượt), bóp CPU
+ * bằng `Emulation.setCPUThrottlingRate` của DevTools.
+ *
+ * Vẫn giữ một hằng số thay vì đi đếm bảng trước mỗi lần đọc: `count()` mất 1–7ms, tức đắt gấp đôi cả
+ * lượt đọc của một kỳ hẹp. 1.500 là chỗ sai ít nhất cho cả bảng nhỏ lẫn bảng lớn — lệch nhiều nhất
+ * khoảng 50ms ở dải 2–4 tháng của quán một năm tuổi.
  */
-const WIDE_QUERY = 200
+const WIDE_QUERY = 1_500
 
 /** Dòng hàng của nhiều đơn trong một truy vấn. Báo cáo không được đọc `orderLines` từng đơn một. */
 export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {

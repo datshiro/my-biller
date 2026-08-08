@@ -192,11 +192,12 @@ describe('createOrder', () => {
 })
 
 /**
- * Hàm này đổi thuật toán ở ngưỡng 200 đơn. Hai nhánh phải cho **cùng một kết quả**, nếu không thì kỳ
- * báo cáo rộng ra vừa đủ 200 đơn là giá vốn với lợi nhuận nhảy số mà không ai biết vì sao.
+ * Hàm này đổi thuật toán ở ngưỡng `WIDE_QUERY` (1.500 đơn). Hai nhánh phải cho **cùng một kết quả**,
+ * nếu không thì kỳ báo cáo rộng ra vừa đủ chạm ngưỡng là giá vốn với lợi nhuận nhảy số mà không ai
+ * biết vì sao.
  *
- * Ghi thẳng vào bảng chứ không qua `createOrder`: chỗ cần thử là đường đọc, mà dựng 250 đơn thật thì
- * mất cả phút.
+ * Ghi thẳng vào bảng chứ không qua `createOrder`: chỗ cần thử là đường đọc, mà dựng 1.600 đơn thật
+ * thì mất cả phút.
  */
 describe('listOrderLinesOfOrders', () => {
   const seedLines = (count: number) =>
@@ -216,7 +217,7 @@ describe('listOrderLinesOfOrders', () => {
   // Mỗi ca thừa ra 50 đơn không được hỏi tới: trả cả bảng về cũng phải bị bắt.
   it.each([
     ['dưới ngưỡng — đi bằng anyOf', 5],
-    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 250],
+    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 1_600],
   ])('%s: chỉ trả dòng của đúng những đơn được hỏi', async (_label, asked) => {
     await seedLines(asked + 50)
     const wanted = Array.from({ length: asked }, (_, index) => index + 1)
