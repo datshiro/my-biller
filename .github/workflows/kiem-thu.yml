@@ -14,9 +14,9 @@ jobs:
   kiem-thu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -43,7 +43,7 @@ jobs:
       # `trace: 'retain-on-failure'` để lại trace trong test-results/ — mở bằng `npx playwright
       # show-trace` là xem lại được đúng lượt chạy đã đỏ, không phải đoán từ log.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace
           path: test-results/
