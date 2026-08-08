@@ -2,7 +2,14 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
 import { createItem, getItem, updateItem } from '../repositories/items'
-import { createOrder, getOrderLines, getOrderPayments, listOrdersByCustomer, type OrderDraft } from '../repositories/orders'
+import {
+  createOrder,
+  getOrderLines,
+  getOrderPayments,
+  listOrderLinesOfOrders,
+  listOrdersByCustomer,
+  type OrderDraft,
+} from '../repositories/orders'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -181,5 +188,42 @@ describe('createOrder', () => {
     await createOrder(draft())
     const next = await createOrder(draft({ soldAt: new Date(2026, 7, 8, 9, 0).getTime() }))
     expect((await db.orders.get(next.id))?.code).toBe('PBH-260808-001')
+  })
+})
+
+/**
+ * Hàm này đổi thuật toán ở ngưỡng 200 đơn. Hai nhánh phải cho **cùng một kết quả**, nếu không thì kỳ
+ * báo cáo rộng ra vừa đủ 200 đơn là giá vốn với lợi nhuận nhảy số mà không ai biết vì sao.
+ *
+ * Ghi thẳng vào bảng chứ không qua `createOrder`: chỗ cần thử là đường đọc, mà dựng 250 đơn thật thì
+ * mất cả phút.
+ */
+describe('listOrderLinesOfOrders', () => {
+  const seedLines = (count: number) =>
+    db.orderLines.bulkAdd(
+      Array.from({ length: count }, (_, index) => ({
+        orderId: index + 1,
+        itemId: null,
+        name: `Món ${index + 1}`,
+        unit: '',
+        unitPrice: 1_000,
+        costPrice: null,
+        qty: 1,
+        amount: 1_000,
+      })),
+    )
+
+  // Mỗi ca thừa ra 50 đơn không được hỏi tới: trả cả bảng về cũng phải bị bắt.
+  it.each([
+    ['dưới ngưỡng — đi bằng anyOf', 5],
+    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 250],
+  ])('%s: chỉ trả dòng của đúng những đơn được hỏi', async (_label, asked) => {
+    await seedLines(asked + 50)
+    const wanted = Array.from({ length: asked }, (_, index) => index + 1)
+
+    const lines = await listOrderLinesOfOrders(wanted)
+
+    expect(lines).toHaveLength(asked)
+    expect([...new Set(lines.map((line) => line.orderId))].sort((a, b) => a - b)).toEqual(wanted)
   })
 })
