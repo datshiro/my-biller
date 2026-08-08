@@ -6,21 +6,23 @@ import { expect, test, type Download, type Page } from '@playwright/test'
  * nhớ, reload là mất), tải file thật, và chọn file thật từ ổ đĩa.
  */
 
-/** Ảnh chụp những con số người bán nhìn thấy, đọc thẳng từ IndexedDB thật. */
+/**
+ * Ảnh chụp **toàn bộ nội dung** IndexedDB thật, không phải vài con số tổng: một vòng sao lưu đánh
+ * rơi `orders.note` hay cả bảng `itemGroups` vẫn cho số đếm y hệt, và đó đúng là kiểu mất dữ liệu
+ * âm thầm mà bộ e2e này sinh ra để chặn.
+ */
 type Snapshot = {
-  orders: number
-  orderLines: number
-  payments: number
-  items: number
-  customers: number
-  expenses: number
   revenue: number
   paid: number
   shopName: string
+  tables: Record<string, unknown[]>
 }
 
+/** `settings` không nằm trong ảnh chụp: mốc `lastBackupAt` đổi sau mỗi lần xuất file, đúng như thiết kế. */
+const STORES = ['itemGroups', 'items', 'customers', 'orders', 'orderLines', 'payments', 'expenseCategories', 'expenses']
+
 async function snapshot(page: Page): Promise<Snapshot> {
-  return page.evaluate(async () => {
+  return page.evaluate(async (stores) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const open = indexedDB.open('my-biller')
       open.onsuccess = () => resolve(open.result)
@@ -34,30 +36,24 @@ async function snapshot(page: Page): Promise<Snapshot> {
         request.onerror = () => reject(request.error)
       })
 
-    const [orders, orderLines, payments, items, customers, expenses, settings] = await Promise.all([
-      readAll<{ total: number; paidAmount: number; status: string }>('orders'),
-      readAll('orderLines'),
-      readAll('payments'),
-      readAll('items'),
-      readAll('customers'),
-      readAll('expenses'),
-      readAll<{ key: string; value: { name?: string } }>('settings'),
-    ])
+    const rows = await Promise.all(stores.map((store) => readAll<{ id?: number }>(store)))
+    const settings = await readAll<{ key: string; value: { name?: string } }>('settings')
     db.close()
 
+    const tables: Record<string, unknown[]> = {}
+    stores.forEach((store, index) => {
+      tables[store] = (rows[index] ?? []).sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+    })
+
+    const orders = (rows[stores.indexOf('orders')] ?? []) as { total: number; paidAmount: number; status: string }[]
     const alive = orders.filter((order) => order.status !== 'void')
     return {
-      orders: orders.length,
-      orderLines: orderLines.length,
-      payments: payments.length,
-      items: items.length,
-      customers: customers.length,
-      expenses: expenses.length,
       revenue: alive.reduce((sum, order) => sum + order.total, 0),
       paid: alive.reduce((sum, order) => sum + order.paidAmount, 0),
       shopName: settings.find((row) => row.key === 'shop')?.value.name ?? '',
+      tables,
     }
-  })
+  }, STORES)
 }
 
 async function seed(page: Page) {
@@ -100,7 +96,7 @@ test('mất mạng vẫn lên được đơn và ghi vào máy', async ({ page, 
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
   await expect(page.getByRole('heading', { name: 'PHIẾU BÁN HÀNG', exact: true })).toBeVisible()
-  expect((await snapshot(page)).orders).toBe(3)
+  expect((await snapshot(page)).tables.orders).toHaveLength(3)
 
   await context.setOffline(false)
 })
@@ -116,32 +112,39 @@ test('tạo đơn rồi tải lại trang: dữ liệu vẫn còn', async ({ pag
   expect(await snapshot(page)).toEqual(before)
 })
 
-test('sao lưu → xoá sạch → nhập lại: mọi số khớp 100%', async ({ page }) => {
+test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng bảng khớp lại', async ({ page }) => {
   await seed(page)
   const before = await snapshot(page)
-  expect(before.orders).toBeGreaterThan(0)
+  expect(before.tables.orders?.length).toBeGreaterThan(0)
+  expect(before.tables.itemGroups?.length).toBeGreaterThan(0)
 
   await page.goto('/them/cai-dat')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
   expect(backup.filename).toMatch(/^my-biller-backup-\d{6}-\d{4}\.json$/)
   await expect(page.getByText(/Đã tải my-biller-backup/)).toBeVisible()
 
-  // Xoá sạch — Danger Zone cũng tự tải một file trước khi xoá, rồi tải lại trang.
+  // Xoá sạch: tải file an toàn trước, rồi phải tự xác nhận đã thấy file mới xoá được.
   await page.getByRole('button', { name: 'Xoá toàn bộ dữ liệu' }).click()
   await page.getByLabel('Gõ XOA').fill('XOA')
   await Promise.all([
     page.waitForEvent('download'),
-    page.waitForEvent('load'),
-    page.getByRole('button', { name: 'XOÁ TẤT CẢ' }).click(),
+    page.getByRole('button', { name: 'SAO LƯU RỒI XOÁ' }).click(),
   ])
-  expect((await snapshot(page)).orders).toBe(0)
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Đã thấy — xoá tất cả' }).click(),
+  ])
+  expect((await snapshot(page)).tables.orders).toEqual([])
 
   await page.goto('/them/cai-dat')
   await importFile(page, backup.text)
   await Promise.all([
     page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Tải file an toàn' }).click(),
+  ])
+  await Promise.all([
     page.waitForEvent('load'),
-    page.getByRole('button', { name: 'Nhập và ghi đè' }).click(),
+    page.getByRole('button', { name: 'Đã thấy — ghi đè' }).click(),
   ])
 
   expect(await snapshot(page)).toEqual(before)

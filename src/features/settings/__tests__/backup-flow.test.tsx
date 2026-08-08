@@ -13,11 +13,22 @@ import { saveAppState } from '@/db/repositories/settings'
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 const DAY = 24 * 60 * 60 * 1000
 
+/** Tên các file mà app đã bảo trình duyệt tải về trong một ca test. */
+let downloads: string[] = []
+
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
   localStorage.clear()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
+
+  // jsdom không có Blob URL lẫn cơ chế tải file; ghi lại tên file thay cho việc mở thư mục Tải về.
+  downloads = []
+  URL.createObjectURL = vi.fn(() => 'blob:test')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push(this.download)
+  })
 })
 
 afterEach(() => {
@@ -76,6 +87,44 @@ describe('nhập file sao lưu', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
     expect(await db.items.count()).toBe(1)
+  })
+
+  /**
+   * Cửa thứ hai không phải thủ tục thừa: `exportBackup` chỉ bấm `link.click()` rồi trả về, webview
+   * Zalo hay PWA iOS có thể nuốt cú tải mà không báo gì. Ghi đè trước khi người bán tự mắt thấy file
+   * là xoá dữ liệu mà không có đường về.
+   */
+  it('tải file an toàn xong vẫn dừng lại hỏi; chỉ ghi đè sau khi người bán nói đã thấy file', async () => {
+    await seedItem()
+    const file = await collectBackup(NOW)
+    await db.items.clear()
+    await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
+    renderPage()
+
+    pick(JSON.stringify(file))
+    await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
+
+    expect(await screen.findByText('Đã thấy file trong máy chưa?')).toBeDefined()
+    expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
+    // Dữ liệu hiện tại còn nguyên: mới chỉ tải file, chưa ghi đè.
+    expect((await db.items.toArray()).map((item) => item.name)).toEqual(['Bún'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Đã thấy — ghi đè' }))
+    await waitFor(async () => expect((await db.items.toArray()).map((item) => item.name)).toEqual(['Phở']))
+  })
+
+  it('huỷ ở cửa thứ hai thì dữ liệu đang có vẫn nguyên', async () => {
+    await seedItem()
+    const file = await collectBackup(NOW)
+    await db.items.clear()
+    await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
+    renderPage()
+
+    pick(JSON.stringify(file))
+    await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Huỷ' }))
+
+    expect((await db.items.toArray()).map((item) => item.name)).toEqual(['Bún'])
   })
 })
 

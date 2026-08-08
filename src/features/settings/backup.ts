@@ -32,20 +32,23 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
 }
 
 /**
- * Ghi đè toàn bộ dữ liệu. Chỉ gọi sau khi `readBackupFile` đã qua và người bán đã xác nhận.
+ * Ghi đè toàn bộ dữ liệu. Chỉ gọi sau khi `readBackupFile` đã qua, người bán đã xác nhận, **và**
+ * bản hiện tại đã được xuất ra file an toàn mà người bán tự mắt thấy trong máy.
  *
- * Tự xuất bản hiện tại ra file **trước** khi xoá: nếu người bán chọn nhầm file cũ, thứ vừa mất vẫn
- * còn nằm trong Downloads. `recalcAll()` chạy sau cùng để `paidAmount`/`status` được dựng lại từ
- * `payments` thay vì tin vào con số đã lưu trong file.
+ * Việc xuất file an toàn cố ý **không** nằm trong hàm này: `exportBackup` chỉ gọi `link.click()`
+ * rồi trả về, không có gì bảo đảm trình duyệt đã ghi được file — webview Zalo và PWA trên iOS có
+ * thể nuốt mất cú tải trong im lặng. Bước không quay lại được thì phải để mắt người thật xác nhận,
+ * nên chốt chặn đó nằm ở giao diện, ngay trước lời gọi này.
+ *
+ * `recalcAll()` chạy sau cùng để `paidAmount`/`status` được dựng lại từ `payments` thay vì tin vào
+ * con số đã lưu trong file.
  */
-export async function applyBackup(data: BackupData, at: number): Promise<void> {
-  await exportBackup(at)
+export async function applyBackup(data: BackupData): Promise<void> {
   await replaceAllData(data)
   await recalcAll()
 }
 
-/** Xoá sạch, cũng xuất file trước — đổi ý sau khi bấm thì vẫn nhập lại được. */
-export async function wipeAfterBackup(at: number): Promise<void> {
-  await exportBackup(at)
+/** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */
+export async function wipeEverything(): Promise<void> {
   await wipeAllData()
 }
