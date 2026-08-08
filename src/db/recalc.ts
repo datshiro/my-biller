@@ -33,18 +33,6 @@ async function applyFix(fix: Fix): Promise<void> {
   await db.orders.update(fix.id, { updatedAt: fix.updatedAt })
 }
 
-/** Tính lại `paidAmount`/`status` của một đơn từ bảng `payments` — nguồn sự thật là các phiếu thu. */
-export async function recalcOrderPayment(orderId: number): Promise<void> {
-  await db.transaction('rw', db.orders, db.payments, async () => {
-    const order = await db.orders.get(orderId)
-    if (!order) return
-
-    const payments = await db.payments.where('orderId').equals(orderId).toArray()
-    const fix = repaired(order, payments.reduce((sum, payment) => sum + payment.amount, 0))
-    if (fix) await applyFix(fix)
-  })
-}
-
 /**
  * Chạy sau khi nhập file sao lưu: sửa mọi đơn lệch và trả về số đơn đã sửa.
  *

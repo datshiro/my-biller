@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
-import { recalcAll, recalcOrderPayment } from '../recalc'
+import { recalcAll } from '../recalc'
 import { addOrderPayment } from '../repositories/payments'
 import { createOrder, type OrderDraft } from '../repositories/orders'
 
@@ -105,7 +105,7 @@ describe('recalc', () => {
     const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 30_000, method: 'cash', note: '' } }))
     await db.orders.update(id, { paidAmount: 0, status: 'unpaid' })
 
-    await recalcOrderPayment(id)
+    await recalcAll()
     expect(await db.orders.get(id)).toMatchObject({ paidAmount: 30_000, status: 'partial' })
   })
 
