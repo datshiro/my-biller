@@ -45,7 +45,18 @@ export async function recalcOrderPayment(orderId: number): Promise<void> {
   })
 }
 
-/** Chạy sau khi nhập file sao lưu: sửa mọi đơn lệch và trả về số đơn đã sửa. */
+/**
+ * Chạy sau khi nhập file sao lưu: sửa mọi đơn lệch và trả về số đơn đã sửa.
+ *
+ * Đơn huỷ thì phiếu thu của nó phải biến mất theo, không chỉ `paidAmount` về 0. Đưa tổng về 0 mà để
+ * dòng `payments` nằm lại là phá bất biến "`paidAmount` bằng tổng phiếu thu của đơn": số tiền đó vẫn
+ * hiện trong lịch sử thu tiền của khách và vẫn cộng vào "Đã thu" của kỳ, chỉ mỗi màn chi tiết đơn là
+ * không thấy. Và vì `repaired` trả `null` khi đơn đã đúng, lần chạy sau sẽ không bao giờ dọn nữa —
+ * nên phải dọn ở đây, độc lập với việc dòng đơn có phải sửa hay không.
+ *
+ * `addOrderPayment` đã chặn thu tiền trên đơn huỷ, nên cảnh này chỉ đến từ file nhập vào: bản build
+ * cũ, hoặc file sửa tay.
+ */
 export async function recalcAll(): Promise<number> {
   return db.transaction('rw', db.orders, db.payments, async () => {
     const paidByOrder = new Map<number, number>()
@@ -53,12 +64,17 @@ export async function recalcAll(): Promise<number> {
       paidByOrder.set(payment.orderId, (paidByOrder.get(payment.orderId) ?? 0) + payment.amount)
     })
 
-    const orders = await db.orders.toArray()
-    const fixes = orders
-      .map((order) => repaired(order, paidByOrder.get(order.id ?? -1) ?? 0))
-      .filter((fix): fix is Fix => fix !== null)
+    let repairs = 0
+    for (const order of await db.orders.toArray()) {
+      if (order.id === undefined) continue
 
-    for (const fix of fixes) await applyFix(fix)
-    return fixes.length
+      const stray = order.status === 'void' && paidByOrder.has(order.id)
+      if (stray) await db.payments.where('orderId').equals(order.id).delete()
+
+      const fix = repaired(order, paidByOrder.get(order.id) ?? 0)
+      if (fix) await applyFix(fix)
+      if (fix || stray) repairs += 1
+    }
+    return repairs
   })
 }

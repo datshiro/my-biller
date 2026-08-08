@@ -142,6 +142,9 @@ describe('xuất → xoá → nhập', () => {
     await recalcAll()
 
     expect(await db.orders.get(orderId)).toMatchObject({ status: 'void', paidAmount: 0 })
+    // Phiếu thu phải đi theo đơn: lịch sử thu tiền của khách và tổng "Đã thu" của kỳ đọc thẳng bảng
+    // `payments`, không đọc `paidAmount`.
+    expect(await db.payments.where('orderId').equals(orderId).count()).toBe(0)
   })
 
   it('recalcAll không đóng dấu ngày nhập lên đơn cũ', async () => {
