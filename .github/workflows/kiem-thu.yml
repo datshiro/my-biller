@@ -1,0 +1,51 @@
+# Cửa kiểm tự động cho mọi push lên main và mọi pull request.
+#
+# `npm run test:live` (Robot Framework) cố ý KHÔNG ở đây: nó cần dựng venv Python và `rfbrowser init`
+# tải riêng một bộ Playwright nữa, đắt hơn hẳn ba tầng còn lại mà phủ gần trùng. Bộ đó chạy tay trước
+# khi deploy — xem docs/kiem-thu-live.md.
+name: Kiểm thử
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  kiem-thu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Vitest (unit + component)
+        run: npm test
+
+      # `npm run build` chạy `tsc --noEmit` trước `vite build`, nên đây cũng là bước kiểm kiểu.
+      - name: Build
+        run: npm run build
+
+      # e2e chạy trên Chrome thật (`channel: 'chrome'`), không phải chromium đóng gói kèm.
+      - name: Cài Chrome cho Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: Playwright e2e
+        run: npm run test:e2e
+
+      # `trace: 'retain-on-failure'` để lại trace trong test-results/ — mở bằng `npx playwright
+      # show-trace` là xem lại được đúng lượt chạy đã đỏ, không phải đoán từ log.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-trace
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

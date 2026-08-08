@@ -12,8 +12,12 @@ const ORDERS = 5_000
  * Đo được ~84ms trên máy làm việc, tức còn dư hơn ba lần. Ngưỡng này không nhằm chốt một con số ms
  * cho mọi máy — nó để bắt lỗi **đổi dáng truy vấn** (quét cả bảng, hỏi từng đơn một), thứ làm chậm
  * gấp nhiều lần chứ không phải vài chục phần trăm.
+ *
+ * Runner GitHub dùng vCPU chia sẻ, cùng dáng truy vấn này đo được 519–565ms — chậm hơn máy dev 4–6
+ * lần mà không có gì hỏng. Nới ngưỡng ở đó chứ không nới ở máy dev: 300ms là con số thật cần giữ,
+ * còn 1500ms vẫn bắt được cú chậm gấp nhiều lần mà không đỏ vì runner hôm nay đông khách.
  */
-const BUDGET_MS = 300
+const BUDGET_MS = process.env.CI ? 1_500 : 300
 
 async function seedOrders(page: Page, count: number) {
   return page.evaluate(async (total) => {

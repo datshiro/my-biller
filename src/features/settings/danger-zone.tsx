@@ -1,11 +1,19 @@
 import { useState } from 'react'
-import { exportSafetyCopy, wipeEverything } from './backup'
+import { exportBackup, wipeEverything } from './backup'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { Sheet } from '@/ui/sheet'
 import { TextField } from '@/ui/text-field'
 
 const CONFIRM_WORD = 'XOA'
+
+/**
+ * Cửa cuối trước khi xoá sạch. File sao lưu nhập lại được thì đi qua hai cửa; file không nhập lại
+ * được thì thêm cửa thứ ba nói thẳng ra là xoá bây giờ mất hẳn.
+ */
+type WipeStep =
+  | { phase: 'seen'; filename: string; problem: string | null }
+  | { phase: 'accept'; filename: string; problem: string }
 
 /**
  * Bắt gõ chữ chứ không chỉ bấm "Đồng ý": xoá sạch là thao tác không có Undo, và người bán đang cầm
@@ -16,14 +24,15 @@ export function DangerZone() {
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [step, setStep] = useState<WipeStep | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const saveSafetyCopy = async () => {
     setBusy(true)
     setError(null)
     try {
-      setSaved(await exportSafetyCopy(Date.now()))
+      const { filename, problem } = await exportBackup(Date.now())
+      setStep({ phase: 'seen', filename, problem })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không sao lưu được. Chưa xoá gì cả.')
     } finally {
@@ -32,7 +41,7 @@ export function DangerZone() {
   }
 
   const wipe = async () => {
-    setSaved(null)
+    setStep(null)
     setBusy(true)
     try {
       await wipeEverything()
@@ -82,19 +91,49 @@ export function DangerZone() {
               autoFocus
               autoCapitalize="characters"
               onChange={(event) => setTyped(event.target.value)}
-              error={error ?? undefined}
             />
           </div>
+          {/* Khe lỗi của ô nhập chỉ dành cho việc gõ sai chữ xác nhận. Lỗi sao lưu / lỗi xoá là
+              chuyện khác hẳn, đổ vào đó thì đọc như "chữ XOA sai định dạng". */}
+          {error ? (
+            <p
+              role="alert"
+              className="mt-3 rounded-btn bg-danger-tint px-3 py-2 text-[13px] font-semibold text-danger"
+            >
+              {error}
+            </p>
+          ) : null}
         </Sheet>
       ) : null}
 
-      {saved ? (
+      {step?.phase === 'seen' ? (
         <ConfirmDialog
           title="Đã thấy file trong máy chưa?"
-          message={`Vừa tải "${saved}" về thư mục Tải về. Mở ra xem có thật không rồi mới bấm tiếp — sau bước này không lấy lại được gì.`}
-          confirmLabel="Đã thấy — xoá tất cả"
+          message={
+            step.problem === null
+              ? `Vừa tải "${step.filename}" về thư mục Tải về. Mở ra xem có thật không rồi mới bấm tiếp — sau bước này không lấy lại được gì.`
+              : `Vừa tải "${step.filename}" về thư mục Tải về. Mở ra xem có thật không rồi mới bấm tiếp — nhưng file này có chỗ hỏng, còn một bước nữa phải đọc.`
+          }
+          confirmLabel={step.problem === null ? 'Đã thấy — xoá tất cả' : 'Đã thấy — đọc tiếp'}
+          onConfirm={() =>
+            step.problem === null
+              ? void wipe()
+              : setStep({ phase: 'accept', filename: step.filename, problem: step.problem })
+          }
+          onCancel={() => setStep(null)}
+        />
+      ) : null}
+
+      {/* Cửa thứ ba, chỉ mở khi file vừa tải về không nhập lại được. Chặn hẳn ở đây thì người bán
+          mắc kẹt: không nhập được file mới mà cũng không xoá được để bắt đầu lại. Nên vẫn cho đi,
+          nhưng phải nói ra là đi đâu. */}
+      {step?.phase === 'accept' ? (
+        <ConfirmDialog
+          title="File vừa tải về KHÔNG nhập lại được"
+          message={`${step.problem} Xoá bây giờ là mất hẳn, "${step.filename}" không dựng lại sổ được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi xoá sau.`}
+          confirmLabel="Vẫn xoá — mất cũng được"
           onConfirm={() => void wipe()}
-          onCancel={() => setSaved(null)}
+          onCancel={() => setStep(null)}
         />
       ) : null}
     </section>

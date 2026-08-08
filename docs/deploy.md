@@ -91,14 +91,17 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
   mới.
 - Không có tài khoản, không có phân quyền. Ai cầm máy là dùng được.
 
-## Số đo tham chiếu (bản 1.0.0, đo trên máy dev)
+## Số đo tham chiếu (đo trên máy dev)
+
+Bundle và precache đo lại ở bản 1.0.1; LCP với Lighthouse vẫn là số của 1.0.0 — chưa đo lại trên bản
+deploy mới, đừng đọc chúng như số của 1.0.1.
 
 | Hạng mục | Kết quả |
 |---|---|
-| Bundle | 542 KB thô · **165 KB gzip** (JS) + 5 KB gzip (CSS) |
-| Precache của service worker | 17 file · 623 KB |
-| LCP (Chrome, CPU ×4 + Slow 4G) | **464 ms** · CLS 0.00 |
-| Lighthouse mobile | Accessibility 100 · Best Practices 100 · SEO 91 |
+| Bundle (1.0.1) | 552 KB thô · **168 KB gzip** (JS) + 5 KB gzip (CSS) |
+| Precache của service worker (1.0.1) | 17 file · 633 KB |
+| LCP (1.0.0; Chrome, CPU ×4 + Slow 4G) | **464 ms** · CLS 0.00 |
+| Lighthouse mobile (1.0.0) | Accessibility 100 · Best Practices 100 · SEO 91 |
 | PWA installable | manifest hợp lệ (name, short_name, start_url, standalone, icon 192/512 + maskable) + service worker *activated* |
 
 Kiểm trên chính `an-quynh.pages.dev` (8/8/2026): `/`, `/bao-cao`, `/don/1/phieu`,
