@@ -66,14 +66,31 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
 }
 
 /**
- * Ngưỡng đổi cách truy vấn. `anyOf` bắt Dexie duyệt con trỏ theo từng khoá nên chi phí tăng theo
- * N×(số dòng), còn đọc cả bảng là **một** `getAll` rồi lọc trong bộ nhớ. Kỳ báo cáo rộng (cả năm)
- * rơi vào vế sau; một ngày vài chục đơn thì `anyOf` vẫn rẻ hơn nhiều so với đọc cả bảng.
+ * Ngưỡng đổi cách truy vấn. `anyOf` bắt Dexie duyệt con trỏ theo từng khoá nên chi phí tăng theo số
+ * đơn được hỏi, còn đọc cả bảng là một lượt `getAll` rồi lọc trong bộ nhớ — đắt cố định theo cỡ
+ * bảng, không phụ thuộc kỳ báo cáo.
  *
- * Con số 200 chọn theo *hình dạng* của hai thuật toán, chưa đo trên điện thoại thật — đo lại trước
- * khi tin vào nó.
+ * Đo trên Chrome, CPU throttle ×6 (thay cho điện thoại rẻ tiền), `orderLines` 24.000 dòng:
+ *
+ * | số đơn hỏi | `anyOf` | đọc cả bảng |
+ * |---|---|---|
+ * | 200 | 9ms | 99ms |
+ * | 900 | 34ms | 98ms |
+ * | 3.200 | 119ms | 109ms |
+ *
+ * Chỗ giao nhau **không phải một con số tuyệt đối** mà là một tỷ lệ: đo ở ba cỡ bảng (2.000 / 5.400 /
+ * 24.000 dòng) thì nó rơi vào 10–17% số dòng đang có. Ngưỡng cũ 200 nằm dưới xa mọi vạch đó, nên hai
+ * kỳ hay xem nhất — "7 ngày qua" và "Tháng" của quán đông khách — đều bị đẩy sang đường chậm gấp ba.
+ *
+ * Đo lại trên Chrome-Android thật (máy ảo Android 16) thì tỷ lệ giao nhau còn nới ra 25–35%: ở bảng
+ * 24.000 dòng, hỏi 3.200 đơn vẫn là 33ms bằng `anyOf` so với 75ms đọc cả bảng. Nghĩa là 1.500 an toàn
+ * hơn trên máy thật so với những gì bảng số throttle ở trên gợi ý, chứ không mạo hiểm hơn.
+ *
+ * Vẫn giữ một hằng số thay vì đi đếm bảng trước mỗi lần đọc: `count()` mất 1–6ms (Android: 1–7ms),
+ * tức đắt gấp đôi cả lượt đọc của một kỳ hẹp. 1.500 là chỗ sai ít nhất cho cả bảng nhỏ lẫn bảng lớn —
+ * lệch nhiều nhất khoảng 50ms ở dải 2–4 tháng của quán một năm tuổi.
  */
-const WIDE_QUERY = 200
+const WIDE_QUERY = 1_500
 
 /** Dòng hàng của nhiều đơn trong một truy vấn. Báo cáo không được đọc `orderLines` từng đơn một. */
 export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {

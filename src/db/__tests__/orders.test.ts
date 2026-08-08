@@ -216,7 +216,7 @@ describe('listOrderLinesOfOrders', () => {
   // Mỗi ca thừa ra 50 đơn không được hỏi tới: trả cả bảng về cũng phải bị bắt.
   it.each([
     ['dưới ngưỡng — đi bằng anyOf', 5],
-    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 250],
+    ['từ ngưỡng trở lên — đọc cả bảng rồi lọc', 1_600],
   ])('%s: chỉ trả dòng của đúng những đơn được hỏi', async (_label, asked) => {
     await seedLines(asked + 50)
     const wanted = Array.from({ length: asked }, (_, index) => index + 1)
