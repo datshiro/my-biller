@@ -128,6 +128,112 @@ describe('nhập file sao lưu', () => {
   })
 })
 
+/**
+ * Bản sao an toàn có thể xuất ra được mà không nhập lại được (bản build cũ, sửa tay qua DevTools).
+ * Chặn cứng ở đó thì người bán mắc kẹt: không nhập được file mới mà cũng không xoá được để bắt đầu
+ * lại. Nên vẫn cho đi, qua một cửa thứ ba nói thẳng là mất hẳn.
+ */
+describe('bản sao an toàn không nhập lại được', () => {
+  /** Ghi thẳng vào bảng, không qua schema: `collectBackup` xuất được, `parseBackupFile` từ chối. */
+  const addOddItem = () =>
+    db.items.add({
+      name: 'Hàng lạ',
+      groupId: null,
+      unit: '',
+      unitPrice: 25_500.5,
+      costPrice: null,
+      isActive: 1,
+      note: '',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+
+  const wipeUpToSecondGate = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Xoá toàn bộ dữ liệu' }))
+    await userEvent.type(screen.getByLabelText('Gõ XOA'), 'XOA')
+    await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RỒI XOÁ' }))
+  }
+
+  it('xoá sạch: dữ liệu lành thì vẫn chỉ hai cửa như cũ', async () => {
+    await seedItem()
+    renderPage()
+
+    await wipeUpToSecondGate()
+
+    expect(await screen.findByText('Đã thấy file trong máy chưa?')).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: 'Đã thấy — xoá tất cả' }))
+    await waitFor(async () => expect(await db.items.count()).toBe(0))
+  })
+
+  it('xoá sạch: file hỏng thì dừng ở cửa thứ ba, huỷ ở đó là chưa xoá gì', async () => {
+    await seedItem()
+    await addOddItem()
+    renderPage()
+
+    await wipeUpToSecondGate()
+    await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
+
+    const gate = await screen.findByText('File vừa tải về KHÔNG nhập lại được')
+    expect(gate).toBeDefined()
+    expect(screen.getByText(/data\.items\.\d+\.unitPrice/)).toBeDefined()
+    expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
+    expect(await db.items.count()).toBe(2)
+  })
+
+  it('xoá sạch: qua cửa thứ ba thì mới thật sự xoá', async () => {
+    await seedItem()
+    await addOddItem()
+    renderPage()
+
+    await wipeUpToSecondGate()
+    await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Vẫn xoá — mất cũng được' }))
+
+    await waitFor(async () => expect(await db.items.count()).toBe(0))
+  })
+
+  it('nhập file: file hỏng thì thêm cửa thứ ba, chưa ghi đè cho tới khi qua nó', async () => {
+    await seedItem()
+    const file = await collectBackup(NOW)
+    await db.items.clear()
+    await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
+    await addOddItem()
+    renderPage()
+
+    pick(JSON.stringify(file))
+    await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
+
+    expect(await screen.findByText('File an toàn vừa tải về KHÔNG nhập lại được')).toBeDefined()
+    // Chưa đụng gì tới DB: vẫn là dữ liệu hiện tại, chưa phải dữ liệu trong file.
+    expect((await db.items.toArray()).map((item) => item.name)).toEqual(['Bún', 'Hàng lạ'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Vẫn ghi đè — mất cũng được' }))
+    await waitFor(async () => expect((await db.items.toArray()).map((item) => item.name)).toEqual(['Phở']))
+  })
+
+  /**
+   * Khe lỗi của ô "Gõ XOA" nói về chữ người bán vừa gõ. Đổ lỗi sao lưu vào đó thì câu lỗi đọc như
+   * "chữ XOA sai định dạng", và người bán sửa cái không hỏng.
+   */
+  it('lỗi không xuất được file hiện ra như báo động, không phải như lỗi của ô nhập', async () => {
+    await seedItem()
+    URL.createObjectURL = vi.fn(() => {
+      throw new Error('Webview chặn tải file.')
+    })
+    renderPage()
+
+    await wipeUpToSecondGate()
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Webview chặn tải file/)
+    expect(screen.getByLabelText('Gõ XOA').getAttribute('aria-invalid')).toBeNull()
+    expect(screen.queryByText('Đã thấy file trong máy chưa?')).toBeNull()
+    expect(await db.items.count()).toBe(1)
+  })
+})
+
 describe('banner nhắc sao lưu', () => {
   it('chưa sao lưu lần nào thì nhắc ngay', async () => {
     renderPage()

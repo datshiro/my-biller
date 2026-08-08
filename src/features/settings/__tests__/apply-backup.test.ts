@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyBackup, exportBackup, exportSafetyCopy } from '../backup'
+import { applyBackup, exportBackup } from '../backup'
 import { collectBackup } from '@/db/backup'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
@@ -74,28 +74,14 @@ describe('applyBackup', () => {
   })
 })
 
-describe('exportBackup', () => {
-  it('ghi mốc sao lưu để banner nhắc nhở tắt đi', async () => {
-    await sellOnCredit(110_000, 110_000)
-    expect((await getAppState()).lastBackupAt).toBeNull()
-
-    const outcome = await exportBackup(NOW)
-
-    expect(outcome).toEqual({
-      filename: 'my-biller-backup-260807-1400.json',
-      importable: true,
-      problem: null,
-    })
-    expect((await getAppState()).lastBackupAt).toBe(NOW)
-  })
-})
-
 /**
- * Bản sao an toàn đứng ngay trước hai bước không quay lại được. `collectBackup` cố ý khoan dung với
- * bản ghi lạ còn `parseBackupFile` thì nghiêm ngặt, nên tồn tại đúng một loại file vừa xuất được vừa
- * không nhập lại được — đưa file đó ra rồi xoá sạch là dựng cái bẫy chứ không phải giữ đường về.
+ * `collectBackup` cố ý khoan dung với bản ghi lạ còn `parseBackupFile` thì nghiêm ngặt, nên tồn tại
+ * đúng một loại file vừa xuất được vừa không nhập lại được. Hàm này phải **nói ra** loại đó chứ
+ * không được tự chặn: nó cũng là bản sao an toàn đứng trước ghi đè và xoá sạch, chặn ở đây thì người
+ * bán không nhập được file mới mà cũng không xoá được để bắt đầu lại. Việc dựng thêm cửa xác nhận là
+ * của giao diện — xem `backup-flow.test.tsx`.
  */
-describe('exportSafetyCopy', () => {
+describe('exportBackup', () => {
   /** Ghi thẳng vào bảng, không qua schema: giả bản build cũ hoặc người dùng sửa tay qua DevTools. */
   const addOddItem = () =>
     db.items.add({
@@ -110,25 +96,21 @@ describe('exportSafetyCopy', () => {
       updatedAt: soldAt,
     })
 
-  it('dữ liệu lành thì tải file và ghi mốc như thường', async () => {
+  it('ghi mốc sao lưu để banner nhắc nhở tắt đi', async () => {
     await sellOnCredit(110_000, 110_000)
+    expect((await getAppState()).lastBackupAt).toBeNull()
 
-    expect(await exportSafetyCopy(NOW)).toBe('my-biller-backup-260807-1400.json')
+    const outcome = await exportBackup(NOW)
+
+    expect(outcome).toEqual({
+      filename: 'my-biller-backup-260807-1400.json',
+      importable: true,
+      problem: null,
+    })
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
 
-  it('file không nhập lại được thì chặn, nêu đúng chỗ hỏng, và KHÔNG tải gì cả', async () => {
-    await sellOnCredit(110_000, 110_000)
-    await addOddItem()
-
-    await expect(exportSafetyCopy(NOW)).rejects.toThrow(/data\.items\.\d+\.unitPrice/)
-
-    // Không có mốc sao lưu nghĩa là chưa có file nào ra khỏi máy — người bán không bị dẫn tới bước xoá.
-    expect((await getAppState()).lastBackupAt).toBeNull()
-    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
-  })
-
-  it('sao lưu thường vẫn ra file với bản ghi lạ — không khoá đường xuất dữ liệu', async () => {
+  it('vẫn ra file với bản ghi lạ — không khoá đường xuất dữ liệu', async () => {
     await sellOnCredit(110_000, 110_000)
     await addOddItem()
 
@@ -138,7 +120,7 @@ describe('exportSafetyCopy', () => {
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
   })
 
-  it('nhưng file lạ đó không được tính là đã sao lưu', async () => {
+  it('nhưng file lạ đó không được tính là đã sao lưu, và nêu đúng chỗ hỏng', async () => {
     await sellOnCredit(110_000, 110_000)
     await addOddItem()
 

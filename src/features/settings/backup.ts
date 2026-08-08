@@ -19,13 +19,6 @@ function downloadJson(filename: string, text: string): void {
 // Xuống dòng, thụt lề: file sao lưu phải đọc và sửa tay được, đây là lối thoát cuối cùng khi hỏng.
 const backupText = async (at: number) => JSON.stringify(await collectBackup(at), null, 2)
 
-async function writeBackup(at: number, text: string): Promise<string> {
-  const filename = backupFilename(at)
-  downloadJson(filename, text)
-  await saveAppState({ lastBackupAt: at })
-  return filename
-}
-
 /**
  * Kết quả một lần sao lưu. File **luôn** ra khỏi máy, nhưng "đã sao lưu" thì không phải lúc nào
  * cũng đúng — `importable` là thứ phân biệt hai chuyện đó.
@@ -39,13 +32,20 @@ export type BackupOutcome = {
 }
 
 /**
- * Xuất file sao lưu.
+ * Xuất file sao lưu. Cũng là bản sao an toàn đứng ngay trước hai bước không quay lại được: ghi đè
+ * khi nhập file, và xoá sạch.
  *
  * File vẫn tải về kể cả khi có bản ghi lạ (bản build cũ, sửa tay qua DevTools) — đó là dữ liệu của
  * người bán, và `parseBackupFile` lúc nhập lại sẽ chỉ đúng dòng cần sửa. Nhưng **mốc sao lưu thì
  * không**: `lastBackupAt` là thứ tắt banner nhắc sao lưu, nên đóng dấu nó cho một file mà
  * `parseBackupFile` sẽ từ chối là hứa với người bán một đường về không tồn tại — và họ chỉ phát
  * hiện ra đúng vào lúc cần phục hồi.
+ *
+ * `collectBackup` cố ý khoan dung với bản ghi lạ còn `parseBackupFile` thì nghiêm ngặt, nên tồn tại
+ * đúng một loại file vừa xuất được vừa không nhập lại được. Hàm này **không** tự chặn loại file đó:
+ * chặn ở đây thì người bán mắc kẹt — không nhập được file mới mà cũng không xoá được để bắt đầu lại,
+ * ngay trong app, không lối nào ra. Thay vào đó nó nói thật qua `importable`/`problem`, và màn hình
+ * dựng thêm một cửa xác nhận cho đúng trường hợp đó (xem `danger-zone.tsx`, `settings-page.tsx`).
  */
 export async function exportBackup(at: number): Promise<BackupOutcome> {
   const text = await backupText(at)
@@ -61,22 +61,6 @@ export async function exportBackup(at: number): Promise<BackupOutcome> {
 
   if (problem === null) await saveAppState({ lastBackupAt: at })
   return { filename, importable: problem === null, problem }
-}
-
-/**
- * Bản sao an toàn cho hai bước không quay lại được: ghi đè khi nhập file, và xoá sạch.
- *
- * Khác `exportBackup` ở chỗ nó **đọc lại** đúng nội dung vừa ghi ra. `collectBackup` cố ý khoan dung
- * để một bản ghi lạ không làm chết cả lần sao lưu, nhưng `parseBackupFile` thì nghiêm ngặt — nên có
- * đúng một loại file vừa xuất được vừa không nhập lại được. Đưa file đó ra rồi xoá sạch là dựng một
- * cái bẫy: người bán thấy file trong máy, tin là còn đường về, mà không còn.
- *
- * Hỏng thì ném lỗi nêu đúng bản ghi hỏng và **không tải gì cả** — thà chặn còn hơn xoá.
- */
-export async function exportSafetyCopy(at: number): Promise<string> {
-  const text = await backupText(at)
-  parseBackupFile(text)
-  return writeBackup(at, text)
 }
 
 /** Chỉ đọc và kiểm file — **không** chạm vào DB. Sai định dạng thì ném lỗi ở đây, trước mọi thứ khác. */

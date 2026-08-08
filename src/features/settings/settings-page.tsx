@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router'
-import { applyBackup, exportBackup, exportSafetyCopy, readBackupFile } from './backup'
+import { applyBackup, exportBackup, readBackupFile } from './backup'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -19,10 +19,14 @@ const message = (error: unknown) => (error instanceof Error ? error.message : 'K
 /**
  * Nhập file đi qua hai cửa. Cửa `safety` tồn tại vì bản xuất tự động trước khi ghi đè có thể thất
  * bại trong im lặng (webview Zalo, PWA iOS chặn tải file) — mà lúc đó thì đã không còn đường về.
+ * Cửa `accept` chỉ mở khi chính bản xuất đó không nhập lại được: ghi đè lúc ấy là mất hẳn dữ liệu
+ * đang có, nên phải nói ra thay vì chặn cứng — chặn thì người bán không nhập được mà cũng không có
+ * cách nào đi tiếp.
  */
 type ImportStep =
   | { phase: 'confirm'; file: BackupFile }
-  | { phase: 'safety'; file: BackupFile; filename: string }
+  | { phase: 'safety'; file: BackupFile; filename: string; problem: string | null }
+  | { phase: 'accept'; file: BackupFile; filename: string; problem: string }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -77,7 +81,8 @@ export function SettingsPage() {
     setStep(null)
     setBusy(true)
     try {
-      setStep({ phase: 'safety', file, filename: await exportSafetyCopy(Date.now()) })
+      const { filename, problem } = await exportBackup(Date.now())
+      setStep({ phase: 'safety', file, filename, problem })
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -208,8 +213,26 @@ export function SettingsPage() {
       {step?.phase === 'safety' ? (
         <ConfirmDialog
           title="Đã thấy file trong máy chưa?"
-          message={`Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không rồi mới bấm tiếp — sau bước này dữ liệu đang có trên máy không lấy lại được.`}
-          confirmLabel="Đã thấy — ghi đè"
+          message={
+            step.problem === null
+              ? `Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không rồi mới bấm tiếp — sau bước này dữ liệu đang có trên máy không lấy lại được.`
+              : `Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không — nhưng file này có chỗ hỏng, còn một bước nữa phải đọc.`
+          }
+          confirmLabel={step.problem === null ? 'Đã thấy — ghi đè' : 'Đã thấy — đọc tiếp'}
+          onConfirm={() =>
+            step.problem === null
+              ? void runImport(step.file)
+              : setStep({ phase: 'accept', file: step.file, filename: step.filename, problem: step.problem })
+          }
+          onCancel={() => setStep(null)}
+        />
+      ) : null}
+
+      {step?.phase === 'accept' ? (
+        <ConfirmDialog
+          title="File an toàn vừa tải về KHÔNG nhập lại được"
+          message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có, "${step.filename}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
+          confirmLabel="Vẫn ghi đè — mất cũng được"
           onConfirm={() => void runImport(step.file)}
           onCancel={() => setStep(null)}
         />
