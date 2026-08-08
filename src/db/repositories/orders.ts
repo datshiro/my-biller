@@ -65,10 +65,26 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
   return db.payments.where('orderId').equals(orderId).sortBy('paidAt')
 }
 
+/**
+ * Ngưỡng đổi cách truy vấn. `anyOf` bắt Dexie duyệt con trỏ theo từng khoá nên chi phí tăng theo
+ * N×(số dòng), còn đọc cả bảng là **một** `getAll` rồi lọc trong bộ nhớ. Kỳ báo cáo rộng (cả năm)
+ * rơi vào vế sau; một ngày vài chục đơn thì `anyOf` vẫn rẻ hơn nhiều so với đọc cả bảng.
+ *
+ * Con số 200 chọn theo *hình dạng* của hai thuật toán, chưa đo trên điện thoại thật — đo lại trước
+ * khi tin vào nó.
+ */
+const WIDE_QUERY = 200
+
 /** Dòng hàng của nhiều đơn trong một truy vấn. Báo cáo không được đọc `orderLines` từng đơn một. */
-export function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {
-  if (orderIds.length === 0) return Promise.resolve([])
-  return db.orderLines.where('orderId').anyOf([...orderIds]).toArray()
+export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {
+  if (orderIds.length === 0) return []
+  if (orderIds.length < WIDE_QUERY) {
+    return db.orderLines.where('orderId').anyOf([...orderIds]).toArray()
+  }
+
+  const wanted = new Set(orderIds)
+  const lines = await db.orderLines.toArray()
+  return lines.filter((line) => wanted.has(line.orderId))
 }
 
 /** Phiếu thu theo `paidAt` — dòng tiền của kỳ, khác doanh thu khi có bán nợ hoặc thu nợ cũ. */
@@ -82,8 +98,14 @@ export type DebtSummary = { total: number; customerCount: number }
  * Đơn còn thiếu tiền, **toàn bộ** chứ không giới hạn theo kỳ: khoản nợ từ tháng trước vẫn là tiền
  * chưa đòi được hôm nay. Đây là nguồn duy nhất cho cả màn Công nợ lẫn card ở màn Báo cáo.
  */
-export function listOpenDebtOrders(): Promise<Order[]> {
-  return db.orders.where('status').anyOf(['unpaid', 'partial']).toArray()
+export async function listOpenDebtOrders(): Promise<Order[]> {
+  // Hai lần `equals` chứ không phải một `anyOf`: mỗi `equals` là một `getAll` trên khoảng khoá, còn
+  // `anyOf` duyệt con trỏ qua từng bản ghi — chênh nhau hàng chục lần khi sổ nợ dài.
+  const [unpaid, partial] = await Promise.all([
+    db.orders.where('status').equals('unpaid').toArray(),
+    db.orders.where('status').equals('partial').toArray(),
+  ])
+  return [...unpaid, ...partial]
 }
 
 export async function summarizeDebt(): Promise<DebtSummary> {

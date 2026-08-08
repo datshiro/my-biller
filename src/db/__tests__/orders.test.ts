@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
 import { createItem, getItem, updateItem } from '../repositories/items'
-import { createOrder, getOrderLines, getOrderPayments, type OrderDraft } from '../repositories/orders'
+import { createOrder, getOrderLines, getOrderPayments, listOrdersByCustomer, type OrderDraft } from '../repositories/orders'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -47,6 +47,35 @@ describe('createOrder', () => {
   it('kẹp giảm giá ở mức tiền hàng', async () => {
     const { id } = await createOrder(draft({ discount: 999_000 }))
     expect(await db.orders.get(id)).toMatchObject({ discount: 110_000, total: 0, status: 'paid' })
+  })
+
+  /**
+   * Khác ca dưới ở chỗ giá trong draft **đã** khác giá danh mục ngay lúc ghi. Ca dưới chỉ chứng minh
+   * "bản ghi đã lưu không bị viết đè ngược"; ca này chứng minh `createOrder` chép giá từ draft chứ
+   * không tra lại bảng `items` — nếu nó tra lại thì giá vốn hôm nay sẽ chảy ngược vào đơn cũ và làm
+   * sai lợi nhuận của mọi kỳ đã chốt.
+   */
+  it('giá bán và giá vốn ghi vào dòng đơn là số trong draft, không phải số đang có trong danh mục', async () => {
+    const itemId = await createItem({
+      name: 'Phở bò',
+      groupId: null,
+      unit: 'tô',
+      unitPrice: 55_000,
+      costPrice: 30_000,
+      isActive: 1,
+    })
+
+    const { id } = await createOrder(
+      draft({ lines: [{ itemId, name: 'Phở bò hôm qua', unit: 'tô', unitPrice: 50_000, costPrice: 25_000, qty: 2 }] }),
+    )
+
+    expect((await getOrderLines(id))[0]).toMatchObject({
+      itemId,
+      name: 'Phở bò hôm qua',
+      unitPrice: 50_000,
+      costPrice: 25_000,
+      amount: 100_000,
+    })
   })
 
   it('sửa giá mặt hàng KHÔNG làm sai phiếu đã xuất', async () => {
@@ -114,6 +143,26 @@ describe('createOrder', () => {
     )
 
     expect(await db.orders.get(id)).toMatchObject({ customerId: null, status: 'paid' })
+  })
+
+  /** Bấm XONG hai lần bằng hai ngón, hoặc màn hình đơ rồi nhả một lượt — hai lệnh ghi cùng lúc thật. */
+  it('20 đơn ghi đồng thời: không đơn nào trùng mã, không đơn nào mất dòng hàng', async () => {
+    const created = await Promise.all(
+      Array.from({ length: 20 }, () => createOrder(draft({ payment: { amount: 110_000, method: 'cash', note: '' } }))),
+    )
+
+    const codes = created.map((order) => order.code)
+    expect(new Set(codes).size).toBe(20)
+    expect(await db.orders.count()).toBe(20)
+    for (const { id } of created) expect(await getOrderLines(id)).toHaveLength(1)
+  }, 30_000)
+
+  it('lịch sử đơn của khách xếp mới nhất lên đầu', async () => {
+    const older = await createOrder(draft({ soldAt: soldAt - 86_400_000 }))
+    const newer = await createOrder(draft({ soldAt }))
+
+    const history = await listOrdersByCustomer(1)
+    expect(history.map((order) => order.id)).toEqual([newer.id, older.id])
   })
 
   it('300 đơn trong cùng một ngày: mã không trùng, đánh số 001..300', async () => {
