@@ -48,8 +48,12 @@ function download(blob: Blob, filename: string): void {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  // Gắn vào DOM rồi mới bấm, và hoãn thu hồi URL: thu hồi ngay thì Safari huỷ luôn cú tải vừa bắt
+  // đầu. Giống hệt `settings/backup.ts` — đây là đường cứu phiếu khi Zalo không nhận share.
+  document.body.append(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 /** Phiếu một trang giữ đúng tên số phiếu; nhiều trang thì đánh số để khách xếp lại đúng thứ tự. */

@@ -39,14 +39,19 @@ async function overflowing(page: Page) {
     const limit = document.documentElement.clientWidth
     const offenders: string[] = []
 
-    // Hàng chip lọc cố ý cuộn ngang: bản thân khung cuộn không được vượt bề ngang màn, nhưng chip
-    // bên trong nó thì được — đó chính là thứ người bán vuốt.
+    /**
+     * Chỉ tha cho khung **cố ý** cuộn ngang (hàng chip lọc): chip bên trong nó được phép thò ra,
+     * đó chính là thứ người bán vuốt.
+     *
+     * Nhận diện bằng class chứ không bằng `getComputedStyle`: theo CSS spec, khung nào đặt
+     * `overflow-y: auto` thì trục còn lại **cũng** tính ra `auto`. `<main>` của app đúng như vậy,
+     * nên hỏi computed style sẽ tha cho toàn bộ nội dung mọi màn — bộ dò xanh mà không thấy gì.
+     */
     const insideScroller = (element: HTMLElement) => {
-      for (let node = element; node !== document.body; ) {
-        const parent = node.parentElement
-        if (!parent) return false
-        if (getComputedStyle(parent).overflowX !== 'visible') return true
-        node = parent
+      for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+        if (node.classList.contains('overflow-x-auto') || node.classList.contains('overflow-x-scroll')) {
+          return true
+        }
       }
       return false
     }
@@ -75,6 +80,25 @@ for (const [path, title, ready] of ROUTES) {
     expect(await overflowing(page)).toEqual([])
   })
 }
+
+/**
+ * Ca tự kiểm bộ dò. Không có nó thì 15 ca trên có thể xanh chỉ vì bộ dò mù — đã từng đúng như vậy:
+ * `<main>` cuộn dọc nên `overflow-x` computed ra `auto`, và mọi nội dung của mọi màn bị tha hết.
+ */
+test('bộ dò tràn ngang bắt được phần tử vượt khổ nằm trong <main>', async ({ page }) => {
+  await page.goto('/bao-cao')
+  await expect(page.getByText('DOANH THU').first()).toBeVisible()
+  expect(await overflowing(page)).toEqual([])
+
+  await page.evaluate(() => {
+    const probe = document.createElement('div')
+    probe.style.cssText = 'width:420px;height:4px'
+    probe.className = 'moi-nhet-vao-de-thu'
+    document.querySelector('main')?.append(probe)
+  })
+
+  expect(await overflowing(page)).toEqual(['div.moi-nhet-vao-de-thu'])
+})
 
 test('phiếu bán hàng và chi tiết đơn không tràn ngang ở 320px', async ({ page }) => {
   await page.goto('/don')
