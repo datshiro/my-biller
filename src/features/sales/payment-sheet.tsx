@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { calcChange, suggestCashAmounts } from '@/domain/cash-suggestion'
 import { formatAmount, formatVnd } from '@/domain/money'
 import type { Payment } from '@/domain/schema'
@@ -8,9 +7,9 @@ import { Sheet } from '@/ui/sheet'
 
 export type PaymentChoice = Pick<Payment, 'amount' | 'method' | 'note'> | null
 
-type Method = 'cash' | 'transfer' | 'debt'
+export type PayMethod = 'cash' | 'transfer' | 'debt'
 
-const METHODS: { value: Method; label: string }[] = [
+const METHODS: { value: PayMethod; label: string }[] = [
   { value: 'cash', label: 'Tiền mặt' },
   { value: 'transfer', label: 'Chuyển khoản' },
   { value: 'debt', label: 'Bán nợ' },
@@ -25,9 +24,18 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
   )
 }
 
+/**
+ * `method` và `given` do màn ngoài giữ, không phải state trong đây: ghi nợ phải đi chọn khách, mà
+ * lúc đó sheet này bị gỡ khỏi cây. Nếu để state ở đây thì quay lại nó về mặc định "tiền mặt, đưa đủ"
+ * và đơn nợ bị ghi thành đã thu đủ.
+ */
 export function PaymentSheet({
   total,
   hasCustomer,
+  method,
+  given,
+  onMethodChange,
+  onGivenChange,
   onConfirm,
   onPickCustomer,
   onClose,
@@ -36,15 +44,16 @@ export function PaymentSheet({
 }: {
   total: number
   hasCustomer: boolean
+  method: PayMethod
+  given: number | null
+  onMethodChange: (method: PayMethod) => void
+  onGivenChange: (given: number | null) => void
   onConfirm: (payment: PaymentChoice) => void
   onPickCustomer: () => void
   onClose: () => void
   submitting: boolean
   error: string | null
 }) {
-  const [method, setMethod] = useState<Method>('cash')
-  const [given, setGiven] = useState<number | null>(total)
-
   const paid = method === 'debt' ? 0 : method === 'transfer' ? total : Math.min(given ?? 0, total)
   const owed = total - paid
   const change = method === 'cash' ? calcChange(total, given ?? 0) : 0
@@ -80,10 +89,10 @@ export function PaymentSheet({
               type="button"
               aria-pressed={method === option.value}
               onClick={() => {
-                setMethod(option.value)
-                if (option.value === 'cash') setGiven(total)
+                onMethodChange(option.value)
+                if (option.value === 'cash') onGivenChange(total)
               }}
-              className={`h-12 flex-1 rounded-btn border text-[15px] font-semibold ${
+              className={`min-h-12 flex-1 rounded-btn border px-1 text-[15px] font-semibold leading-tight ${
                 method === option.value ? 'border-brand bg-brand text-white' : 'border-line bg-white'
               }`}
             >
@@ -98,12 +107,12 @@ export function PaymentSheet({
 
         {method === 'cash' ? (
           <>
-            <MoneyInput label="Khách đưa" value={given} onChange={setGiven} large />
+            <MoneyInput label="Khách đưa" value={given} onChange={onGivenChange} large />
 
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setGiven(total)}
+                onClick={() => onGivenChange(total)}
                 className="h-12 flex-1 rounded-btn border border-line bg-white px-2 font-semibold active:bg-surface"
               >
                 Đủ tiền
@@ -112,7 +121,7 @@ export function PaymentSheet({
                 <button
                   key={amount}
                   type="button"
-                  onClick={() => setGiven(amount)}
+                  onClick={() => onGivenChange(amount)}
                   className="money h-12 flex-1 rounded-btn border border-line bg-white px-2 font-semibold active:bg-surface"
                 >
                   {formatAmount(amount)}
