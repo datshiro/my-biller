@@ -33,6 +33,7 @@ export function MoneyInput({
   large = false,
   quickAdd = false,
   placeholder,
+  enterKeyHint,
   inputRef,
 }: {
   label: string
@@ -44,6 +45,8 @@ export function MoneyInput({
   large?: boolean
   quickAdd?: boolean
   placeholder?: string
+  /** Danh sách nhiều ô liền nhau đặt `"next"` để bàn phím Android có phím sang ô kế thay vì phím xuống dòng. */
+  enterKeyHint?: 'next' | 'done'
   /** Để màn ngoài đặt con trỏ vào đây khi mở — `autoFocus` thua hiệu ứng focus của `Sheet`. */
   inputRef?: React.Ref<HTMLInputElement>
 }) {
@@ -102,6 +105,7 @@ export function MoneyInput({
           id={id}
           ref={inputRef}
           inputMode="numeric"
+          enterKeyHint={enterKeyHint}
           value={text}
           placeholder={placeholder}
           onChange={(event) => handleType(event.currentTarget)}
