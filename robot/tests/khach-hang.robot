@@ -124,9 +124,81 @@ Thêm khách nhanh ngay trong lúc bán
     Should Be Equal    ${đơn}[status]    unpaid
 
 
+Đặt giá riêng cho khách thì sổ ghi đúng số đó
+    [Documentation]    Ca dính tiền: đọc thẳng IndexedDB chứ không tin con số trên màn.
+    Mở Bảng Giá Của Khách    Anh Hùng
+    Điền Ô    Phở bò đặc biệt    38000
+    Bấm Nút    LƯU BẢNG GIÁ
+
+    Chờ Thấy Chữ    1 món có giá riêng
+    ${giá}=    Đọc Bảng    customerPrices
+    Length Should Be    ${giá}    1
+    Should Be Equal As Integers    ${giá}[0][unitPrice]    38000
+
+Giá riêng bằng 0 là giá thật, không phải ô trống
+    [Documentation]    Món tặng kèm. Hiểu 0 thành "chưa đặt" là món tặng bị tính đủ tiền.
+    Mở Bảng Giá Của Khách    Anh Hùng
+    Điền Ô    Trà đá    0
+    Bấm Nút    LƯU BẢNG GIÁ
+
+    Chờ Thấy Chữ    1 món có giá riêng
+    ${giá}=    Đọc Bảng    customerPrices
+    Length Should Be    ${giá}    1
+    Should Be Equal As Integers    ${giá}[0][unitPrice]    0
+
+Sửa giá lần hai rồi xoá trắng ô thì sổ theo đúng từng bước
+    [Documentation]    Lưu lần hai đi qua đúng đường từng đẻ ConstraintError: khoá chính là ++id còn
+    ...    uniqueness nằm ở &[customerId+itemId], nên put không mang id cũ là rollback cả transaction
+    ...    và mọi ô người bán vừa gõ mất sạch.
+    [Tags]    regression
+    Mở Bảng Giá Của Khách    Anh Hùng
+    Điền Ô    Phở bò đặc biệt    38000
+    Bấm Nút    LƯU BẢNG GIÁ
+    Chờ Thấy Chữ    1 món có giá riêng
+
+    Bấm Nút    Bảng giá sỉ
+    Điền Ô    Phở bò đặc biệt    40000
+    Bấm Nút    LƯU BẢNG GIÁ
+    Chờ Thấy Chữ    1 món có giá riêng
+    ${giá}=    Đọc Bảng    customerPrices
+    Length Should Be    ${giá}    1
+    Should Be Equal As Integers    ${giá}[0][unitPrice]    40000
+
+    Bấm Nút    Bảng giá sỉ
+    Điền Ô    Phở bò đặc biệt    ${EMPTY}
+    Bấm Nút    LƯU BẢNG GIÁ
+    Chờ Thấy Chữ    Chưa đặt
+    ${giá}=    Đọc Bảng    customerPrices
+    Should Be Empty    ${giá}
+
+Món đã có giá riêng nổi lên đầu danh sách
+    Mở Bảng Giá Của Khách    Anh Hùng
+    Điền Ô    Trà đá    2000
+    Bấm Nút    LƯU BẢNG GIÁ
+    Chờ Thấy Chữ    1 món có giá riêng
+
+    Bấm Nút    Bảng giá sỉ
+    # Theo tên thì "Cà phê sữa" đứng đầu; đặt giá riêng cho Trà đá là nó phải vượt lên.
+    # Chữ hoa là do `label-xs` đặt `text-transform: uppercase`, không phải tên món viết hoa.
+    ${đầu}=    Get Text    css=label >> nth=0
+    Should Be Equal    ${đầu}    TRÀ ĐÁ
+
+Rời màn bảng giá khi còn ô chưa lưu thì app hỏi lại
+    Mở Bảng Giá Của Khách    Anh Hùng
+    Điền Ô    Phở bò đặc biệt    38000
+    Click    css=button[aria-label="Quay lại"]
+    Chờ Hộp Xác Nhận    Bỏ những gì đang nhập?
+
+
 *** Keywords ***
 Mở Chi Tiết Khách
     [Arguments]    ${tên}
     Mở Màn    /them/khach-hang
     Click    css=button:has-text("${tên}")
     Chờ Thấy Chữ    Lịch sử đơn
+
+Mở Bảng Giá Của Khách
+    [Arguments]    ${tên}
+    Mở Chi Tiết Khách    ${tên}
+    Bấm Nút    Bảng giá sỉ
+    Chờ Thấy Chữ    Để trống là bán giá lẻ

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { useNavigate, useParams } from 'react-router'
+import { useCustomerPriceCount } from './use-customer-prices'
 import { useCustomer, useCustomerOrders } from './use-customers'
 import { deleteCustomer } from '@/db/repositories/customers'
 import { groupDebts, totalDebt } from '@/domain/debt'
@@ -24,6 +25,7 @@ export function CustomerDetailPage() {
   const orders = useCustomerOrders(customerId)
 
   const history = useCustomerPayments(customerId)
+  const priceCount = useCustomerPriceCount(customerId)
 
   const [confirming, setConfirming] = useState(false)
   const [collecting, setCollecting] = useState(false)
@@ -116,6 +118,23 @@ export function CustomerDetailPage() {
           </p>
         ) : null}
       </div>
+
+      <ul className="border-t border-line">
+        <li>
+          <ListRow
+            title="Bảng giá sỉ"
+            subtitle={
+              priceCount === undefined
+                ? '…'
+                : priceCount > 0
+                  ? `${priceCount} món có giá riêng`
+                  : 'Chưa đặt — khách này mua giá lẻ'
+            }
+            right={<span className="text-[20px] text-muted">›</span>}
+            onClick={() => void navigate(`/them/khach-hang/${customer.id}/bang-gia`)}
+          />
+        </li>
+      </ul>
 
       <h2 className="label-xs border-t border-line px-4 pt-4 pb-2 text-muted">Lịch sử đơn</h2>
 

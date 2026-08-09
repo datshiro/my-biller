@@ -3,6 +3,7 @@ import { AppLayout } from './app-layout'
 import { CustomerDetailPage } from '@/features/customers/customer-detail-page'
 import { CustomerFormPage } from '@/features/customers/customer-form-page'
 import { CustomerListPage } from '@/features/customers/customer-list-page'
+import { CustomerPricePage } from '@/features/customers/customer-price-page'
 import { DebtListPage } from '@/features/debts/debt-list-page'
 import { ExpenseListPage } from '@/features/expenses/expense-list-page'
 import { ItemFormPage } from '@/features/items/item-form-page'
@@ -46,6 +47,7 @@ export function AppRoutes() {
         <Route path="/them/mat-hang/:id" element={<ItemFormPage />} />
         <Route path="/them/khach-hang/moi" element={<CustomerFormPage />} />
         <Route path="/them/khach-hang/:id/sua" element={<CustomerFormPage />} />
+        <Route path="/them/khach-hang/:id/bang-gia" element={<CustomerPricePage />} />
         <Route path="/them/cua-hang" element={<ShopInfoPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

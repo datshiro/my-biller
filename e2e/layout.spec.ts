@@ -19,6 +19,7 @@ const ROUTES = [
   ['/them/mat-hang/moi', 'Thêm mặt hàng', 'LƯU MẶT HÀNG'],
   ['/them/khach-hang', 'Khách hàng', 'Anh Hùng'],
   ['/them/khach-hang/moi', 'Thêm khách hàng', 'LƯU KHÁCH HÀNG'],
+  ['/them/khach-hang/1/bang-gia', 'Bảng giá của khách', 'Để trống là bán giá lẻ'],
   ['/them/cai-dat', 'Cài đặt', 'SAO LƯU RA FILE'],
   ['/them/cua-hang', 'Thông tin cửa hàng', 'LƯU THÔNG TIN'],
   ['/them/nhom-mat-hang', 'Nhóm mặt hàng', 'Đồ uống'],
