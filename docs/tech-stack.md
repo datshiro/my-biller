@@ -75,6 +75,45 @@ src/
 ```
 `domain/` không được import từ `db/` hay React → test bằng Vitest không cần DOM.
 
+**7. Giá riêng của khách — bảng mềm, hai tầng, không có "giá sỉ chung".**
+
+Dexie đã lên **`version(2)`**, thêm đúng một bảng `customerPrices` với index ghép **unique**
+`&[customerId+itemId]`. Hình dạng bản ghi ở `src/domain/schema.ts` (`CustomerPriceSchema`) — đừng chép
+lại vào đây, chép là để nó lệch.
+
+Ba invariant, cả ba đều ở `src/domain/wholesale-price.ts`:
+
+- **Đúng 2 tầng:** giá riêng của khách → giá lẻ. Không có tầng "giá sỉ chung" cho mọi khách.
+- **Không có dòng = bán giá lẻ.** Vắng mặt là câu trả lời, không phải dữ liệu thiếu.
+- **`0` là một giá thật** (hàng tặng kèm, khuyến mãi). Vì vậy code tra giá dùng `??`, không `||` —
+  `||` biến một món người bán đã quyết định cho không thành một món có tính tiền.
+
+Giá lẻ mà dòng giỏ rơi về khi tắt SỈ là **ảnh chụp lúc dòng vào giỏ** (`CartLine.retailPrice`), không
+phải giá đọc lại từ danh mục: đọc lại thì sửa giá ở màn Mặt hàng sẽ làm giá của một đơn đang lên dở
+nhảy theo.
+
+**Bảng mềm, không phải bảng cứng.** Dòng giá mồ côi (món hoặc khách không còn) và dòng trùng cặp là rác
+**vô hại** — giá tra theo `itemId` của dòng đang trong giỏ nên dòng mồ côi không bao giờ được đọc. Nên
+nó **không** nằm trong `validateBackupIntegrity`; nó bị lọc ở `cleanPriceRows` rồi đếm và nói ra ở cửa
+xác nhận. Chặn cả file vì mấy dòng rác thì đường ra duy nhất của người bán là sửa tay JSON — cái giá đó
+lớn hơn nhiều lần cái hại. Riêng dòng trùng cặp thì bắt buộc phải lọc: để nguyên là `bulkPut` ăn
+`ConstraintError` và **huỷ cả lượt nhập**, không riêng dòng đó.
+
+**File sao lưu nhận `version: 1 | 2`, xuất `2`.** File v1 ra đời trước bảng giá nên thiếu hẳn khoá
+`customerPrices`; nó được bù `[]` ở bước preprocess **theo đúng `version`**, chứ không phải bằng
+`.default([])` trên trường đó — `.default()` sẽ nuốt luôn một file v2 bị lược mất bảng giá, và khi đó
+`version` chỉ còn là chữ trang trí.
+
+**Không revert deploy sau khi đã lên v2.** Bản JS cũ **mở được** kho đã ở version cao hơn: Dexie ăn
+`VersionError` rồi tự mở lại không nêu version và chạy tiếp với đúng những bảng nó khai. Hậu quả không
+phải màn trắng mà là mất tiền trong im lặng — `collectBackup` gom theo `db.tables` nên file sao lưu
+thiếu hẳn bảng mới mà vẫn đóng dấu `lastBackupAt` như file lành, còn `replaceAllData` xoá cũng theo
+`db.tables` nên bảng mới sống sót qua lần nhập rồi bám sang bản ghi vừa nhận đúng số id đó. Chặn ở
+`db.on('ready')`: thấy trong kho có bảng mình không khai thì dừng hẳn, so theo **tên bảng** chứ không
+theo số version (Dexie có đường mở lại ở `idbdb.version + 1` nên một bản v1 hợp lệ vẫn có thể nằm ở
+version thật 11). Cùng nhà với nó là `on('versionchange')` — một bản JS khác vừa nâng version thì đóng
+kết nối và chặn màn, vì giữ kết nối là mọi lệnh ghi hỏng trong khi màn hình vẫn hiện như thường.
+
 ## Ràng buộc & rủi ro chấp nhận
 
 - **iOS xóa storage sau 7 ngày không dùng** (Safari policy). Mitigation bắt buộc trong bản 1: gọi `navigator.storage.persist()`, banner nhắc backup, hiện "lần backup gần nhất", export 1 chạm. → Backup là tính năng **an toàn dữ liệu**, không phải nice-to-have.
