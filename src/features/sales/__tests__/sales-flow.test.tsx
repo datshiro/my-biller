@@ -58,6 +58,21 @@ function renderSales() {
   )
 }
 
+/**
+ * Biến nháp app vừa ghi thành nháp **phiên trước** để lại, bằng cách bỏ dấu phiên đi — đúng thứ nằm trên
+ * máy người bán sau khi họ đóng app, hoặc sau khi app tự cập nhật lên bản mới.
+ *
+ * Phải dựng tay như vậy vì trong jsdom `unmount()` rồi `render()` vẫn nằm trong **một** lần nạp trang,
+ * tức vẫn cùng một phiên — chính là cảnh "rời màn rồi quay lại" chứ không phải cảnh mở lại app.
+ */
+function boDauPhienKhoiNhap() {
+  const raw = localStorage.getItem('my-biller:cart-draft')
+  if (raw === null) throw new Error('Chưa có nháp nào để bỏ dấu phiên.')
+  const draft = JSON.parse(raw) as Record<string, unknown>
+  delete draft.sessionId
+  localStorage.setItem('my-biller:cart-draft', JSON.stringify(draft))
+}
+
 /** Chạm ô trong lưới mặt hàng. Phải giới hạn trong lưới vì tên món còn hiện lại ở dòng giỏ. */
 const pick = async (name: string) => {
   const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
@@ -122,7 +137,7 @@ describe('bán hàng', () => {
     clearCartDraft()
     unmount()
 
-    expect(loadCartDraft()?.lines).toHaveLength(1)
+    expect(loadCartDraft()?.cart.lines).toHaveLength(1)
   })
 
   it('hai món, khách đưa dư → tiền thối đúng, đơn paid, ghi đủ dòng hàng', async () => {
@@ -306,10 +321,30 @@ describe('bán hàng', () => {
     await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).not.toBeNull())
 
     first.unmount()
+    boDauPhienKhoiNhap()
     renderSales()
 
     expect(await screen.findByText(/Đã khôi phục đơn đang lên dở/)).toBeDefined()
     expect(await screen.findByRole('button', { name: /THU TIỀN · 1 món/ })).toBeDefined()
+  })
+
+  /**
+   * Bấm sang màn khác rồi quay lại là chuyện xảy ra cả chục lần mỗi buổi — thêm một món, xem lại đơn cũ.
+   * Trước đây lần nào cũng dựng lại banner "đã khôi phục", một câu sai sự thật đặt ngay cạnh nút "Bỏ đi"
+   * xoá sạch giỏ đang lên.
+   */
+  it('rời màn Bán hàng rồi quay lại không phải là khôi phục đơn', async () => {
+    await seedItems()
+    const first = renderSales()
+
+    await pick('Phở bò')
+    await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).not.toBeNull())
+
+    first.unmount()
+    renderSales()
+
+    expect(await screen.findByRole('button', { name: /THU TIỀN · 1 món/ })).toBeDefined()
+    expect(screen.queryByText(/Đã khôi phục đơn đang lên dở/)).toBeNull()
   })
 
   it('nháp hỏng không làm chết màn bán hàng', async () => {

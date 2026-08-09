@@ -186,6 +186,26 @@ Lọc theo nhóm chỉ hiện món của nhóm đó
     Chờ Thấy Chữ    Đã khôi phục đơn đang lên dở
     Chờ Thấy Chữ    55.000 đ
 
+Rời màn Bán hàng rồi quay lại không phải là "khôi phục đơn"
+    [Documentation]    Banner "Đã khôi phục đơn đang lên dở" trước đây dựng lại theo từng lần dựng màn
+    ...    Bán hàng, tức hiện lên mỗi lần bấm sang màn khác rồi quay lại — dù người bán chưa hề đóng
+    ...    app. Một câu sai sự thật, mà ngay cạnh nó là nút "Bỏ đi" xoá sạch giỏ đang lên.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Nháp Giỏ Được Lưu
+
+    # Đi bằng thanh nav như người bán. `Mở Màn` là nạp lại trang, tức mở ra một phiên mới — đúng lúc
+    # banner *phải* hiện, nên dùng nó ở đây là kiểm nhầm chuyện khác.
+    Click    ${NAV_THEM}
+    Chờ Thấy Chữ    4 món
+    Click    ${NAV_BAN}
+
+    Chờ Thấy Chữ    TRONG ĐƠN
+    Không Được Thấy Chữ    Đã khôi phục đơn đang lên dở
+    Chờ Thấy Chữ    55.000 đ
+
 Bán xong thì nháp biến mất, mở lại không khôi phục đơn vừa bán
     [Documentation]    Nháp sống sót qua một lượt bán là mầm của đơn trùng: mở lại màn Bán hàng
     ...    thấy đúng những món vừa bán nằm sẵn trong giỏ, rất dễ bấm bán lần nữa.

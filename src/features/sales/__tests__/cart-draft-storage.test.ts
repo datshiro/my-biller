@@ -35,7 +35,7 @@ describe('nháp do bản build cũ ghi', () => {
 
   it('dòng cũ nhận priceSource "manual" và retailPrice bằng chính đơn giá của nó', () => {
     localStorage.setItem(KEY, NHAP_BAN_CU)
-    const cart = loadCartDraft()
+    const cart = loadCartDraft()?.cart
 
     expect(cart?.lines).toEqual([
       expect.objectContaining({ name: 'Phở bò', unitPrice: 55_000, retailPrice: 55_000, priceSource: 'manual' }),
@@ -46,14 +46,22 @@ describe('nháp do bản build cũ ghi', () => {
   it('giỏ cũ mở ra ở chế độ Lẻ', () => {
     localStorage.setItem(KEY, NHAP_BAN_CU)
 
-    expect(loadCartDraft()?.priceMode).toBe('retail')
+    expect(loadCartDraft()?.cart.priceMode).toBe('retail')
   })
 
   it('giữ nguyên phần còn lại của nháp', () => {
     localStorage.setItem(KEY, NHAP_BAN_CU)
-    const cart = loadCartDraft()
+    const cart = loadCartDraft()?.cart
 
     expect(cart).toMatchObject({ customerId: 3, customerName: 'Cô Bảy', discount: 10_000, note: 'giao 7h' })
+  })
+
+  // Bản build cũ chưa đóng dấu phiên nào. Không tính là phiên trước thì mọi nháp đang nằm trên máy người
+  // bán lúc app tự cập nhật đều mở lại lặng lẽ, không một dòng nói vì sao trong giỏ có sẵn hàng.
+  it('tính là nháp của phiên trước, vì chưa mang dấu phiên nào', () => {
+    localStorage.setItem(KEY, NHAP_BAN_CU)
+
+    expect(loadCartDraft()?.fromEarlierSession).toBe(true)
   })
 })
 
@@ -80,7 +88,15 @@ describe('nháp do bản build này ghi', () => {
   it('đi qua lưu rồi nạp mà không mất chế độ giá lẫn giá lẻ gốc', () => {
     saveCartDraft(cart)
 
-    expect(loadCartDraft()).toEqual(cart)
+    expect(loadCartDraft()?.cart).toEqual(cart)
+  })
+
+  // Nháp chính phiên này vừa ghi thì không phải "khôi phục": người bán chưa hề đóng app, chỉ đi vòng qua
+  // một màn khác rồi quay lại. Báo khôi phục ở đó là nói sai, mà ngay cạnh câu đó là nút xoá sạch giỏ.
+  it('không tính là nháp của phiên trước', () => {
+    saveCartDraft(cart)
+
+    expect(loadCartDraft()?.fromEarlierSession).toBe(false)
   })
 })
 

@@ -9,7 +9,11 @@ export function useCart(): {
   dispatch: (action: CartAction) => void
   /** Xoá giỏ VÀ nháp đã lưu. Gọi sau khi ghi đơn thành công, hoặc khi người bán bỏ đơn dở. */
   reset: () => void
-  /** Giỏ lúc mở app được khôi phục từ nháp — để báo cho người bán biết vì sao có sẵn hàng trong đơn. */
+  /**
+   * Giỏ mở ra từ nháp của **phiên trước** — đóng app mở lại, tải lại trang, app tự cập nhật. Để báo cho
+   * người bán biết vì sao có sẵn hàng trong đơn. Bấm sang màn khác rồi quay lại cũng nạp lại nháp, nhưng
+   * đó là giỏ họ vừa để lại chứ không phải chuyện cần báo.
+   */
   restored: boolean
 } {
   // Đọc nháp ngay lúc dựng state, không qua effect: khôi phục là giá trị khởi tạo chứ không phải
@@ -18,9 +22,9 @@ export function useCart(): {
   // Nháp đi qua `restore` chứ không nạp thẳng: đó là chỗ khoá dòng được tính lại. Nạp thẳng thì nháp
   // do bản build cũ ghi giữ nguyên khoá cũ và mọi lần chạm sau đó đẻ ra dòng thứ hai thay vì cộng dồn.
   const [cart, dispatch] = useReducer(cartReducer, draft, (seed) =>
-    seed ? cartReducer(emptyCart(), { type: 'restore', cart: seed }) : emptyCart(),
+    seed ? cartReducer(emptyCart(), { type: 'restore', cart: seed.cart }) : emptyCart(),
   )
-  const [restored, setRestored] = useState(draft !== null)
+  const [restored, setRestored] = useState(draft?.fromEarlierSession ?? false)
 
   const latestCart = useRef(cart)
 

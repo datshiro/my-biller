@@ -4,6 +4,19 @@ import type { Cart } from '@/domain/cart'
 const KEY = 'my-biller:cart-draft'
 
 /**
+ * Dấu của **lần nạp trang hiện tại**. Module chỉ chạy lại khi trang được nạp lại — đóng app mở lại, tải
+ * lại, app tự cập nhật — nên nháp mang dấu khác dấu này đúng là nháp phiên trước để lại. Bấm sang màn
+ * khác rồi quay lại màn Bán hàng không nạp lại trang, nên vẫn cùng dấu.
+ */
+const SESSION = String(Math.random())
+
+function sessionOf(raw: unknown): string | null {
+  return raw !== null && typeof raw === 'object' && 'sessionId' in raw && typeof raw.sessionId === 'string'
+    ? raw.sessionId
+    : null
+}
+
+/**
  * Ba trường của bảng giá riêng đều **có đường rơi về**, vì mọi nháp đang nằm trong máy người bán đều do
  * bản build cũ ghi và thiếu cả ba. Thiếu mà parse đỏ thì `loadCartDraft` xoá sạch nháp *và* banner "Đã
  * khôi phục đơn đang lên dở" cũng không hiện: người bán đang lên đơn 12 dòng, app tự cập nhật, mở lại
@@ -46,7 +59,7 @@ export function saveCartDraft(cart: Cart): void {
       localStorage.removeItem(KEY)
       return
     }
-    localStorage.setItem(KEY, JSON.stringify(cart))
+    localStorage.setItem(KEY, JSON.stringify({ ...cart, sessionId: SESSION }))
   } catch {
     // Hết dung lượng hoặc trình duyệt chặn localStorage: mất nháp thì tiếc, nhưng chặn bán hàng thì tệ hơn.
   }
@@ -55,18 +68,22 @@ export function saveCartDraft(cart: Cart): void {
 /**
  * Nháp là dữ liệu ngoài tầm kiểm soát (người dùng sửa tay, bản cũ còn sót, storage hỏng).
  * Parse không qua thì bỏ luôn nháp và mở giỏ rỗng — không bao giờ để app trắng màn vì một nháp hỏng.
+ *
+ * Trả kèm `fromEarlierSession` vì mỗi lần dựng lại màn Bán hàng đều nạp lại nháp, mà chỉ nháp của phiên
+ * trước mới đáng báo cho người bán. Nháp do bản build cũ ghi chưa có dấu phiên nào, tính là phiên trước.
  */
-export function loadCartDraft(): Cart | null {
+export function loadCartDraft(): { cart: Cart; fromEarlierSession: boolean } | null {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
 
-    const parsed = CartSchema.safeParse(JSON.parse(raw))
+    const json: unknown = JSON.parse(raw)
+    const parsed = CartSchema.safeParse(json)
     if (!parsed.success) {
       localStorage.removeItem(KEY)
       return null
     }
-    return parsed.data
+    return { cart: parsed.data, fromEarlierSession: sessionOf(json) !== SESSION }
   } catch {
     localStorage.removeItem(KEY)
     return null

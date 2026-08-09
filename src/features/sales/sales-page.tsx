@@ -122,14 +122,18 @@ export function SalesPage() {
   }
 
   /**
-   * Nháp có thể sống lâu hơn bảng giá và lâu hơn cả khách. Mở lại app mà không tính lại thì công tắc
-   * hiện SỈ trong khi bảng giá rỗng: món thêm mới vào giỏ ở giá lẻ, nằm cạnh những dòng giá sỉ cũ.
+   * Nháp có thể sống lâu hơn bảng giá và lâu hơn cả khách. Mở màn mà không tính lại thì công tắc hiện
+   * SỈ trong khi bảng giá rỗng: món thêm mới vào giỏ ở giá lẻ, nằm cạnh những dòng giá sỉ cũ.
+   *
+   * Chốt ở chế độ giá của giỏ chứ không ở `restored`: `book` là state của màn nên **mọi** lần dựng lại
+   * màn đều bắt đầu với bảng giá rỗng, kể cả khi người bán chỉ bấm sang màn khác rồi quay lại chứ không
+   * hề đóng app — mà đúng những lần đó thì `restored` là false.
    */
-  const restoreHandled = useRef(false)
+  const repricedOnMount = useRef(false)
   useEffect(() => {
-    if (restoreHandled.current) return
-    restoreHandled.current = true
-    if (!restored || cart.priceMode !== 'wholesale') return
+    if (repricedOnMount.current) return
+    repricedOnMount.current = true
+    if (cart.priceMode !== 'wholesale') return
 
     const customerId = cart.customerId
     void (async () => {
@@ -141,7 +145,7 @@ export function SalesPage() {
       await applyMode('retail', null)
       setNotice('Khách của đơn đang lên dở không còn nữa. Đã chuyển về giá lẻ — xem lại giá trước khi thu tiền.')
     })()
-    // Chỉ chạy đúng một lần lúc mở màn; `restoreHandled` là chốt, không phải mảng phụ thuộc.
+    // Chỉ chạy đúng một lần lúc mở màn; `repricedOnMount` là chốt, không phải mảng phụ thuộc.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
