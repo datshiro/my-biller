@@ -15,7 +15,11 @@ export function useCart(): {
   // Đọc nháp ngay lúc dựng state, không qua effect: khôi phục là giá trị khởi tạo chứ không phải
   // một lần cập nhật sau khi đã vẽ giỏ rỗng.
   const [draft] = useState(loadCartDraft)
-  const [cart, dispatch] = useReducer(cartReducer, draft ?? emptyCart())
+  // Nháp đi qua `restore` chứ không nạp thẳng: đó là chỗ khoá dòng được tính lại. Nạp thẳng thì nháp
+  // do bản build cũ ghi giữ nguyên khoá cũ và mọi lần chạm sau đó đẻ ra dòng thứ hai thay vì cộng dồn.
+  const [cart, dispatch] = useReducer(cartReducer, draft, (seed) =>
+    seed ? cartReducer(emptyCart(), { type: 'restore', cart: seed }) : emptyCart(),
+  )
   const [restored, setRestored] = useState(draft !== null)
 
   useEffect(() => {

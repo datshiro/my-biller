@@ -3,17 +3,38 @@ import 'fake-indexeddb/auto'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SalesPage } from '../sales-page'
 import { db } from '@/db/db'
-import { createCustomer } from '@/db/repositories/customers'
+import { savePriceBook } from '@/db/repositories/customer-prices'
+import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
 import { createItem } from '@/db/repositories/items'
 import { getOrderLines } from '@/db/repositories/orders'
+
+/**
+ * Đọc bảng giá chậm lại theo từng khách, để dựng được cảnh hai lượt đọc IndexedDB **về sai thứ tự gọi**.
+ * Mặc định 0ms nên mọi ca khác chạy y như thật; chỉ ca đua mới nạp số vào map này.
+ */
+const { chamTheoKhach } = vi.hoisted(() => ({ chamTheoKhach: new Map<number, number>() }))
+
+vi.mock('@/db/repositories/customer-prices', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/db/repositories/customer-prices')>()
+  return {
+    ...actual,
+    listPriceBook: async (customerId: number) => {
+      const rows = await actual.listPriceBook(customerId)
+      const delay = chamTheoKhach.get(customerId) ?? 0
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+      return rows
+    },
+  }
+})
 
 afterEach(cleanup)
 
 beforeEach(async () => {
   localStorage.clear()
+  chamTheoKhach.clear()
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
 })
@@ -42,6 +63,22 @@ const pick = async (name: string) => {
 }
 const openPayment = async () =>
   userEvent.click(await screen.findByRole('button', { name: /THU TIỀN/ }))
+
+/** Dòng trong giỏ — đơn giá nằm ngay trong nút "Sửa <tên>". */
+const dongGio = async (name: string) =>
+  (await screen.findByRole('button', { name: `Sửa ${name}` })).textContent ?? ''
+
+const oTrongLuoi = async (name: string) => {
+  const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
+  return within(grid).getByRole('button', { name: new RegExp(name) }).textContent ?? ''
+}
+
+const chonKhach = async (name: string | RegExp) =>
+  userEvent.click(await screen.findByRole('button', { name }))
+
+const moChonKhach = async () => userEvent.click(await screen.findByRole('button', { name: /^KHÁCH/ }))
+
+const bam = async (label: string) => userEvent.click(await screen.findByRole('button', { name: label }))
 
 describe('bán hàng', () => {
   it('hai món, khách đưa dư → tiền thối đúng, đơn paid, ghi đủ dòng hàng', async () => {
@@ -248,5 +285,328 @@ describe('bán hàng', () => {
     await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra da{Enter}')
 
     expect(await screen.findByRole('button', { name: /THU TIỀN · 2 món/ })).toBeDefined()
+  })
+})
+
+describe('công tắc Lẻ/SỈ', () => {
+  /** Phở bò có giá riêng, Trà đá thì không — để thấy SỈ chỉ đụng đúng món có giá riêng. */
+  const seedGiaSi = async (name: string, phoPrice: number) => {
+    const [phoId] = await seedItems()
+    const customerId = await createCustomer({ name, phone: '', address: '', note: '' })
+    await savePriceBook(customerId, [{ itemId: phoId ?? -1, unitPrice: phoPrice }])
+    return { phoId: phoId ?? -1, customerId }
+  }
+
+  it('bật SỈ khi giỏ đã có món: dòng danh mục xuống giá sỉ, dòng gõ tay giữ nguyên', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await pick('Trà đá')
+
+    // Trà đá thành dòng gõ tay — `applyPriceMode` không được đụng vào nó.
+    await bam('Sửa Trà đá')
+    const priceBox = within(screen.getByRole('dialog')).getByLabelText(/Đơn giá riêng/)
+    await userEvent.clear(priceBox)
+    await userEvent.type(priceBox, '2000')
+    await bam('XONG')
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+    expect(await dongGio('Trà đá')).toContain('2.000')
+    expect(screen.getByText(/1 món lấy giá riêng/)).toBeDefined()
+
+    await openPayment()
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+    const [order] = await db.orders.toArray()
+    expect(order?.total).toBe(47_000)
+    expect(await getOrderLines(order?.id ?? -1)).toMatchObject([{ unitPrice: 45_000 }, { unitPrice: 2_000 }])
+  })
+
+  it('chạm SỈ khi chưa chọn khách thì phải chọn khách trước; đóng lại vẫn là Lẻ', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+
+    expect(await screen.findByText('Chọn khách')).toBeDefined()
+    await bam('Đóng')
+
+    expect(screen.getByRole('button', { name: 'SỈ' }).getAttribute('aria-pressed')).toBe('false')
+    expect(await dongGio('Phở bò')).toContain('55.000')
+  })
+
+  it('thêm món khi đang SỈ — cả qua lưới lẫn qua gõ "2 pho" — đều vào giá riêng', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'SỈ' }).getAttribute('aria-pressed')).toBe('true'))
+
+    // Lưới phải hiện giá SẼ tính, không phải giá lẻ — người bán đọc con số đó rồi mới quyết định bán.
+    await waitFor(async () => expect(await oTrongLuoi('Phở bò')).toContain('45.000'))
+
+    await pick('Phở bò')
+    expect(await dongGio('Phở bò')).toContain('45.000')
+
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 pho{Enter}')
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(0))
+    expect(await screen.findByRole('button', { name: /THU TIỀN · 3 món/ })).toBeDefined()
+
+    await openPayment()
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+    const [order] = await db.orders.toArray()
+    expect(order?.total).toBe(135_000)
+    expect(await getOrderLines(order?.id ?? -1)).toMatchObject([{ unitPrice: 45_000, qty: 3 }])
+  })
+
+  /**
+   * Giá lẻ mà `applyPriceMode` rơi về là ảnh chụp trên dòng giỏ, không phải giá đọc lại từ danh mục.
+   * Sửa giá ở màn Mặt hàng giữa chừng mà giỏ nhảy theo là sửa giá một đơn đã chốt giá với khách.
+   */
+  it('tắt SỈ trả giỏ về đúng giá lẻ lúc thêm món, kể cả khi giá trong danh mục đã đổi', async () => {
+    const { phoId } = await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await db.items.update(phoId, { unitPrice: 60_000 })
+
+    await moChonKhach()
+    await chonKhach(/Khách lẻ/)
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('55.000'))
+    expect(screen.getByRole('button', { name: 'SỈ' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  /**
+   * Khoá dòng có `#priceSource` là vì đúng ca này: không có nó thì dòng catalog vừa xuống 45.000 trùng
+   * khoá dòng gõ tay 45.000 → `upsert` gộp thành một dòng `manual` qty 2. Tắt SỈ không đụng dòng manual,
+   * nên cả 2 tô bán 45.000 thay vì 1×45.000 + 1×55.000 — mất tiền mà không lỗi nào hiện ra.
+   */
+  it('dòng gõ tay trùng giá với giá sỉ vẫn là hai dòng riêng, tắt SỈ thì tách lại đúng', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('Sửa Phở bò')
+    const priceBox = within(screen.getByRole('dialog')).getByLabelText(/Đơn giá riêng/)
+    await userEvent.clear(priceBox)
+    await userEvent.type(priceBox, '45000')
+    await bam('XONG')
+
+    await pick('Phở bò')
+    expect(await screen.findByRole('button', { name: /THU TIỀN · 2 món/ })).toBeDefined()
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Sửa Phở bò' })).toHaveLength(2))
+
+    await moChonKhach()
+    await chonKhach(/Khách lẻ/)
+
+    await openPayment()
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+    const [order] = await db.orders.toArray()
+    expect(order?.total).toBe(100_000)
+    expect(await getOrderLines(order?.id ?? -1)).toMatchObject([
+      { unitPrice: 45_000, qty: 1 },
+      { unitPrice: 55_000, qty: 1 },
+    ])
+  })
+
+  it('món đã ngừng bán còn nằm trong giỏ thì bật/tắt SỈ vẫn chạy, không đổi giá bậy', async () => {
+    const { phoId } = await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await db.items.update(phoId, { isActive: 0 })
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Sửa Phở bò/ })).not.toBeNull())
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await moChonKhach()
+    await chonKhach(/Khách lẻ/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('55.000'))
+  })
+
+  it('đổi khách khi đang SỈ thì mọi đơn giá là giá của khách mới', async () => {
+    const { phoId } = await seedGiaSi('Cô Bảy', 45_000)
+    const chuTam = await createCustomer({ name: 'Chú Tám', phone: '', address: '', note: '' })
+    await savePriceBook(chuTam, [{ itemId: phoId, unitPrice: 30_000 }])
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await moChonKhach()
+    await chonKhach(/Chú Tám/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('30.000'))
+
+    await openPayment()
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+    const [order] = await db.orders.toArray()
+    expect(order).toMatchObject({ customerId: chuTam, total: 30_000 })
+    expect(await getOrderLines(order?.id ?? -1)).toMatchObject([{ unitPrice: 30_000 }])
+  })
+
+  /**
+   * Bảng giá của khách trước về SAU bảng giá của khách sau. `await` một mình không chặn được: nó chỉ
+   * bảo đảm mỗi lượt đọc xong mới dispatch, không bảo đảm lượt nào xong trước. Bỏ `requestId` đi thì
+   * header hiện "Chú Tám" mà từng đơn giá là của Cô Bảy — không một lỗi nào hiện ra.
+   */
+  it('đổi khách hai nhịp nhanh, bảng giá khách cũ về sau: giá vẫn là của khách đang hiện trên header', async () => {
+    const { phoId, customerId: coBay } = await seedGiaSi('Cô Bảy', 45_000)
+    const chuTam = await createCustomer({ name: 'Chú Tám', phone: '', address: '', note: '' })
+    await savePriceBook(chuTam, [{ itemId: phoId, unitPrice: 30_000 }])
+    chamTheoKhach.set(coBay, 300)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await moChonKhach()
+    await chonKhach(/Chú Tám/)
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('30.000'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+
+    expect(await dongGio('Phở bò')).toContain('30.000')
+  })
+
+  /**
+   * Bấm lọt THU TIỀN trong cửa sổ `await` là `finish` chụp `cart.lines` của render trước → đơn ghi ở
+   * giá **trước khi** tính lại, rồi `reset()` xoá sạch giỏ nên không còn gì để đối chiếu.
+   */
+  it('nút THU TIỀN bị khoá trong lúc còn đang nạp bảng giá', async () => {
+    const { customerId } = await seedGiaSi('Cô Bảy', 45_000)
+    chamTheoKhach.set(customerId, 300)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+
+    expect((await screen.findByRole('button', { name: /THU TIỀN/ })).hasAttribute('disabled')).toBe(true)
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+    expect(screen.getByRole('button', { name: /THU TIỀN/ }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('nháp SỈ khôi phục theo bảng giá HIỆN TẠI, không theo giá đã đóng băng trong nháp', async () => {
+    const { phoId, customerId } = await seedGiaSi('Cô Bảy', 45_000)
+    const first = renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+    await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).toContain('45000'))
+
+    first.unmount()
+    await savePriceBook(customerId, [{ itemId: phoId, unitPrice: 40_000 }])
+    renderSales()
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('40.000'))
+    expect(screen.getByRole('button', { name: 'SỈ' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('nháp SỈ trỏ vào khách đã bị xoá: hạ về Lẻ và báo cho người bán', async () => {
+    const { customerId } = await seedGiaSi('Cô Bảy', 45_000)
+    const first = renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).toContain('45000'))
+
+    first.unmount()
+    await deleteCustomer(customerId)
+    renderSales()
+
+    expect(await screen.findByText(/không còn nữa/)).toBeDefined()
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('55.000'))
+    expect(screen.getByRole('button', { name: 'SỈ' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  /**
+   * Đường mất tiền nguy hiểm nhất của plan này: `calcOrderTotals` kẹp `discount` về `subtotal` **trong im
+   * lặng**, nên một cú chạm công tắc kéo tổng về 0 và đơn 0đ đó được ghi là trả đủ. Guard `tooBig` của
+   * `AdjustSheet` chỉ chạy lúc gõ, không chạy lại sau khi đổi giá.
+   */
+  it('giảm giá trước rồi bật SỈ: tổng tụt về 0 thì phải có cảnh báo ở thanh tổng', async () => {
+    await seedGiaSi('Cô Bảy', 5_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('Giảm giá / phụ thu')
+
+    const box = within(screen.getByRole('dialog')).getByLabelText('Giảm giá')
+    await userEvent.type(box, '50000')
+    await bam('ÁP DỤNG')
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('5.000'))
+    expect(screen.getByText(/vẫn còn giảm giá/)).toBeDefined()
+    expect(screen.getByRole('button', { name: /THU TIỀN/ })).toBeDefined()
+  })
+
+  it('đang SỈ mà mở Giảm giá thì sheet nói rõ đơn này đã tính giá sỉ', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await bam('Giảm giá / phụ thu')
+    expect(within(screen.getByRole('dialog')).getByText(/giảm lần thứ hai/)).toBeDefined()
+  })
+
+  it('chốt đơn sỉ bằng chuyển khoản: thu đủ theo tổng sỉ, không dính quy tắc "khách đưa"', async () => {
+    await seedGiaSi('Cô Bảy', 45_000)
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await openPayment()
+    await bam('Chuyển khoản')
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => {
+      expect((await db.orders.toArray())[0]).toMatchObject({
+        total: 45_000,
+        paidAmount: 45_000,
+        status: 'paid',
+      })
+    })
   })
 })

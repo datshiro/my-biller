@@ -40,6 +40,13 @@ export function CartLines({
             <span className="block text-[13px] text-muted">
               {formatAmount(line.unitPrice)}
               {line.unit ? ` / ${line.unit}` : ''}
+              {/* Dấu này ở mức TỪNG DÒNG chứ không phải mức đơn: bật SỈ mà khách chỉ có giá riêng cho
+                  vài món thì phần còn lại vẫn là giá lẻ, và người bán cần thấy dòng nào là dòng nào. */}
+              {line.priceSource === 'catalog' && line.unitPrice !== line.retailPrice ? (
+                <span className="ml-1 rounded-full bg-brand px-1.5 text-[11px] font-bold uppercase text-white">
+                  sỉ
+                </span>
+              ) : null}
               {line.note ? ` · ${line.note}` : ''}
             </span>
           </button>
