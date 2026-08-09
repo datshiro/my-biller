@@ -13,7 +13,7 @@ mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra fil
 ## Chạy
 
 ```bash
-npm run test:live                              # cả 125 ca
+npm run test:live                              # cả 126 ca
 npm run test:regression                        # chỉ các ca chốt chặn hồi quy — vòng nhanh lúc đang sửa
 ./robot/run.sh robot/tests/ban-hang.robot      # một màn
 ./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
@@ -60,7 +60,7 @@ robot/
 │   ├── app.resource          vòng đời trình duyệt, phiên sạch, nạp mẫu, đọc IndexedDB
 │   └── sales.resource        thao tác màn Bán hàng, dùng lại ở nhiều suite
 └── tests/
-    ├── ban-hang.robot        25 ca · giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
+    ├── ban-hang.robot        26 ca · giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
     ├── don-hang.robot        12 ca · danh sách đơn, ghi chú, huỷ đơn
     ├── mat-hang.robot        13 ca · danh mục, ngừng bán, chặn xoá món đã bán
     ├── khach-hang.robot      18 ca · khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
