@@ -6,6 +6,7 @@ export function ItemGrid({
   qtyOf,
   priceOf,
   onPick,
+  onAdd,
 }: {
   items: readonly Item[]
   /** Số lượng món này đang có trong giỏ, để làm nổi ô đã chọn. */
@@ -16,6 +17,7 @@ export function ItemGrid({
    */
   priceOf: (item: Item) => number
   onPick: (item: Item) => void
+  onAdd: () => void
 }) {
   return (
     <div role="group" aria-label="Mặt hàng" className="grid grid-cols-3 gap-2 px-4 pb-4">
@@ -51,6 +53,18 @@ export function ItemGrid({
           </button>
         )
       })}
+
+      {/* Cuối lưới, không phải đầu: mọi ô khác là một lượt bán, để lối rời màn lên đầu là mời chạm
+          nhầm giữa lúc quán đông. Nét đứt viền `faint` chứ không `line`: `line` chỉ tương phản 1,3:1
+          với nền trắng, tức dấu hiệu "không phải món" gần như vô hình. */}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-btn border border-dashed border-faint p-2 text-[13px] font-semibold text-muted active:scale-[0.98]"
+      >
+        <span className="text-[20px] leading-none">＋</span>
+        Thêm mặt hàng
+      </button>
     </div>
   )
 }

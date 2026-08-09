@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SalesPage } from '../sales-page'
+import { clearCartDraft, loadCartDraft } from '../cart-draft-storage'
 import { db } from '@/db/db'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
@@ -51,6 +52,7 @@ function renderSales() {
       <Routes>
         <Route path="/" element={<SalesPage />} />
         <Route path="/don/:id/phieu" element={<p>Phiếu đã xuất</p>} />
+        <Route path="/them/mat-hang/moi" element={<p>Màn thêm mặt hàng</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -81,6 +83,37 @@ const moChonKhach = async () => userEvent.click(await screen.findByRole('button'
 const bam = async (label: string) => userEvent.click(await screen.findByRole('button', { name: label }))
 
 describe('bán hàng', () => {
+  it('đã có món rồi vẫn thêm được món mới ngay từ lưới', async () => {
+    await seedItems()
+    renderSales()
+
+    const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
+    // Ô thêm món phải nằm **cuối** lưới: mọi ô khác là một lượt bán, để nó lên đầu là mời chạm nhầm
+    // giữa lúc quán đông. Không chốt vị trí ở đây thì dời nó lên đầu vẫn xanh cả bộ.
+    expect(within(grid).getAllByRole('button').at(-1)?.textContent).toContain('Thêm mặt hàng')
+
+    await userEvent.click(within(grid).getByRole('button', { name: /Thêm mặt hàng/ }))
+    expect(await screen.findByText('Màn thêm mặt hàng')).toBeDefined()
+  })
+
+  /**
+   * Không có ca Robot: lỗi chỉ hiện trong cửa sổ 300ms giữa lần chạm cuối và lượt ghi nháp. Robot lái
+   * trình duyệt thật với đồng hồ thật, mỗi bước tốn hơn 300ms nên nó **luôn** đi qua sau khi nháp đã
+   * ghi xong — ca live sẽ xanh kể cả khi lỗi còn nguyên. Gate phải nằm ở đây.
+   */
+  it('rời màn Bán hàng ngay sau khi thêm món thì nháp giỏ vẫn giữ được món đó', async () => {
+    await seedItems()
+    const { unmount } = renderSales()
+
+    await pick('Phở bò')
+    // Dựng lại đúng cảnh cần kiểm: chưa có gì trên đĩa, giỏ mới nhất chỉ còn trong bộ nhớ. Xoá ở đây
+    // thay vì đo bằng đồng hồ, để ca không phụ thuộc việc userEvent chạy nhanh hay chậm hơn 300ms.
+    clearCartDraft()
+    unmount()
+
+    expect(loadCartDraft()?.lines).toHaveLength(1)
+  })
+
   it('hai món, khách đưa dư → tiền thối đúng, đơn paid, ghi đủ dòng hàng', async () => {
     await seedItems()
     renderSales()

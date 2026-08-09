@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import { clearCartDraft, loadCartDraft, saveCartDraft } from './cart-draft-storage'
 import { cartReducer, emptyCart, type Cart, type CartAction } from '@/domain/cart'
 
@@ -22,10 +22,23 @@ export function useCart(): {
   )
   const [restored, setRestored] = useState(draft !== null)
 
+  const giỏMớiNhất = useRef(cart)
+
   useEffect(() => {
+    giỏMớiNhất.current = cart
     const timer = setTimeout(() => saveCartDraft(cart), SAVE_DELAY_MS)
     return () => clearTimeout(timer)
   }, [cart])
+
+  /**
+   * Rời màn Bán hàng lúc giờ hẹn chưa nổ thì `clearTimeout` ở trên huỷ luôn lượt ghi, và mọi thay đổi
+   * trong 300ms cuối biến mất không một dấu vết — chạm thêm một món rồi bấm sang màn khác là món đó
+   * không bao giờ vào nháp. Ghi nốt lúc gỡ màn để đóng cửa sổ đó.
+   *
+   * Đọc qua ref chứ không đưa `cart` vào mảng phụ thuộc: để `cart` vào là effect chạy lại mỗi lần giỏ
+   * đổi, tức ghi thẳng mỗi lần chạm và vô hiệu hoá đúng cái debounce vừa đặt ở trên.
+   */
+  useEffect(() => () => saveCartDraft(giỏMớiNhất.current), [])
 
   return {
     cart,

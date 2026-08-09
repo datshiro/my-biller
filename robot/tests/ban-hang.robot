@@ -369,3 +369,27 @@ Giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt SỈ thì
     ${của_đơn}=    Evaluate    sorted([d['unitPrice'] for d in $dòng if d['orderId'] == $đơn['id']])
     Should Be Equal    ${của_đơn}    ${{ [45000, 55000] }}
     ...    Sổ ghi một dòng qty 2 ở giá sỉ: tô thứ hai lẽ ra bán giá lẻ.
+
+Thêm được món mới ngay từ lưới bán hàng
+    [Documentation]    Lối vào form thêm món trên màn Bán hàng trước đây chỉ nằm ở empty state của
+    ...    lưới. Vừa có món đầu tiên là empty state biến mất, và màn Bán hàng — màn người bán ở lì
+    ...    cả ngày — hết sạch đường tạo món kế tiếp. Ca này khoá lại lối đó, và khoá luôn việc món
+    ...    vừa thêm phải bán được ngay chứ không chỉ hiện ra trong danh mục.
+    [Tags]    regression
+    Mở Màn    /
+    Click    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Thêm mặt hàng")
+    Điền Ô    Tên mặt hàng *    Bánh mì
+    Điền Ô    Giá bán *    20000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+
+    ${món}=    Đọc Bảng    items
+    ${bánh_mì}=    Evaluate    [d for d in $món if d['name'] == 'Bánh mì'][0]
+    Should Be Equal As Integers    ${bánh_mì}[unitPrice]    20000
+    ...    Màn hình hiện đúng giá mà sổ ghi số khác thì mọi đơn bán món này đều sai.
+
+    # Về bằng thanh nav như người bán, không nhảy thẳng URL: lưu xong app đứng ở màn Mặt hàng chứ
+    # không tự quay lại chỗ bán, nên đường về phải là một phần của ca chứ không được giấu đi.
+    Click    ${NAV_BAN}
+    Chọn Món    Bánh mì
+    Chờ Thấy Chữ    20.000 đ
