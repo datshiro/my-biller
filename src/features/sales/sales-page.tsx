@@ -307,7 +307,13 @@ export function SalesPage() {
         ) : visible.length === 0 ? (
           <p className="px-4 py-8 text-center text-muted">Không có món nào khớp.</p>
         ) : (
-          <ItemGrid items={visible} qtyOf={qtyOf} priceOf={priceOf} onPick={addItem} />
+          <ItemGrid
+            items={visible}
+            qtyOf={qtyOf}
+            priceOf={priceOf}
+            onPick={addItem}
+            onAdd={() => void navigate('/them/mat-hang/moi')}
+          />
         )}
 
         {count > 0 ? (
