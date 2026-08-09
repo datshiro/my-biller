@@ -305,7 +305,13 @@ export function SalesPage() {
             onAction={() => void navigate('/them/mat-hang/moi')}
           />
         ) : visible.length === 0 ? (
-          <p className="px-4 py-8 text-center text-muted">Không có món nào khớp.</p>
+          // Gõ tên một món chưa có là lúc muốn tạo nó nhất, mà đây lại đúng nhánh lưới biến mất —
+          // ô thêm món nằm trong lưới nên cũng đi theo. Mang tên vừa gõ sang form luôn.
+          <EmptyState
+            message="Không có món nào khớp."
+            actionLabel="＋ Thêm mặt hàng"
+            onAction={() => void navigate('/them/mat-hang/moi', { state: { itemName: query.trim() } })}
+          />
         ) : (
           <ItemGrid
             items={visible}
