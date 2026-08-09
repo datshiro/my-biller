@@ -53,9 +53,9 @@ và mọi push vào `main`. Gate code hiện có vẫn nằm riêng trong `Code 
 `Robot live` chạy toàn bộ `npm run test:live` không lọc suite/tag và có timeout 15 phút.
 
 Khi cùng một pull request hoặc ref có lượt mới, lượt cũ đang chạy bị huỷ. Nếu `Robot live` thất bại,
-workflow tải `robot/results/` lên artifact `robot-live-results` và giữ 7 ngày. Check `Robot live` chỉ
-trở thành cổng merge bắt buộc sau khi branch protection của `main` được bật và yêu cầu đúng tên
-check này; workflow tự nó chưa khẳng định protection đã active.
+workflow tải `robot/results/` lên artifact `robot-live-results` và giữ 7 ngày. Branch protection của
+`main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
+merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.
 
 ## Vì sao phải chạy trên bản `vite` dev, không phải bản build
 

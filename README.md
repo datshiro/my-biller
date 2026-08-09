@@ -37,9 +37,9 @@ Sau `npm ci`, cài môi trường local cho `npm run test:live` bằng đúng m�
 `./robot/install.sh`. Script này là nguồn cài đặt duy nhất; xem thêm
 [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
 
-Toàn bộ bộ kiểm thử live chạy trên pull request dưới check độc lập `Robot live`. Check này chỉ trở thành
-cổng merge bắt buộc sau khi branch protection của `main` được bật và yêu cầu nó; riêng việc có
-workflow chưa có nghĩa protection đã active.
+Toàn bộ bộ kiểm thử live chạy trên pull request dưới check độc lập `Robot live`. Branch protection của
+`main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
+merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.
 
 ## Kiến trúc
 
