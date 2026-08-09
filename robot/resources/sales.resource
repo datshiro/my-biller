@@ -59,6 +59,21 @@ Chờ Nháp Giỏ Được Lưu
 Nháp Giỏ Phải Trống
     LocalStorage Get Item    ${KHOÁ_NHÁP_GIỎ}    ==    ${None}
 
+Thêm Mặt Hàng
+    [Documentation]    Thêm một món qua đúng form người bán dùng. Ở chung đây vì hai suite cần nó
+    ...    (mat-hang lẫn khach-hang); chép vào từng suite là mỗi lần đổi nhãn ô lại phải sửa hai chỗ,
+    ...    mà suite đỏ lại chỉ về màn không hề đổi.
+    ...    Bỏ trống `${đơn_vị}` là món không có đơn vị — bộ dữ liệu mẫu không có món nào như vậy.
+    [Arguments]    ${tên}    ${giá_bán}    ${đơn_vị}=${EMPTY}
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    ${tên}
+    Điền Ô    Giá bán *    ${giá_bán}
+    IF    "${đơn_vị}" != ""
+        Chọn Chip    ${đơn_vị}
+    END
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    ${tên}
+
 Đặt Giá Sỉ
     [Documentation]    Đặt giá riêng cho một món của một khách, đi đúng đường người bán đi:
     ...    Khách hàng → chi tiết → Bảng giá sỉ. Không cấy thẳng vào IndexedDB, vì ca dùng nó

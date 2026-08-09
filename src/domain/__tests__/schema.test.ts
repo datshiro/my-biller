@@ -75,6 +75,13 @@ describe('ràng buộc tiền tệ trong schema', () => {
     expect(ItemSchema.parse({ ...item, isActive: 1 }).isActive).toBe(1)
   })
 
+  it('đơn vị toàn khoảng trắng thành rỗng, vì guard `unit ? …` ở các màn không phân biệt được', () => {
+    const item = { name: 'Phở', groupId: null, unitPrice: 1_000, costPrice: null, isActive: 1, createdAt: 1, updatedAt: 1 }
+    // Màn nhập đã tự trim; đường vào còn lại là file sao lưu sửa tay, không qua form nào cả.
+    expect(ItemSchema.parse({ ...item, unit: '  ' }).unit).toBe('')
+    expect(ItemSchema.parse({ ...item, unit: ' tô ' }).unit).toBe('tô')
+  })
+
   it('bỏ qua trường lạ thay vì ghi rác xuống DB', () => {
     expect(OrderSchema.parse({ ...order, hackedField: 'x' })).not.toHaveProperty('hackedField')
   })

@@ -46,7 +46,10 @@ export const ItemSchema = z.object({
   id: Id.optional(),
   name: z.string().min(1),
   groupId: Id.nullable(),
-  unit: z.string(),
+  // `.trim()` ở đây chứ không ở màn nhập: form đã tự trim, nhưng file sao lưu thì người bán sửa tay
+  // được (`settings/backup.ts` nói thẳng vậy), nên `unit: " "` vào lại qua đường khôi phục. Chuỗi đó
+  // truthy, luồn qua mọi guard `unit ? …` và hiện lại đúng dấu gạch chéo lủng lẳng đã đi sửa.
+  unit: z.string().trim(),
   unitPrice: Money,
   costPrice: Money.nullable(),
   isActive: Flag,

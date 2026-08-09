@@ -83,7 +83,8 @@ export function OrderDetailPage() {
           <span className="min-w-0 flex-1">
             <span className="block truncate font-semibold">{line.name}</span>
             <span className="money block text-[13px] text-muted">
-              {formatQty(line.qty)} {line.unit} × {formatAmount(line.unitPrice)}
+              {formatQty(line.qty)}
+              {line.unit ? ` ${line.unit}` : ''} × {formatAmount(line.unitPrice)}
             </span>
           </span>
           <span className="money shrink-0 font-bold">{formatAmount(line.amount)}</span>

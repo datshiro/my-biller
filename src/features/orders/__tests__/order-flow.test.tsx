@@ -98,6 +98,25 @@ describe('danh sách đơn', () => {
 })
 
 describe('chi tiết đơn', () => {
+  /**
+   * Không có ca Robot cho chỗ này: trình duyệt gộp khoảng trắng liền nhau (`white-space: normal`),
+   * nên dòng thiếu đơn vị hiện ra y hệt dòng đúng — `Get Text` đọc `innerText` và không phân biệt
+   * được. Đo trên bản deploy: `textContent` là "1  × 45.000" còn `innerText` là "1 × 45.000".
+   * Chỉ `textContent` mới thấy, nên gate phải nằm ở đây.
+   */
+  it('món chưa đặt đơn vị không để lại khoảng trắng thừa ở dòng số lượng × đơn giá', async () => {
+    const { id } = await createOrder(
+      draft({
+        lines: [{ itemId: null, name: 'Bún bò', unit: '', unitPrice: 40_000, costPrice: null, qty: 2 }],
+        payment: { amount: 80_000, method: 'cash', note: '' },
+      }),
+    )
+    renderApp(`/don/${id}`)
+
+    const dòng = await screen.findByText(/× 40.000/)
+    expect(dòng.textContent).toBe('2 × 40.000')
+  })
+
   it('huỷ đơn từ giao diện: phải xác nhận, xong thì đơn thành đã huỷ và mất phiếu thu', async () => {
     const { id } = await createOrder(draft())
     renderApp(`/don/${id}`)
