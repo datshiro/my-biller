@@ -1,4 +1,5 @@
 import { calcLineAmount, calcOrderTotals, type OrderTotals } from './order-total'
+import { resolveUnitPrice, type PriceBook, type PriceMode } from './wholesale-price'
 import type { Item } from './schema'
 
 /** Một dòng trong giỏ. Giá và tên đã tách khỏi `items` ngay lúc thêm — sửa giá tại đây không đụng danh mục. */
@@ -9,6 +10,18 @@ export type CartLine = {
   name: string
   unit: string
   unitPrice: number
+  /**
+   * Giá lẻ chụp lại lúc dòng vào giỏ. Là chỗ `applyPriceMode` rơi về khi tắt SỈ, nên nó phải nằm **trên
+   * dòng** chứ không đọc lại từ danh mục: đọc lại thì sửa giá ở màn Mặt hàng sẽ làm giá trong giỏ nhảy
+   * theo, phá đúng cái invariant ghi ở đầu file này.
+   */
+  retailPrice: number
+  /**
+   * Giá này ở đâu ra. **Không suy được từ con số**: đang bán SỈ cho khách A rồi đổi sang khách B, giá
+   * của A khác giá danh mục nên phép so-giá sẽ đoán nhầm là người bán gõ tay và đóng băng giá của A vào
+   * đơn của B. Phải ghi lại ngay lúc dòng sinh ra.
+   */
+  priceSource: 'catalog' | 'manual'
   costPrice: number | null
   qty: number
   note: string
@@ -21,11 +34,19 @@ export type Cart = {
   discount: number
   surcharge: number
   note: string
+  priceMode: PriceMode
 }
 
 export type CartAction =
-  | { type: 'addItem'; item: Item; qty?: number }
-  | { type: 'addLine'; line: Omit<CartLine, 'key' | 'note'> & { note?: string } }
+  /** `book` bắt buộc, **không có giá trị mặc định**: quên truyền là typecheck đỏ, không phải âm thầm bán giá lẻ. */
+  | { type: 'addItem'; item: Item; qty?: number; book: PriceBook }
+  | {
+      type: 'addLine'
+      line: Omit<CartLine, 'key' | 'note' | 'priceSource' | 'retailPrice'> & { note?: string }
+      book: PriceBook
+    }
+  /** Đổi giá **cả giỏ** một lượt. Payload cố ý không mang danh mục — xem `retailPrice`. */
+  | { type: 'applyPriceMode'; mode: PriceMode; book: PriceBook }
   | { type: 'setQty'; key: string; qty: number }
   | { type: 'bumpQty'; key: string; delta: number }
   | { type: 'setUnitPrice'; key: string; unitPrice: number }
@@ -49,14 +70,24 @@ export const emptyCart = (): Cart => ({
   discount: 0,
   surcharge: 0,
   note: '',
+  priceMode: 'retail',
 })
 
 /**
  * Khoá dòng gộp theo mặt hàng + đơn giá: chạm ô mặt hàng nhiều lần thì cộng dồn số lượng,
  * nhưng nếu người bán đã sửa giá riêng cho một dòng thì lần chạm sau tạo dòng mới thay vì đè giá cũ.
+ *
+ * `priceSource` nằm trong khoá vì **`upsert` giữ bản ghi đang có và chỉ cộng `qty`**, tức mọi trường của
+ * dòng tới đều bị bỏ. Không có nó thì: giỏ có 1 tô gõ tay 38.000 + 3 tô giá lẻ 55.000, bật SỈ đúng giá
+ * 38.000 → dòng catalog trùng khoá dòng manual → gộp thành 1 dòng `manual` qty 4. Tắt SỈ không đụng dòng
+ * manual, nên 4 tô bán 38.000 thay vì 1×38.000 + 3×55.000: **mất 51.000đ, không một lỗi nào hiện ra**.
  */
-const lineKey = (itemId: number | null, name: string, unitPrice: number) =>
-  `${itemId ?? `x:${name}`}@${unitPrice}`
+const lineKey = (
+  itemId: number | null,
+  name: string,
+  unitPrice: number,
+  priceSource: CartLine['priceSource'],
+) => `${itemId ?? `x:${name}`}@${unitPrice}#${priceSource}`
 
 function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const at = lines.findIndex((line) => line.key === incoming.key)
@@ -72,19 +103,35 @@ function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
 const mapLine = (lines: CartLine[], key: string, change: (line: CartLine) => CartLine) =>
   lines.map((line) => (line.key === key ? change(line) : line))
 
+/**
+ * Người bán tự đặt giá cho một dòng ⇒ dòng đó thành `manual` và từ đó `applyPriceMode` không đụng vào
+ * nữa. Chỉ đổi khi giá **thật sự khác**: mở sheet sửa rồi bấm lưu mà không đổi giá thì dòng vẫn là giá
+ * danh mục, bật/tắt SỈ vẫn hoàn nguyên được.
+ */
+function withPrice(line: CartLine, unitPrice: number): CartLine {
+  const priceSource = unitPrice === line.unitPrice ? line.priceSource : 'manual'
+  return { ...line, unitPrice, priceSource, key: lineKey(line.itemId, line.name, unitPrice, priceSource) }
+}
+
 export function cartReducer(cart: Cart, action: CartAction): Cart {
   switch (action.type) {
+    // Hai đường thêm món đi qua **cùng một chỗ** resolve giá: để call site tự nhớ gọi là để nó quên.
     case 'addItem': {
-      const { item, qty = 1 } = action
+      const { item, qty = 1, book } = action
       if (item.id === undefined) throw new Error('Mặt hàng chưa lưu thì chưa thêm vào giỏ được.')
+
+      const retailPrice = item.unitPrice
+      const unitPrice = resolveUnitPrice({ itemId: item.id, retailPrice }, cart.priceMode, book)
       return {
         ...cart,
         lines: upsert(cart.lines, {
-          key: lineKey(item.id, item.name, item.unitPrice),
+          key: lineKey(item.id, item.name, unitPrice, 'catalog'),
           itemId: item.id,
           name: item.name,
           unit: item.unit,
-          unitPrice: item.unitPrice,
+          unitPrice,
+          retailPrice,
+          priceSource: 'catalog',
           costPrice: item.costPrice,
           qty,
           note: '',
@@ -93,15 +140,39 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     }
 
     case 'addLine': {
-      const { line } = action
+      const { line, book } = action
+      const retailPrice = line.unitPrice
+      const unitPrice = resolveUnitPrice({ itemId: line.itemId, retailPrice }, cart.priceMode, book)
+      // Món ngoài danh mục không có giá riêng nào để tra, và cũng không có giá lẻ để quay về.
+      const priceSource = line.itemId === null ? 'manual' : 'catalog'
       return {
         ...cart,
         lines: upsert(cart.lines, {
           ...line,
-          key: lineKey(line.itemId, line.name, line.unitPrice),
+          key: lineKey(line.itemId, line.name, unitPrice, priceSource),
+          unitPrice,
+          retailPrice,
+          priceSource,
           note: line.note ?? '',
         }),
       }
+    }
+
+    case 'applyPriceMode': {
+      const { mode, book } = action
+      const lines = cart.lines.reduce<CartLine[]>((acc, line) => {
+        // Nối thẳng, không qua `upsert`: dòng người bán tự đặt giá thì **cả giá lẫn qty** phải nguyên vẹn.
+        if (line.priceSource === 'manual' || line.itemId === null) return [...acc, line]
+
+        const unitPrice = resolveUnitPrice(line, mode, book)
+        return upsert(acc, {
+          ...line,
+          unitPrice,
+          key: lineKey(line.itemId, line.name, unitPrice, 'catalog'),
+        })
+      }, [])
+
+      return { ...cart, priceMode: mode, lines }
     }
 
     case 'setQty':
@@ -116,15 +187,8 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     }
 
     case 'setUnitPrice':
-      return {
-        ...cart,
-        // Đổi giá là đổi luôn khoá dòng, nếu không hai dòng cùng mặt hàng sẽ đụng khoá nhau.
-        lines: mapLine(cart.lines, action.key, (line) => ({
-          ...line,
-          unitPrice: action.unitPrice,
-          key: lineKey(line.itemId, line.name, action.unitPrice),
-        })),
-      }
+      // Đổi giá là đổi luôn khoá dòng, nếu không hai dòng cùng mặt hàng sẽ đụng khoá nhau.
+      return { ...cart, lines: mapLine(cart.lines, action.key, (line) => withPrice(line, action.unitPrice)) }
 
     case 'setLineNote':
       return { ...cart, lines: mapLine(cart.lines, action.key, (line) => ({ ...line, note: action.note })) }
@@ -134,11 +198,9 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       return {
         ...cart,
         lines: mapLine(cart.lines, action.key, (line) => ({
-          ...line,
+          ...withPrice(line, action.unitPrice),
           qty: action.qty,
-          unitPrice: action.unitPrice,
           note: action.note,
-          key: lineKey(line.itemId, line.name, action.unitPrice),
         })),
       }
     }
@@ -159,7 +221,15 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       return { ...cart, note: action.note }
 
     case 'restore':
-      return action.cart
+      // Tính lại khoá: nháp do bản build cũ ghi mang khoá thiếu `#priceSource`, giữ nguyên thì lần chạm
+      // sau vào đúng món đúng giá lại đẻ ra dòng thứ hai thay vì cộng dồn.
+      return {
+        ...action.cart,
+        lines: action.cart.lines.map((line) => ({
+          ...line,
+          key: lineKey(line.itemId, line.name, line.unitPrice, line.priceSource),
+        })),
+      }
 
     case 'clear':
       return emptyCart()

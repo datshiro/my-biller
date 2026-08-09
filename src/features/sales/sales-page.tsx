@@ -13,6 +13,7 @@ import { BackupBanner } from '@/features/settings/backup-banner'
 import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
 import { formatAmount, formatVnd } from '@/domain/money'
 import { normalizeName, parseOrderText } from '@/domain/order-draft/parse-order-text'
+import type { PriceBook } from '@/domain/wholesale-price'
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { EmptyState, ListSkeleton } from '@/ui/empty-state'
@@ -23,6 +24,12 @@ import { AdjustSheet } from './adjust-sheet'
 
 /** `customer-for-debt` là màn chọn khách mở TỪ sheet thu tiền — chọn xong phải quay lại đúng chỗ cũ. */
 type OpenSheet = 'none' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
+
+/**
+ * Chưa có công tắc Lẻ/SỈ nên chưa khách nào có bảng giá được nạp: mọi dòng vào giỏ bằng giá lẻ, đúng như
+ * hôm nay. Phase 4 thay hằng này bằng bảng giá thật của khách đang chọn.
+ */
+const CHUA_NAP_BANG_GIA: PriceBook = new Map()
 
 export function SalesPage() {
   const navigate = useNavigate()
@@ -57,7 +64,7 @@ export function SalesPage() {
     cart.lines.filter((line) => line.itemId === itemId).reduce((sum, line) => sum + line.qty, 0)
 
   const addItem = (item: Item) => {
-    dispatch({ type: 'addItem', item })
+    dispatch({ type: 'addItem', item, book: CHUA_NAP_BANG_GIA })
     setQuery('')
   }
 
@@ -78,7 +85,7 @@ export function SalesPage() {
     const parsed = parseOrderText(query, candidates)
     if (parsed.length === 0) return
 
-    for (const line of parsed) dispatch({ type: 'addLine', line })
+    for (const line of parsed) dispatch({ type: 'addLine', line, book: CHUA_NAP_BANG_GIA })
     setQuery('')
   }
 
