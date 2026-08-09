@@ -217,3 +217,118 @@ Chốt đơn xong nhảy thẳng sang phiếu để gửi khách
     Chốt Đơn
     Chờ Thấy Chữ    PHIẾU BÁN HÀNG
     Chờ Thấy Chữ    Quán Cơm Bà Tư
+
+Bật SỈ thì giỏ tính theo giá riêng của khách, sổ ghi đúng giá đó
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    45.000 đ
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    45000
+    Should Be Equal    ${đơn}[customerName]    Anh Hùng
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Integers    ${của_đơn}[0][unitPrice]    45000
+    ...    Màn hiện giá sỉ mà sổ ghi giá lẻ — đúng kiểu hỏng tệ nhất của app này.
+
+Món khách chưa có giá riêng vẫn bán giá lẻ khi đang SỈ
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    48.000 đ
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    48000
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Trà đá'][0]
+    Should Be Equal As Integers    ${trà}[unitPrice]    3000    Món không có giá riêng bị kéo theo giá sỉ.
+
+Chạm SỈ khi chưa chọn khách thì app bắt chọn khách trước
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Chip    SỈ
+    Chờ Thấy Chữ    Chọn khách
+
+    ${đang}=    Chip Đang Chọn    SỈ
+    Should Be Equal    ${đang}    false    Bật SỈ mà chưa có khách thì chưa có bảng giá nào để tra.
+
+Đổi sang khách khác khi đang SỈ thì mọi đơn giá là của khách mới
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /them/khach-hang
+    Bấm Nút    Thêm khách hàng
+    Điền Ô    Tên khách hàng *    Chị Hoa
+    Bấm Nút    LƯU KHÁCH HÀNG
+    Chờ Thấy Chữ    2 khách
+    Đặt Giá Sỉ    Chị Hoa    Phở bò đặc biệt    30000
+
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    45.000 đ
+
+    Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
+    Chọn Khách Trong Sheet    Chị Hoa
+    Chờ Thấy Chữ    30.000 đ
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[customerName]    Chị Hoa
+    Should Be Equal As Integers    ${đơn}[total]    30000
+    ...    Header hiện tên khách mới mà giá vẫn là của khách cũ.
+
+Chọn "Khách lẻ" khi đang SỈ thì công tắc về Lẻ và giỏ về giá lẻ
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    45.000 đ
+
+    Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
+    Chọn Khách Trong Sheet    Khách lẻ
+    Chờ Thấy Chữ    55.000 đ
+
+    ${đang}=    Chip Đang Chọn    SỈ
+    Should Be Equal    ${đang}    false    Khách lẻ không có bảng giá riêng nào để tra.
+
+Đơn đang lên dở ở giá sỉ được tính lại theo bảng giá hiện tại sau khi tải lại trang
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    45.000 đ
+    Chờ Nháp Giỏ Được Lưu
+
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    40000
+    Mở Màn    /
+    Chờ Thấy Chữ    Đã khôi phục đơn đang lên dở
+    Chờ Thấy Chữ    40.000 đ
+
+    ${đang}=    Chip Đang Chọn    SỈ
+    Should Be Equal    ${đang}    true    Nháp SỈ khôi phục mà công tắc về Lẻ thì món thêm sau vào giá lẻ.
+
+Giảm giá trước rồi bật SỈ thì thanh tổng cảnh báo tiền hàng đã tụt
+    [Documentation]    `calcOrderTotals` kẹp giảm giá về bằng tiền hàng **trong im lặng**, nên một cú
+    ...    chạm công tắc kéo TỔNG CỘNG về 0 và đơn 0đ đó vẫn ghi là trả đủ. Guard của sheet Giảm giá
+    ...    chỉ chạy lúc gõ, không chạy lại sau khi đổi giá.
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    5000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bấm Nút    Giảm giá / phụ thu
+    Điền Ô    Giảm giá    50000
+    Bấm Nút    ÁP DỤNG
+    Chờ Thấy Chữ    5.000 đ
+
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    vẫn còn giảm giá

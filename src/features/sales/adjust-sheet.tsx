@@ -8,12 +8,15 @@ export function AdjustSheet({
   subtotal,
   discount,
   surcharge,
+  wholesale = false,
   onApply,
   onClose,
 }: {
   subtotal: number
   discount: number
   surcharge: number
+  /** Đơn đang bán giá sỉ — giảm giá chồng lên đó thường là đã tính hai lần. */
+  wholesale?: boolean
   onApply: (next: { discount: number; surcharge: number }) => void
   onClose: () => void
 }) {
@@ -44,6 +47,7 @@ export function AdjustSheet({
           value={nextDiscount}
           onChange={setNextDiscount}
           quickAdd
+          hint={wholesale ? 'Đơn này đang tính giá sỉ — giảm thêm là giảm lần thứ hai.' : undefined}
           error={tooBig ? 'Giảm giá không được lớn hơn tiền hàng.' : undefined}
         />
 

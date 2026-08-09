@@ -34,6 +34,7 @@ export function PaymentSheet({
   hasCustomer,
   method,
   given,
+  givenWarning,
   onMethodChange,
   onGivenChange,
   onConfirm,
@@ -46,6 +47,8 @@ export function PaymentSheet({
   hasCustomer: boolean
   method: PayMethod
   given: number | null
+  /** Số khách đưa đã gõ từ trước mà tổng đơn đổi sau lưng — tiền thối tính ra sẽ sai. */
+  givenWarning?: string
   onMethodChange: (method: PayMethod) => void
   onGivenChange: (given: number | null) => void
   onConfirm: (payment: PaymentChoice) => void
@@ -107,7 +110,7 @@ export function PaymentSheet({
 
         {method === 'cash' ? (
           <>
-            <MoneyInput label="Khách đưa" value={given} onChange={onGivenChange} large />
+            <MoneyInput label="Khách đưa" value={given} onChange={onGivenChange} warning={givenWarning} large />
 
             <div className="flex flex-wrap gap-2">
               <button

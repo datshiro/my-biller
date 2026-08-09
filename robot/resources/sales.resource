@@ -8,6 +8,7 @@ ${SHEET_THU_TIỀN}       css=[role=dialog][aria-label="Thu tiền"]
 ${NÚT_XONG}             css=button:has-text("XONG & XUẤT PHIẾU")
 ${NÚT_CHỌN_KHÁCH_NỢ}    css=button:has-text("CHỌN KHÁCH ĐỂ GHI NỢ")
 ${KHOÁ_NHÁP_GIỎ}        my-biller:cart-draft
+${NÚT_KHÁCH_TRÊN_ĐẦU}    css=header >> css=button:has-text("KHÁCH")
 
 *** Keywords ***
 Chọn Món
@@ -57,6 +58,26 @@ Chờ Nháp Giỏ Được Lưu
 
 Nháp Giỏ Phải Trống
     LocalStorage Get Item    ${KHOÁ_NHÁP_GIỎ}    ==    ${None}
+
+Đặt Giá Sỉ
+    [Documentation]    Đặt giá riêng cho một món của một khách, đi đúng đường người bán đi:
+    ...    Khách hàng → chi tiết → Bảng giá sỉ. Không cấy thẳng vào IndexedDB, vì ca dùng nó
+    ...    cần biết cả hai màn còn khớp nhau.
+    [Arguments]    ${tên_khách}    ${tên_món}    ${giá}
+    Mở Màn    /them/khach-hang
+    Click    css=button:has-text("${tên_khách}")
+    Bấm Nút    Bảng giá sỉ
+    Chờ Thấy Chữ    Để trống là bán giá lẻ
+    Điền Ô    ${tên_món}    ${giá}
+    Bấm Nút    LƯU BẢNG GIÁ
+    Chờ Thấy Chữ    món có giá riêng
+
+Bật Giá Sỉ Cho Khách
+    [Documentation]    Chạm SỈ khi chưa có khách thì app mở màn chọn khách trước — hai bước này
+    ...    luôn đi liền nhau.
+    [Arguments]    ${tên}
+    Chọn Chip    SỈ
+    Chọn Khách Trong Sheet    ${tên}
 
 Bán Nhanh
     [Documentation]    Một lượt bán tiền mặt trả đủ. Dùng khi test cần "có sẵn một đơn" chứ không kiểm luồng bán.
