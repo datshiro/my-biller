@@ -145,6 +145,8 @@ Tìm không ra thì báo rõ chứ không để danh sách trống trơn
     Click    css=button:has-text("Trà đá")
     Select Options By    css=select[aria-label="Nhóm"]    label    Đồ ăn
     Bấm Nút    LƯU MẶT HÀNG
+    # Form chỉ điều hướng sau khi updateItem hoàn tất; chờ mốc đó trước khi mở màn Bán hàng.
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
 
     Mở Màn    /
     Click    css=button:has-text("Đồ ăn")

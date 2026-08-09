@@ -73,6 +73,8 @@ Khách chưa có đơn nào thì không có nút thu nợ
     Mở Màn    /them/khach-hang/moi
     Điền Ô    Tên khách hàng *    Khách mới tinh
     Bấm Nút    LƯU KHÁCH HÀNG
+    # Form chỉ điều hướng sau khi createCustomer hoàn tất; không cắt ngang lần ghi bằng Go To kế tiếp.
+    Wait For Condition    Url    ==    ${BASE_URL}/them/khach-hang
     Mở Chi Tiết Khách    Khách mới tinh
     Chờ Thấy Chữ    chưa có đơn nào
     Wait For Elements State    css=button:has-text("THU NỢ")    detached
