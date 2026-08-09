@@ -183,6 +183,25 @@ Món đã có giá riêng nổi lên đầu danh sách
     ${đầu}=    Get Text    css=label >> nth=0
     Should Be Equal    ${đầu}    TRÀ ĐÁ
 
+Món chưa đặt đơn vị thì gợi ý giá lẻ không kéo theo gạch chéo lủng lẳng
+    [Documentation]    Đơn vị là trường tuỳ chọn, mà màn này nối thẳng "/ \${item.unit}" nên món bỏ trống
+    ...    đơn vị hiện thành "Giá lẻ 40.000 /". Ba màn kia (dòng giỏ, sheet sửa dòng, tờ phiếu) đã chặn
+    ...    chuỗi rỗng từ trước; sót màn bảng giá và màn chi tiết đơn. Bộ mẫu không bắt được vì cả 4 món
+    ...    đều có đơn vị. Dấu \\ trước \${item.unit} là cố ý: không escape thì Robot giải nó như biến thật
+    ...    lúc dựng documentation, và câu giải thích lỗi cũ biến mất khỏi report.html.
+    [Tags]    regression
+    Thêm Mặt Hàng    Bún bò    40000
+
+    Mở Bảng Giá Của Khách    Anh Hùng
+    ${không_đơn_vị}=    Gợi Ý Của Ô    Bún bò
+    Should Be Equal    ${không_đơn_vị}    Giá lẻ 40.000
+    ...    Món bỏ trống đơn vị vẫn bị nối gạch chéo vào gợi ý giá lẻ.
+
+    # Món có đơn vị phải giữ nguyên phần "/ tô" — chặn chuỗi rỗng không được nuốt luôn đơn vị thật.
+    ${có_đơn_vị}=    Gợi Ý Của Ô    Phở bò đặc biệt
+    Should Be Equal    ${có_đơn_vị}    Giá lẻ 55.000 / tô
+    ...    Chặn chuỗi rỗng đã nuốt luôn đơn vị thật của món có đơn vị.
+
 Rời màn bảng giá khi còn ô chưa lưu thì app hỏi lại
     Mở Bảng Giá Của Khách    Anh Hùng
     Điền Ô    Phở bò đặc biệt    38000
@@ -202,3 +221,33 @@ Mở Bảng Giá Của Khách
     Mở Chi Tiết Khách    ${tên}
     Bấm Nút    Bảng giá sỉ
     Chờ Thấy Chữ    Để trống là bán giá lẻ
+
+Vị Trí Gợi Ý
+    [Documentation]    Chỗ đứng của dòng gợi ý, bám theo nhãn giống `Điền Ô` vì id do `useId()` sinh và
+    ...    đổi mỗi lần render. Ba chỗ dễ sai, cả ba đều làm ca đỏ nhầm chỗ chứ không phải đỏ đúng:
+    ...
+    ...    - Nhãn là <label> khi ô có `htmlFor`, là <span> khi không — nhận cả hai.
+    ...    - `Field` chỉ dựng MỘT thẻ <p>, chọn theo thứ tự lỗi → cảnh báo → gợi ý. Không lọc thì ô
+    ...      đang hiện cảnh báo sẽ trả về câu cảnh báo và ca so chuỗi báo sai chỗ. Lọc theo lớp
+    ...      `text-muted` vì chỉ gợi ý mang lớp đó (lỗi `text-danger`, cảnh báo `text-warn`).
+    ...    - Tên món lọt thẳng vào chuỗi XPath, nên tên có nháy kép phải đổi sang nháy đơn. Tên mang
+    ...      cả hai kiểu nháy thì XPath 1.0 không dựng nổi literal — chưa gặp, gặp thì phải đổi cách.
+    [Arguments]    ${nhãn}
+    ${literal}=    Set Variable    ${{ '"%s"' % $nhãn if '"' not in $nhãn else "'%s'" % $nhãn }}
+    RETURN    ${{ 'xpath=//*[self::label or self::span][normalize-space()=%s]/following-sibling::p[contains(@class,"text-muted")][1]' % $literal }}
+
+Gợi Ý Của Ô
+    [Documentation]    Dòng chữ nhỏ dưới ô nhập. Nói thẳng khi không có dòng nào, thay vì để phép chờ
+    ...    treo hết 15s rồi báo "không tìm thấy phần tử" — người đọc `report.html` sẽ tưởng locator hỏng
+    ...    trong khi thật ra ô đang hiện cảnh báo/lỗi, hoặc ô vốn không có gợi ý nào.
+    [Arguments]    ${nhãn}
+    ${vị_trí}=    Vị Trí Gợi Ý    ${nhãn}
+    ${số}=    Get Element Count    ${vị_trí}
+    IF    ${số} == 0
+        Fail    Ô "${nhãn}" không có dòng gợi ý — ô đang hiện cảnh báo/lỗi, hoặc ô này vốn không có gợi ý.
+    END
+    # Tên món không unique trong DB (`db.ts` index `name` không unique), nên hai món trùng tên là hai
+    # nhãn khớp. Lấy cái đầu cho tất định — cùng lối `Chờ Thấy Chữ` đã chọn — thay vì để Playwright ném
+    # lỗi strict mode, thứ đọc như "hint hỏng" trong khi nguyên nhân là danh mục trùng dòng.
+    ${chữ}=    Get Text    ${vị_trí} >> nth=0
+    RETURN    ${chữ}

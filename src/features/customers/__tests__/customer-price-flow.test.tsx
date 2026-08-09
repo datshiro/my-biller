@@ -129,6 +129,26 @@ describe('bảng giá riêng của khách', () => {
     expect(screen.getByText(/Để trống là bán giá lẻ/)).toBeDefined()
   })
 
+  /**
+   * Ca Robot cũng khoá chỗ này, nhưng Robot cố ý không chạy trong CI (`.github/workflows/kiem-thu.yml`)
+   * nên một mình nó thì trả code về bản cũ vẫn xanh hết mọi cổng tự động. Ca này là cổng CI thật.
+   * Khớp chuỗi tuyệt đối chứ không regex: "Giá lẻ 40.000 /" cũng chứa "Giá lẻ 40.000".
+   */
+  it('món chưa đặt đơn vị thì gợi ý giá lẻ không kéo theo gạch chéo lủng lẳng', async () => {
+    const { customerId } = await seed()
+    await createItem({
+      name: 'Bún bò',
+      groupId: null,
+      unit: '',
+      unitPrice: 40_000,
+      costPrice: null,
+      isActive: 1,
+    })
+    renderPriceSheet(customerId)
+
+    expect(await screen.findByText('Giá lẻ 40.000')).toBeDefined()
+  })
+
   it('món đã có giá riêng nổi lên đầu danh sách', async () => {
     const { customerId } = await seed()
     renderPriceSheet(customerId)
