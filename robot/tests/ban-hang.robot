@@ -393,3 +393,24 @@ Thêm được món mới ngay từ lưới bán hàng
     Click    ${NAV_BAN}
     Chọn Món    Bánh mì
     Chờ Thấy Chữ    20.000 đ
+
+Gõ tên món chưa có thì vẫn thêm được món ngay tại chỗ, kèm tên đã gõ
+    [Documentation]    Ô thêm món nằm trong lưới, mà nhánh "không khớp" thay lưới bằng một dòng chữ —
+    ...    nên gõ đúng tên một món chưa có, tức lúc muốn tạo nó nhất, thì lối tạo lại biến mất. Ca này
+    ...    khoá cả lối đó lẫn việc tên vừa gõ được mang sang form thay vì bắt gõ lại.
+    [Tags]    regression
+    Mở Màn    /
+    Gõ Vào Ô Tìm Món    bánh mì
+    Chờ Thấy Chữ    Không có món nào khớp
+    Bấm Nút    Thêm mặt hàng
+
+    ${tên}=    Đọc Ô    Tên mặt hàng *
+    Should Be Equal    ${tên}    bánh mì    Tên vừa gõ ở ô tìm không được mang sang, người bán phải gõ lại.
+
+    Điền Ô    Giá bán *    20000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+
+    ${món}=    Đọc Bảng    items
+    ${bánh_mì}=    Evaluate    [d for d in $món if d['name'] == 'bánh mì'][0]
+    Should Be Equal As Integers    ${bánh_mì}[unitPrice]    20000

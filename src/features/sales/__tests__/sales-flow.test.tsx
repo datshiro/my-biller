@@ -96,6 +96,17 @@ describe('bán hàng', () => {
     expect(await screen.findByText('Màn thêm mặt hàng')).toBeDefined()
   })
 
+  it('gõ tên món chưa có thì vẫn còn lối tạo món ngay tại chỗ', async () => {
+    await seedItems()
+    renderSales()
+
+    await userEvent.type(await screen.findByPlaceholderText(/Tìm món/), 'bánh mì')
+    expect(await screen.findByText('Không có món nào khớp.')).toBeDefined()
+
+    await userEvent.click(screen.getByRole('button', { name: /Thêm mặt hàng/ }))
+    expect(await screen.findByText('Màn thêm mặt hàng')).toBeDefined()
+  })
+
   /**
    * Không có ca Robot: lỗi chỉ hiện trong cửa sổ 300ms giữa lần chạm cuối và lượt ghi nháp. Robot lái
    * trình duyệt thật với đồng hồ thật, mỗi bước tốn hơn 300ms nên nó **luôn** đi qua sau khi nháp đã

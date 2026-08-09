@@ -29,6 +29,21 @@ function renderAt(path: string) {
 }
 
 describe('thêm mặt hàng', () => {
+  it('mở từ ô tìm màn Bán hàng thì tên đã gõ được điền sẵn, và chưa coi là chữ chưa lưu', async () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/them/mat-hang/moi', state: { itemName: 'Bánh mì' } }]}>
+        <Routes>
+          <Route path="/them/mat-hang/moi" element={<ItemFormPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText('Tên mặt hàng *')).toHaveProperty('value', 'Bánh mì')
+    // Chữ do app mang sang, không phải người bán gõ ở màn này — bấm ✕ không được hỏi "bỏ những gì đang nhập".
+    await userEvent.click(screen.getByRole('button', { name: 'Quay lại' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
   it('gõ tên + "45k" rồi Lưu → DB ghi đúng 45000 đồng', async () => {
     renderAt('/them/mat-hang/moi')
 

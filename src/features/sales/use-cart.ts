@@ -22,10 +22,10 @@ export function useCart(): {
   )
   const [restored, setRestored] = useState(draft !== null)
 
-  const giỏMớiNhất = useRef(cart)
+  const latestCart = useRef(cart)
 
   useEffect(() => {
-    giỏMớiNhất.current = cart
+    latestCart.current = cart
     const timer = setTimeout(() => saveCartDraft(cart), SAVE_DELAY_MS)
     return () => clearTimeout(timer)
   }, [cart])
@@ -38,7 +38,7 @@ export function useCart(): {
    * Đọc qua ref chứ không đưa `cart` vào mảng phụ thuộc: để `cart` vào là effect chạy lại mỗi lần giỏ
    * đổi, tức ghi thẳng mỗi lần chạm và vô hiệu hoá đúng cái debounce vừa đặt ở trên.
    */
-  useEffect(() => () => saveCartDraft(giỏMớiNhất.current), [])
+  useEffect(() => () => saveCartDraft(latestCart.current), [])
 
   return {
     cart,

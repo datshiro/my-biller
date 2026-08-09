@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { useItem, useItemGroups } from './use-items'
 import { createItem, deactivateItem, deleteItem, updateItem } from '@/db/repositories/items'
 import type { Item } from '@/domain/schema'
@@ -14,11 +14,25 @@ import { useSubmitOnce } from '@/ui/use-submit-once'
 
 const COMMON_UNITS = ['Tô', 'Ly', 'Cái', 'Kg', 'Phần', 'Chai']
 
+/**
+ * Tên món người bán vừa gõ ở ô tìm màn Bán hàng rồi mới biết món chưa có — điền sẵn để khỏi gõ lại.
+ * `history.state` do trình duyệt giữ và người dùng sửa được, nên soi kiểu chứ không tin sẵn.
+ */
+function suggestedName(state: unknown): string {
+  return state !== null && typeof state === 'object' && 'itemName' in state && typeof state.itemName === 'string'
+    ? state.itemName
+    : ''
+}
+
 function ItemForm({ item }: { item: Item | null }) {
   const navigate = useNavigate()
+  const { state } = useLocation()
   const groups = useItemGroups() ?? []
 
-  const [name, setName] = useState(item?.name ?? '')
+  // Tên điền sẵn là mốc so, không phải chữ "chưa lưu": người bán chưa gõ gì trên màn này, hỏi lại
+  // lúc họ bấm ✕ là hỏi về chữ của chính app.
+  const initialName = item?.name ?? suggestedName(state)
+  const [name, setName] = useState(initialName)
   const [unitPrice, setUnitPrice] = useState<number | null>(item?.unitPrice ?? null)
   const [costPrice, setCostPrice] = useState<number | null>(item?.costPrice ?? null)
   const [unit, setUnit] = useState(item?.unit ?? '')
@@ -32,7 +46,7 @@ function ItemForm({ item }: { item: Item | null }) {
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
   const dirty =
-    name !== (item?.name ?? '') ||
+    name !== initialName ||
     unitPrice !== (item?.unitPrice ?? null) ||
     costPrice !== (item?.costPrice ?? null) ||
     unit !== (item?.unit ?? '') ||
