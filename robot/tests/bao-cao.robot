@@ -15,7 +15,8 @@ Test Tags           bao-cao
 
 
 *** Variables ***
-${SHEET_KHOẢNG}    css=[role=dialog][aria-label="Chọn khoảng ngày"]
+${SHEET_KHOẢNG}     css=[role=dialog][aria-label="Chọn khoảng ngày"]
+${SHEET_THU_NỢ}     css=[role=dialog][aria-label="Thu nợ · Anh Hùng"]
 
 
 *** Test Cases ***
@@ -62,7 +63,9 @@ Thu hết nợ thì dòng giải thích phần chênh biến mất
 
     Mở Màn    /cong-no
     Click    css=button:has-text("Anh Hùng")
-    Click    css=[role=dialog] >> css=button:has-text("THU ")
+    Click    ${SHEET_THU_NỢ} >> css=button:has-text("THU ")
+    # Sheet chỉ đóng sau khi phiếu thu và paidAmount đã được ghi xong.
+    Wait For Elements State    ${SHEET_THU_NỢ}    detached
 
     Mở Báo Cáo Kỳ    Hôm nay
     ${đã_thu}=    Đọc Ô Số    ĐÃ THU

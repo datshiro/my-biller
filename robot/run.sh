@@ -13,65 +13,123 @@
 # lấy dữ liệu ban đầu — chỉ hiện ở chế độ dev.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "${script_dir}/.." && pwd -P)"
+cd "${repo_root}"
 
 PORT=5175
 BASE_URL="http://localhost:${PORT}"
 VENV=".venv-robot"
+EXPECTED_TITLE="<title>my-biller — Bán hàng</title>"
 
 if [[ ! -x "${VENV}/bin/robot" ]]; then
-  echo "Chưa có môi trường Robot. Dựng bằng:" >&2
-  echo "  python3 -m venv ${VENV} && ${VENV}/bin/pip install robotframework robotframework-browser" >&2
-  echo "  ${VENV}/bin/rfbrowser init" >&2
+  echo "Chưa có môi trường Robot. Chạy './robot/install.sh' trước." >&2
   exit 1
 fi
+
+if ! command -v lsof >/dev/null 2>&1; then
+  echo "Không tìm thấy lsof để xác minh tiến trình đang giữ cổng ${PORT}." >&2
+  exit 1
+fi
+
+mkdir -p robot/results robot/downloads
 
 server_pid=""
 
 dọn_dẹp() {
-  [[ -n "${server_pid}" ]] || return 0
-  echo "→ Tắt dev server"
-  kill "${server_pid}" 2>/dev/null || true
+  local exit_code=$?
+  [[ -n "${server_pid}" ]] || return "${exit_code}"
+
+  if kill -0 "${server_pid}" 2>/dev/null; then
+    echo "→ Tắt dev server do lượt Robot này tạo"
+    kill "${server_pid}" 2>/dev/null || true
+  fi
   wait "${server_pid}" 2>/dev/null || true
-  # `npm run dev` đẻ ra tiến trình `vite` con; giết mỗi npm là bỏ lại một tiến trình ma giữ cổng.
-  # Chỉ dọn khi chính script này dựng server, không đụng vào server của người đang code.
-  # `-sTCP:LISTEN` để chỉ bắt tiến trình đang *nghe* cổng — không có nó thì `lsof -i` trả về cả
-  # trình duyệt đang nối tới, và cú dọn này giết luôn Chrome của người dùng.
-  lsof -ti ":${PORT}" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+  return "${exit_code}"
 }
 trap dọn_dẹp EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-if curl -sf -o /dev/null "${BASE_URL}/"; then
-  echo "→ Dùng lại dev server đang chạy ở ${BASE_URL}"
-else
-  # Cổng có thể đang bị một tiến trình chết dở giữ. Dọn đúng chủ cũ thay vì nhảy sang cổng khác —
-  # nhảy cổng là cách các tiến trình ma sinh sôi.
-  if lsof -ti ":${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "→ Cổng ${PORT} đang bị giữ nhưng không phục vụ được, dọn chủ cũ"
-    lsof -ti ":${PORT}" -sTCP:LISTEN | xargs kill 2>/dev/null || true
-    sleep 1
+app_sẵn_sàng() {
+  local html
+  html="$(curl -fsS --max-time 2 "${BASE_URL}/" 2>/dev/null)" || return 1
+  [[ "${html}" == *"${EXPECTED_TITLE}"* ]]
+}
+
+port_listener_pids() {
+  lsof -nP -tiTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | sort -u || true
+}
+
+pid_working_directory() {
+  lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true
+}
+
+listener_pids="$(port_listener_pids)"
+
+if [[ -n "${listener_pids}" ]]; then
+  if [[ "${listener_pids}" == *$'\n'* ]]; then
+    echo "Cổng ${PORT} có nhiều listener (${listener_pids//$'\n'/, }); không thể xác minh ownership." >&2
+    exit 1
   fi
 
+  listener_pid="${listener_pids}"
+  listener_cwd="$(pid_working_directory "${listener_pid}")"
+
+  if [[ "${listener_cwd}" != "${repo_root}" ]] || ! app_sẵn_sàng; then
+    echo "Cổng ${PORT} đang do tiến trình không thuộc my-biller worktree này giữ." >&2
+    echo "PID: ${listener_pid}; cwd: ${listener_cwd:-không đọc được}. Hãy để owner xử lý tiến trình đó." >&2
+    exit 1
+  fi
+
+  confirmed_listener_pids="$(port_listener_pids)"
+  confirmed_listener_cwd=""
+  if [[ "${confirmed_listener_pids}" == "${listener_pid}" ]]; then
+    confirmed_listener_cwd="$(pid_working_directory "${listener_pid}")"
+  fi
+  if [[ "${confirmed_listener_pids}" != "${listener_pid}" ]] || [[ "${confirmed_listener_cwd}" != "${repo_root}" ]]; then
+    echo "Listener ở cổng ${PORT} đã đổi trong lúc xác minh; dừng để tránh chạy nhầm worktree." >&2
+    exit 1
+  fi
+
+  echo "→ Dùng lại dev server đang chạy ở ${BASE_URL}"
+else
   echo "→ Dựng dev server ở ${BASE_URL}"
-  npm run dev -- --port "${PORT}" --strictPort >/tmp/my-biller-robot-dev.log 2>&1 &
+  ./node_modules/.bin/vite --host 127.0.0.1 --port "${PORT}" --strictPort >robot/results/vite.log 2>&1 &
   server_pid=$!
 
-  for _ in $(seq 1 60); do
-    curl -sf -o /dev/null "${BASE_URL}/" && break
+  for _ in {1..60}; do
+    if ! kill -0 "${server_pid}" 2>/dev/null; then
+      echo "Dev server dừng trước khi sẵn sàng. Xem robot/results/vite.log." >&2
+      exit 1
+    fi
+    app_sẵn_sàng && break
     sleep 0.5
   done
 
-  if ! curl -sf -o /dev/null "${BASE_URL}/"; then
-    echo "Dev server không lên sau 30 giây. Xem /tmp/my-biller-robot-dev.log" >&2
+  if ! app_sẵn_sàng; then
+    echo "Dev server không lên sau 30 giây. Xem robot/results/vite.log." >&2
+    exit 1
+  fi
+
+  started_listener_pids="$(port_listener_pids)"
+  started_listener_cwd=""
+  if [[ "${started_listener_pids}" == "${server_pid}" ]]; then
+    started_listener_cwd="$(pid_working_directory "${server_pid}")"
+  fi
+  if [[ "${started_listener_pids}" != "${server_pid}" ]] || [[ "${started_listener_cwd}" != "${repo_root}" ]] || ! kill -0 "${server_pid}" 2>/dev/null; then
+    echo "Listener ở cổng ${PORT} không phải Vite do lượt Robot này tạo; dừng để tránh chạy nhầm worktree." >&2
     exit 1
   fi
 fi
 
-mkdir -p robot/results robot/downloads
+if (( $# == 0 )); then
+  set -- robot/tests
+fi
 
 # Không `exec`: `exec` thay luôn tiến trình shell nên cái trap ở trên không bao giờ chạy và dev
 # server bị bỏ lại giữ cổng.
 "${VENV}/bin/robot" \
   --outputdir robot/results \
   --variable "BASE_URL:${BASE_URL}" \
-  "${@:-robot/tests}"
+  "$@"

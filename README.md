@@ -33,7 +33,13 @@ Màn **Thêm** có nút *Nạp dữ liệu mẫu* (chỉ hiện ở bản dev) �
 | `npm run test:live` | Robot Framework: từng tính năng trên app thật, cổng 5175 |
 
 `npm run test:e2e` cần Chrome của máy: `npx playwright install chrome`.
-`npm run test:live` cần cài thêm một lần — xem [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
+Sau `npm ci`, cài môi trường local cho `npm run test:live` bằng đúng một lệnh:
+`./robot/install.sh`. Script này là nguồn cài đặt duy nhất; xem thêm
+[`docs/kiem-thu-live.md`](docs/kiem-thu-live.md).
+
+Toàn bộ bộ kiểm thử live chạy trên pull request dưới check độc lập `Robot live`. Branch protection của
+`main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
+merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.
 
 ## Kiến trúc
 

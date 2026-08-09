@@ -85,6 +85,8 @@ Bán lại món đã ngừng thì nó về lại lưới bán hàng
 
     Click    css=button:has-text("Cà phê sữa")
     Bấm Nút    Bán lại mặt hàng này
+    # Form chỉ điều hướng sau khi updateItem hoàn tất; không cắt ngang lần ghi đó bằng Go To kế tiếp.
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
 
     Mở Màn    /
     Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Cà phê sữa")    visible
@@ -143,6 +145,8 @@ Tìm không ra thì báo rõ chứ không để danh sách trống trơn
     Click    css=button:has-text("Trà đá")
     Select Options By    css=select[aria-label="Nhóm"]    label    Đồ ăn
     Bấm Nút    LƯU MẶT HÀNG
+    # Form chỉ điều hướng sau khi updateItem hoàn tất; chờ mốc đó trước khi mở màn Bán hàng.
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
 
     Mở Màn    /
     Click    css=button:has-text("Đồ ăn")

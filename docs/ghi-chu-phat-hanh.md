@@ -1,5 +1,20 @@
 # Ghi chú phát hành
 
+## 1.0.3 — 9/8/2026
+
+### Đã thay đổi
+
+- Mọi pull request vào `main` phải qua đủ hai cổng `Code quality and Playwright` và `Robot live`.
+- Môi trường Robot Framework và Google Chrome được cài bằng một script có phiên bản cố định; runner
+  chỉ quản lý Vite do chính nó tạo và không dừng process lạ đang giữ cổng 5175.
+- Khi bộ live test thất bại trên GitHub Actions, report, log và ảnh chụp được giữ trong artifact
+  `robot-live-results` để chẩn đoán.
+
+### Cập nhật có cần làm gì thêm không
+
+Không. Bản này chỉ siết quy trình kiểm thử và merge; hành vi app, dữ liệu IndexedDB và định dạng file
+sao lưu không đổi.
+
 ## 1.0.2 — 8/8/2026
 
 ### Đã sửa

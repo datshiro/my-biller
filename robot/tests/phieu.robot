@@ -12,6 +12,7 @@ Test Tags           phieu
 
 *** Variables ***
 ${LINES_PER_PAGE}    10
+${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
 
 
 *** Test Cases ***
@@ -110,11 +111,12 @@ Chưa đặt tên quán thì phiếu mời thêm tên chứ không in dòng tr�
 
 Trình duyệt thật dựng được ảnh phiếu để gửi đi
     [Documentation]    Nút đứng mãi ở "Đang chuẩn bị ảnh…" nghĩa là `renderReceiptPng` chết trên máy
-    ...    thật — bộ test jsdom không bao giờ thấy được ca này.
+    ...    thật — bộ test jsdom không bao giờ thấy được ca này. Linux Chrome không có Web Share API
+    ...    nên app phải cho tải ảnh; trình duyệt hỗ trợ chia sẻ thì hiện nút Zalo.
     Bán Nhanh    Phở bò
     Chờ Thấy Chữ    Đang chuẩn bị ảnh
-    Wait For Elements State    css=button:has-text("CHIA SẺ QUA ZALO")    visible    timeout=30s
-    Nút Không Được Khoá    CHIA SẺ QUA ZALO
+    Wait For Elements State    ${NÚT_ẢNH_PHIẾU}    visible    timeout=30s
+    Wait For Elements State    ${NÚT_ẢNH_PHIẾU}    enabled
     Không Được Thấy Chữ    Không tạo được ảnh phiếu trên máy này
 
 Từ phiếu bấm Chi tiết là sang trang chi tiết đơn
@@ -163,7 +165,3 @@ Xoá Thông Tin Quán
     Điền Ô    Số điện thoại    ${EMPTY}
     Bấm Nút    LƯU THÔNG TIN
     Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
-
-Nút Không Được Khoá
-    [Arguments]    ${nhãn}
-    Wait For Elements State    css=button:has-text("${nhãn}")    enabled

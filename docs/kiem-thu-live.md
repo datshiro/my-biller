@@ -3,12 +3,27 @@
 Bộ này lái **app thật trên Chrome thật**: bấm nút thật, tải file thật, đọc thẳng IndexedDB thật.
 Nó không thay Vitest hay Playwright mà bổ sung một lớp đọc được cho người không đọc code —
 mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra file HTML xem được ngoài trình duyệt.
+Hiện bộ live có 9 suite, tổng cộng 130 ca.
 
 | Lớp | Chạy bằng | Trả lời câu hỏi |
 | --- | --- | --- |
 | `npm test` | Vitest + jsdom + fake-indexeddb | Hàm và component có đúng không |
 | `npm run test:e2e` | Playwright, cổng 5174 | Luồng chính có chạy trên Chrome không |
 | `npm run test:live` | Robot Framework, cổng 5175 | Từng tính năng có làm đúng việc của nó không |
+
+## Cài lần đầu
+
+Sau khi cài dependency JavaScript, dùng installer của repo:
+
+```bash
+npm ci
+./robot/install.sh
+```
+
+[`robot/install.sh`](../robot/install.sh) tạo môi trường Python riêng, cài các dependency trực tiếp đã
+pin trong [`robot/requirements.txt`](../robot/requirements.txt), khởi tạo Robot Framework Browser và
+cài Chrome. Trên Ubuntu CI, workflow dùng `./robot/install.sh --with-deps` để cài thêm dependency hệ
+điều hành; đó là biến thể dành cho runner Ubuntu, không phải lệnh setup local trên macOS.
 
 ## Chạy
 
@@ -19,21 +34,28 @@ npm run test:regression                        # chỉ các ca chốt chặn h�
 ./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
 ```
 
-`run.sh` tự dựng dev server ở cổng 5175 rồi tự tắt khi xong. Cổng 5173 để dành cho người đang
-code, 5174 cho Playwright — ba thứ chạy song song không giẫm chân nhau. Nếu cổng 5175 đã có
-server đang phục vụ, script dùng lại và **không** tắt nó khi xong.
+`run.sh` tự dựng dev server ở cổng 5175. Cổng 5173 để dành cho người đang code, 5174 cho
+Playwright — ba thứ chạy song song không giẫm chân nhau.
+
+Runner chỉ dùng lại listener có thư mục làm việc là đúng worktree vật lý hiện tại **và** trả về đúng
+thẻ title của app `my-biller — Bán hàng`. Listener lạ, cũ hoặc thuộc worktree khác làm runner dừng
+ngay (fail-closed) với thông báo quyền sở hữu rõ ràng; script không bao giờ tự dừng listener đó, chủ
+tiến trình phải xử lý. Nếu runner tự dựng Vite, lúc kết thúc nó chỉ dừng đúng PID Vite trực tiếp do
+lượt chạy đó tạo.
 
 Kết quả nằm ở `robot/results/report.html` (tóm tắt) và `robot/results/log.html` (từng bước, kèm
-ảnh chụp lúc lỗi).
+ảnh chụp lúc lỗi). Nếu dev server không lên, xem `robot/results/vite.log`.
 
-## Cài lần đầu
+## Trên GitHub Actions
 
-```bash
-python3 -m venv .venv-robot
-.venv-robot/bin/pip install robotframework robotframework-browser
-.venv-robot/bin/rfbrowser init
-npx playwright install chrome
-```
+Workflow [`kiem-thu.yml`](../.github/workflows/kiem-thu.yml) chạy hai job độc lập trên mọi pull request
+và mọi push vào `main`. Gate code hiện có vẫn nằm riêng trong `Code quality and Playwright`; job
+`Robot live` chạy toàn bộ `npm run test:live` không lọc suite/tag và có timeout 15 phút.
+
+Khi cùng một pull request hoặc ref có lượt mới, lượt cũ đang chạy bị huỷ. Nếu `Robot live` thất bại,
+workflow tải `robot/results/` lên artifact `robot-live-results` và giữ 7 ngày. Branch protection của
+`main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
+merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.
 
 ## Vì sao phải chạy trên bản `vite` dev, không phải bản build
 
@@ -55,20 +77,27 @@ ca chạy được theo bất kỳ thứ tự nào.
 
 ```
 robot/
-├── run.sh                    dựng dev server, chạy, dọn
+├── requirements.txt          dependency Python trực tiếp đã pin
+├── install.sh                setup local và biến thể Ubuntu CI
+├── run.sh                    xác minh cổng, dựng Vite, chạy, dọn đúng PID
 ├── resources/
 │   ├── app.resource          vòng đời trình duyệt, phiên sạch, nạp mẫu, đọc IndexedDB
 │   └── sales.resource        thao tác màn Bán hàng, dùng lại ở nhiều suite
-└── tests/
-    ├── ban-hang.robot        29 ca · giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
-    ├── don-hang.robot        12 ca · danh sách đơn, ghi chú, huỷ đơn
-    ├── mat-hang.robot        13 ca · danh mục, ngừng bán, chặn xoá món đã bán
-    ├── khach-hang.robot      19 ca · khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
-    ├── chi-phi.robot         11 ca · ghi/sửa/xoá khoản chi, hai ô tổng
-    ├── cong-no.robot         10 ca · thu nợ, chặn thu dư, phiếu thu ra đúng dòng
-    ├── bao-cao.robot         12 ca · lãi/lỗ, các kỳ, khoảng ngày tự chọn
-    ├── phieu.robot           12 ca · nội dung phiếu, chia trang, dựng ảnh PNG
-    └── sao-luu.robot         12 ca · sao lưu, nhập lại, xoá sạch (tải file thật)
+├── tests/
+│   ├── ban-hang.robot        29 ca · giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
+│   ├── don-hang.robot        12 ca · danh sách đơn, ghi chú, huỷ đơn
+│   ├── mat-hang.robot        13 ca · danh mục, ngừng bán, chặn xoá món đã bán
+│   ├── khach-hang.robot      19 ca · khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
+│   ├── chi-phi.robot         11 ca · ghi/sửa/xoá khoản chi, hai ô tổng
+│   ├── cong-no.robot         10 ca · thu nợ, chặn thu dư, phiếu thu ra đúng dòng
+│   ├── bao-cao.robot         12 ca · lãi/lỗ, các kỳ, khoảng ngày tự chọn
+│   ├── phieu.robot           12 ca · nội dung phiếu, chia trang, dựng ảnh PNG
+│   └── sao-luu.robot         12 ca · sao lưu, nhập lại, xoá sạch (tải file thật)
+└── results/
+    ├── output.xml            kết quả máy đọc
+    ├── report.html           tóm tắt
+    ├── log.html              từng bước và ảnh lỗi
+    └── vite.log              log dev server do runner dựng
 ```
 
 ## Viết thêm ca mới

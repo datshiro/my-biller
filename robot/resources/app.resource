@@ -56,8 +56,21 @@ Nạp Dữ Liệu Mẫu
     ${nút}=    Set Variable    css=button:has-text("Nạp dữ liệu mẫu")
     Wait For Elements State    ${nút}    visible
     Click    ${nút}
-    # "4 món" ở dòng Mặt hàng là dấu hiệu bộ mẫu đã nằm trong IndexedDB, không phải chỉ vừa bấm nút.
+    # Mặt hàng được ghi trước khách, đơn và chi phí. Chờ đủ cả bộ thay vì chỉ nhìn "4 món", nếu không
+    # runner nhanh có thể bắt đầu test trong lúc seed vẫn đang ghi những bảng còn lại.
+    Wait Until Keyword Succeeds    30x    500ms    Bộ Dữ Liệu Mẫu Phải Sẵn Sàng
     Chờ Thấy Chữ    4 món
+
+Bộ Dữ Liệu Mẫu Phải Sẵn Sàng
+    [Documentation]    Đối chiếu mốc hoàn tất trong IndexedDB thật; mọi bảng đều có số bản ghi cố định.
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    4    Bộ mẫu chưa ghi đủ mặt hàng.
+    ${khách_hàng}=    Đọc Bảng    customers
+    Length Should Be    ${khách_hàng}    1    Bộ mẫu chưa ghi đủ khách hàng.
+    ${đơn_hàng}=    Đọc Bảng    orders
+    Length Should Be    ${đơn_hàng}    2    Bộ mẫu chưa ghi đủ đơn hàng.
+    ${chi_phí}=    Đọc Bảng    expenses
+    Length Should Be    ${chi_phí}    1    Bộ mẫu chưa ghi đủ chi phí.
 
 # --- Điều hướng ---------------------------------------------------------------------------
 
