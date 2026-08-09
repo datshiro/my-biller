@@ -332,3 +332,40 @@ Giảm giá trước rồi bật SỈ thì thanh tổng cảnh báo tiền hàng
 
     Bật Giá Sỉ Cho Khách    Anh Hùng
     Chờ Thấy Chữ    vẫn còn giảm giá
+
+Giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt SỈ thì tách lại đúng
+    [Documentation]    Khoá dòng giỏ trước đây không có `priceSource`, nên khi giá sỉ trùng đúng giá
+    ...    người bán đã gõ tay thì `upsert` coi hai dòng là một: nó giữ dòng cũ và chỉ cộng `qty`.
+    ...    Dòng gộp mang nhãn `manual`, mà tắt SỈ không đụng dòng `manual` — nên cả hai tô bán ở giá
+    ...    sỉ thay vì một tô sỉ một tô lẻ. Mất 10.000đ, không một dòng cảnh báo. Ca này dựng dữ liệu
+    ...    **cố ý trùng số**; đặt hai giá khác nhau là không bao giờ chạm tới lỗi.
+    [Tags]    regression
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Đơn giá riêng cho đơn này    45000
+    Bấm Nút    XONG
+
+    Chọn Món    Phở bò
+    Chờ Thấy Chữ    100.000 đ
+
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Chờ Thấy Chữ    90.000 đ
+    ${dòng_giỏ}=    Get Element Count    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Should Be Equal As Integers    ${dòng_giỏ}    2
+    ...    Dòng gõ tay bị dòng danh mục gộp vào — tắt SỈ sẽ không hoàn nguyên được nữa.
+
+    Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
+    Chọn Khách Trong Sheet    Khách lẻ
+    Chờ Thấy Chữ    100.000 đ
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    100000
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    sorted([d['unitPrice'] for d in $dòng if d['orderId'] == $đơn['id']])
+    Should Be Equal    ${của_đơn}    ${{ [45000, 55000] }}
+    ...    Sổ ghi một dòng qty 2 ở giá sỉ: tô thứ hai lẽ ra bán giá lẻ.
