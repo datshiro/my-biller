@@ -19,7 +19,17 @@ type Snapshot = {
 }
 
 /** `settings` không nằm trong ảnh chụp: mốc `lastBackupAt` đổi sau mỗi lần xuất file, đúng như thiết kế. */
-const STORES = ['itemGroups', 'items', 'customers', 'orders', 'orderLines', 'payments', 'expenseCategories', 'expenses']
+const STORES = [
+  'itemGroups',
+  'items',
+  'customers',
+  'customerPrices',
+  'orders',
+  'orderLines',
+  'payments',
+  'expenseCategories',
+  'expenses',
+]
 
 async function snapshot(page: Page): Promise<Snapshot> {
   return page.evaluate(async (stores) => {
@@ -82,6 +92,31 @@ async function importFile(page: Page, contents: string) {
     .setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(contents) })
 }
 
+/**
+ * Bộ mẫu không có dòng giá riêng nào, mà `[]` khớp `[]` thì vòng sao lưu không chứng minh gì cho bảng
+ * này. Đặt giá qua đúng màn người bán dùng rồi mới sao lưu.
+ */
+async function setPrice(page: Page, customer: string, item: string, price: string) {
+  await page.goto('/them/khach-hang')
+  await page.getByRole('button', { name: new RegExp(customer) }).click()
+  await page.getByRole('button', { name: /Bảng giá sỉ/ }).click()
+  await page.getByLabel(item).fill(price)
+  await page.getByRole('button', { name: 'LƯU BẢNG GIÁ' }).click()
+  await expect(page.getByText(/món có giá riêng/)).toBeVisible()
+}
+
+/** Đi hết hai cửa xác nhận của đường nhập file. */
+async function confirmImport(page: Page) {
+  await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Tải file an toàn' }).click(),
+  ])
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Đã thấy — ghi đè' }).click(),
+  ])
+}
+
 test('mất mạng vẫn lên được đơn và ghi vào máy', async ({ page, context }) => {
   await seed(page)
 
@@ -114,9 +149,12 @@ test('tạo đơn rồi tải lại trang: dữ liệu vẫn còn', async ({ pag
 
 test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng bảng khớp lại', async ({ page }) => {
   await seed(page)
+  await setPrice(page, 'Anh Hùng', 'Phở bò đặc biệt', '45000')
+
   const before = await snapshot(page)
   expect(before.tables.orders?.length).toBeGreaterThan(0)
   expect(before.tables.itemGroups?.length).toBeGreaterThan(0)
+  expect(before.tables.customerPrices?.length).toBeGreaterThan(0)
 
   await page.goto('/them/cai-dat')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
@@ -138,19 +176,63 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
 
   await page.goto('/them/cai-dat')
   await importFile(page, backup.text)
-  await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Tải file an toàn' }).click(),
-  ])
-  await Promise.all([
-    page.waitForEvent('load'),
-    page.getByRole('button', { name: 'Đã thấy — ghi đè' }).click(),
-  ])
+  await confirmImport(page)
 
   expect(await snapshot(page)).toEqual(before)
 
   await page.goto('/don')
   await expect(page.getByText('Anh Hùng').first()).toBeVisible()
+})
+
+/**
+ * Dòng giá riêng mồ côi **không** được chặn cả file: giá tra theo `itemId` của dòng đang trong giỏ
+ * nên dòng đó không bao giờ được đọc. Nhưng nó phải bị lọc trước khi ghi — hai dòng cùng cặp
+ * khách–món đụng index unique `&[customerId+itemId]` và `bulkPut` ném `ConstraintError`, huỷ **cả**
+ * lượt nhập. Ca này chạy đường ghi thật vào IndexedDB thật, chỗ duy nhất chứng minh được điều đó.
+ */
+test('file có dòng giá riêng rác: cửa xác nhận nói rõ, nhập vẫn xong, rác không vào máy', async ({
+  page,
+}) => {
+  await seed(page)
+  await setPrice(page, 'Anh Hùng', 'Phở bò đặc biệt', '45000')
+
+  await page.goto('/them/cai-dat')
+  const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
+
+  const file = JSON.parse(backup.text) as {
+    data: { customerPrices: { id: number; customerId: number; itemId: number; unitPrice: number }[] }
+  }
+  const good = file.data.customerPrices[0]
+  if (!good) throw new Error('Bản sao lưu chưa có dòng giá riêng nào để dựng ca này.')
+  file.data.customerPrices.push(
+    { ...good, id: 9001, customerId: 9999 },
+    { ...good, id: 9002, itemId: 9999 },
+    { ...good, id: 9003, unitPrice: 11_000 },
+  )
+
+  await importFile(page, JSON.stringify(file))
+  await expect(page.getByText(/3 dòng giá riêng sẽ bị bỏ/)).toBeVisible()
+  await confirmImport(page)
+
+  const prices = (await snapshot(page)).tables.customerPrices as { id: number; unitPrice: number }[]
+  // Trùng cặp giữ dòng cuối, nên giá còn lại là 11.000 chứ không phải 45.000 — và đúng một dòng.
+  expect(prices).toHaveLength(1)
+  expect(prices[0]?.unitPrice).toBe(11_000)
+
+  // Đường xoá sạch vẫn dùng được sau khi nhập file có rác: nhập hỏng nửa chừng thì lối thoát cuối
+  // cùng của người bán cũng hỏng theo.
+  await page.goto('/them/cai-dat')
+  await page.getByRole('button', { name: 'Xoá toàn bộ dữ liệu' }).click()
+  await page.getByLabel('Gõ XOA').fill('XOA')
+  await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'SAO LƯU RỒI XOÁ' }).click(),
+  ])
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Đã thấy — xoá tất cả' }).click(),
+  ])
+  expect((await snapshot(page)).tables.customerPrices).toEqual([])
 })
 
 test('file hỏng: báo lỗi và dữ liệu đang có không suy suyển', async ({ page }) => {

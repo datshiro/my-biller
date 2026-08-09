@@ -4,9 +4,10 @@ import { collectBackup, countAllRecords, replaceAllData, wipeAllData } from '../
 import { db } from '../db'
 import { recalcAll } from '../recalc'
 import { createExpense, createExpenseCategory } from '../repositories/expenses'
-import { createGroup, createItem } from '../repositories/items'
-import { createCustomer } from '../repositories/customers'
+import { createGroup, createItem, deleteItem } from '../repositories/items'
+import { createCustomer, deleteCustomer } from '../repositories/customers'
 import { savePriceBook } from '../repositories/customer-prices'
+import { cleanPriceRows, parseBackupFile } from '@/domain/backup'
 import { createOrder } from '../repositories/orders'
 import { addOrderPayment } from '../repositories/payments'
 import { saveShop } from '../repositories/settings'
@@ -185,5 +186,35 @@ describe('replaceAllData', () => {
 
     expect(await db.customerPrices.count()).toBe(1)
     expect(await db.customerPrices.get(99)).toBeUndefined()
+  })
+
+  /**
+   * Xoá món và xoá khách kéo theo dòng giá riêng **trong cùng transaction** (`deleteByItem` /
+   * `deleteByCustomer`). Ca này soi hệ quả ở đúng chỗ đắt nhất: file xuất ngay sau lần xoá. Sót lại một
+   * dòng mồ côi thì file vẫn nhập được — bảng giá là bảng mềm — nhưng mỗi vòng sao lưu lại đội thêm một
+   * dòng rác và một dòng "sẽ bị bỏ" ở cửa xác nhận, huấn luyện người bán bấm-cho-qua.
+   */
+  it('xoá món và xoá khách chưa từng bán → file xuất ngay sau đó nhập lại được, không đẻ dòng mồ côi', async () => {
+    await seedShop()
+    const customerId = await createCustomer({ name: 'Anh Tư', phone: '', address: '', note: '' })
+    const itemId = await createItem({
+      name: 'Trà đá',
+      groupId: null,
+      unit: 'ly',
+      unitPrice: 3_000,
+      costPrice: null,
+      isActive: 1,
+    })
+    await savePriceBook(customerId, [{ itemId, unitPrice: 2_000 }])
+
+    await deleteItem(itemId)
+    await deleteCustomer(customerId)
+
+    const file = await collectBackup(exportedAt)
+    const parsed = parseBackupFile(JSON.stringify(file))
+    expect(cleanPriceRows(parsed.data).dropped).toBe(0)
+
+    await replaceAllData(parsed.data)
+    expect(await db.customerPrices.count()).toBe(1)
   })
 })

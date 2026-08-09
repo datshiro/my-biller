@@ -609,4 +609,32 @@ describe('công tắc Lẻ/SỈ', () => {
       })
     })
   })
+
+  /**
+   * Dòng giá bẩn không có đường vào từ giao diện — `savePriceBook` parse trước khi ghi. Nó tới từ bản
+   * build cũ hoặc từ một lần sửa tay qua DevTools. `buildPriceBook` bỏ dòng đó, và ca này khoá cái giá
+   * của việc bỏ: món rơi về **giá lẻ**, màn Bán vẫn bán được. Không bỏ thì `unitPrice` bẩn chảy tới
+   * `cartTotals` và `assertMoney` ném ngay trong thân render, chiếm màn hình giữa lúc đang bán.
+   */
+  it('dòng giá bẩn trong DB: món đó về giá lẻ, màn Bán vẫn chạy chứ không sập', async () => {
+    const { phoId, customerId } = await seedGiaSi('Cô Bảy', 45_000)
+    await db.customerPrices.where('[customerId+itemId]').equals([customerId, phoId]).modify({
+      unitPrice: 45_000.5 as unknown as number,
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderSales()
+
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+
+    await waitFor(() => expect(screen.getByText(/chưa món nào có giá riêng/)).toBeDefined())
+    expect(await dongGio('Phở bò')).toContain('55.000')
+
+    await openPayment()
+    await bam('XONG & XUẤT PHIẾU')
+
+    await waitFor(async () => expect((await db.orders.toArray())[0]?.total).toBe(55_000))
+    vi.restoreAllMocks()
+  })
 })
