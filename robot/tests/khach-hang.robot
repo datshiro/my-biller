@@ -183,6 +183,25 @@ Món đã có giá riêng nổi lên đầu danh sách
     ${đầu}=    Get Text    css=label >> nth=0
     Should Be Equal    ${đầu}    TRÀ ĐÁ
 
+Món chưa đặt đơn vị thì gợi ý giá lẻ không kéo theo gạch chéo lủng lẳng
+    [Documentation]    Đơn vị là trường tuỳ chọn, mà màn này nối thẳng "/ ${item.unit}" nên món bỏ trống
+    ...    đơn vị hiện thành "Giá lẻ 40.000 /". Mọi chỗ khác (dòng giỏ, phiếu, sheet sửa dòng) đều đã
+    ...    chặn chuỗi rỗng từ trước; sót đúng màn bảng giá. Bộ mẫu không bắt được vì cả 4 món đều có đơn vị.
+    [Tags]    regression
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Bún bò
+    Điền Ô    Giá bán *    40000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    Bún bò
+
+    Mở Bảng Giá Của Khách    Anh Hùng
+    ${không_đơn_vị}=    Gợi Ý Của Ô    Bún bò
+    Should Be Equal    ${không_đơn_vị}    Giá lẻ 40.000
+
+    # Món có đơn vị phải giữ nguyên phần "/ tô" — chặn chuỗi rỗng không được nuốt luôn đơn vị thật.
+    ${có_đơn_vị}=    Gợi Ý Của Ô    Phở bò đặc biệt
+    Should Be Equal    ${có_đơn_vị}    Giá lẻ 55.000 / tô
+
 Rời màn bảng giá khi còn ô chưa lưu thì app hỏi lại
     Mở Bảng Giá Của Khách    Anh Hùng
     Điền Ô    Phở bò đặc biệt    38000
@@ -202,3 +221,10 @@ Mở Bảng Giá Của Khách
     Mở Chi Tiết Khách    ${tên}
     Bấm Nút    Bảng giá sỉ
     Chờ Thấy Chữ    Để trống là bán giá lẻ
+
+Gợi Ý Của Ô
+    [Documentation]    Dòng chữ nhỏ dưới ô nhập. `Field` xếp nó là thẻ <p> ngay sau nhãn, nên bám theo
+    ...    nhãn giống `Điền Ô` — id do `useId()` sinh, đổi mỗi lần render.
+    [Arguments]    ${nhãn}
+    ${chữ}=    Get Text    ${{ 'xpath=//label[normalize-space()="%s"]/following-sibling::p[1]' % $nhãn }}
+    RETURN    ${chữ}

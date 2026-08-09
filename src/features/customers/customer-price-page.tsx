@@ -32,7 +32,7 @@ const PriceRow = memo(function PriceRow({
   return (
     <MoneyInput
       label={item.name}
-      hint={`Giá lẻ ${formatAmount(item.unitPrice)} / ${item.unit}`}
+      hint={`Giá lẻ ${formatAmount(item.unitPrice)}${item.unit ? ` / ${item.unit}` : ''}`}
       value={value}
       onChange={(next) => onChange(item.id, next)}
       placeholder="Bán giá lẻ"
