@@ -111,8 +111,8 @@ export function DangerZone() {
           title="Đã thấy file trong máy chưa?"
           message={
             step.problem === null
-              ? `Vừa tải "${step.filename}" về thư mục Tải về. Mở ra xem có thật không rồi mới bấm tiếp — sau bước này không lấy lại được gì.`
-              : `Vừa tải "${step.filename}" về thư mục Tải về. Mở ra xem có thật không rồi mới bấm tiếp — nhưng file này có chỗ hỏng, còn một bước nữa phải đọc.`
+              ? `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file trước khi bấm tiếp; thiết bị có thể đổi tên nếu bị trùng. Sau bước này không lấy lại được gì.`
+              : `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file; thiết bị có thể đổi tên nếu bị trùng. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
           }
           confirmLabel={step.problem === null ? 'Đã thấy — xoá tất cả' : 'Đã thấy — đọc tiếp'}
           onConfirm={() =>
@@ -129,8 +129,8 @@ export function DangerZone() {
           nhưng phải nói ra là đi đâu. */}
       {step?.phase === 'accept' ? (
         <ConfirmDialog
-          title="File vừa tải về KHÔNG nhập lại được"
-          message={`${step.problem} Xoá bây giờ là mất hẳn, "${step.filename}" không dựng lại sổ được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi xoá sau.`}
+          title="Bản sao an toàn KHÔNG nhập lại được"
+          message={`${step.problem} Xoá bây giờ là mất hẳn; bản sao có tên đề xuất "${step.filename}" không dựng lại sổ được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi xoá sau.`}
           confirmLabel="Vẫn xoá — mất cũng được"
           onConfirm={() => void wipe()}
           onCancel={() => setStep(null)}

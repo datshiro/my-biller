@@ -3,7 +3,8 @@
 Bộ này lái **app thật trên Chrome thật**: bấm nút thật, tải file thật, đọc thẳng IndexedDB thật.
 Nó không thay Vitest hay Playwright mà bổ sung một lớp đọc được cho người không đọc code —
 mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra file HTML xem được ngoài trình duyệt.
-Hiện bộ live có 9 suite, tổng cộng 130 ca.
+Danh sách suite và số ca luôn sống trong `robot/tests/*.robot`; guide này chỉ giữ đường chạy và
+điểm vào để tìm coverage.
 
 | Lớp | Chạy bằng | Trả lời câu hỏi |
 | --- | --- | --- |
@@ -28,7 +29,7 @@ cài Chrome. Trên Ubuntu CI, workflow dùng `./robot/install.sh --with-deps` đ
 ## Chạy
 
 ```bash
-npm run test:live                              # cả 130 ca
+npm run test:live                              # toàn bộ suite live
 npm run test:regression                        # chỉ các ca chốt chặn hồi quy — vòng nhanh lúc đang sửa
 ./robot/run.sh robot/tests/ban-hang.robot      # một màn
 ./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
@@ -84,15 +85,15 @@ robot/
 │   ├── app.resource          vòng đời trình duyệt, phiên sạch, nạp mẫu, đọc IndexedDB
 │   └── sales.resource        thao tác màn Bán hàng, dùng lại ở nhiều suite
 ├── tests/
-│   ├── ban-hang.robot        29 ca · giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
-│   ├── don-hang.robot        12 ca · danh sách đơn, ghi chú, huỷ đơn
-│   ├── mat-hang.robot        13 ca · danh mục, ngừng bán, chặn xoá món đã bán
-│   ├── khach-hang.robot      19 ca · khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
-│   ├── chi-phi.robot         11 ca · ghi/sửa/xoá khoản chi, hai ô tổng
-│   ├── cong-no.robot         10 ca · thu nợ, chặn thu dư, phiếu thu ra đúng dòng
-│   ├── bao-cao.robot         12 ca · lãi/lỗ, các kỳ, khoảng ngày tự chọn
-│   ├── phieu.robot           12 ca · nội dung phiếu, chia trang, dựng ảnh PNG
-│   └── sao-luu.robot         12 ca · sao lưu, nhập lại, xoá sạch (tải file thật)
+│   ├── ban-hang.robot        giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
+│   ├── don-hang.robot        danh sách đơn, ghi chú, huỷ đơn
+│   ├── mat-hang.robot        danh mục, ngừng bán, chặn xoá món đã bán
+│   ├── khach-hang.robot      khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
+│   ├── chi-phi.robot         ghi/sửa/xoá khoản chi, hai ô tổng
+│   ├── cong-no.robot         thu nợ, chặn thu dư, phiếu thu ra đúng dòng
+│   ├── bao-cao.robot         lãi/lỗ, các kỳ, khoảng ngày tự chọn
+│   ├── phieu.robot           nội dung phiếu, chia trang, dựng ảnh PNG
+│   └── sao-luu.robot         sao lưu, chia sẻ, nhập lại, xoá sạch, cảnh báo bản sao trống
 └── results/
     ├── output.xml            kết quả máy đọc
     ├── report.html           tóm tắt

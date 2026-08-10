@@ -1,11 +1,16 @@
 import { collectBackup, replaceAllData, wipeAllData } from '@/db/backup'
 import { recalcAll } from '@/db/recalc'
-import { saveAppState } from '@/db/repositories/settings'
-import { backupFilename, parseBackupFile } from '@/domain/backup'
+import { saveLastBackupAt } from '@/db/repositories/settings'
+import {
+  backupFilename,
+  countOperationalRecords,
+  parseBackupFile,
+  type BackupCounts,
+} from '@/domain/backup'
 import type { BackupData, BackupFile } from '@/domain/schema'
 
-function downloadJson(filename: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+function downloadJson(filename: string, file: File): void {
+  const url = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url
   link.download = filename
@@ -16,8 +21,15 @@ function downloadJson(filename: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-// Xuống dòng, thụt lề: file sao lưu phải đọc và sửa tay được, đây là lối thoát cuối cùng khi hỏng.
-const backupText = async (at: number) => JSON.stringify(await collectBackup(at), null, 2)
+export type PreparedBackup = {
+  at: number
+  filename: string
+  /** Một representation duy nhất cho cả cú tải và Web Share. */
+  file: File
+  counts: BackupCounts
+  importable: boolean
+  problem: string | null
+}
 
 /**
  * Kết quả một lần sao lưu. File **luôn** ra khỏi máy, nhưng "đã sao lưu" thì không phải lúc nào
@@ -29,6 +41,66 @@ export type BackupOutcome = {
   importable: boolean
   /** Chỗ hỏng khiến file không nhập lại được, để màn hình chỉ đúng chỗ cần sửa tay. */
   problem: string | null
+}
+
+export type BackupShareOutcome = 'shared' | 'cancelled' | 'failed'
+
+/** Gom và kiểm đúng một snapshot; chưa tạo Blob URL, chưa tải file và chưa đóng dấu sao lưu. */
+export async function prepareBackup(at: number): Promise<PreparedBackup> {
+  const collected = await collectBackup(at)
+  // Xuống dòng, thụt lề: file sao lưu phải đọc và sửa tay được, đây là lối thoát cuối cùng khi hỏng.
+  const text = JSON.stringify(collected, null, 2)
+  const filename = backupFilename(at)
+  const file = new File([text], filename, { type: 'application/json' })
+
+  let problem: string | null = null
+  try {
+    parseBackupFile(text)
+  } catch (caught) {
+    problem = caught instanceof Error ? caught.message : 'Không rõ vì sao.'
+  }
+
+  return {
+    at,
+    filename,
+    file,
+    counts: countOperationalRecords(collected.data),
+    importable: problem === null,
+    problem,
+  }
+}
+
+/** Phát đúng prepared `File`; file lành mới được atomically ghi mốc sao lưu không lùi. */
+export async function downloadPreparedBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
+  downloadJson(prepared.filename, prepared.file)
+  if (prepared.importable) await saveLastBackupAt(prepared.at)
+  return {
+    filename: prepared.filename,
+    importable: prepared.importable,
+    problem: prepared.problem,
+  }
+}
+
+/** Chỉ hiện CTA khi trình duyệt chấp nhận chính file JSON sẽ gửi. Probe lỗi = không hỗ trợ. */
+export function canSharePreparedBackup(prepared: PreparedBackup): boolean {
+  try {
+    if (!prepared.importable || typeof navigator.share !== 'function') return false
+    return navigator.canShare?.({ files: [prepared.file] }) === true
+  } catch {
+    return false
+  }
+}
+
+export async function sharePreparedBackup(prepared: PreparedBackup): Promise<BackupShareOutcome> {
+  try {
+    await navigator.share({ files: [prepared.file] })
+    return 'shared'
+  } catch (caught) {
+    if (typeof caught === 'object' && caught !== null && 'name' in caught && caught.name === 'AbortError') {
+      return 'cancelled'
+    }
+    return 'failed'
+  }
 }
 
 /**
@@ -48,19 +120,7 @@ export type BackupOutcome = {
  * dựng thêm một cửa xác nhận cho đúng trường hợp đó (xem `danger-zone.tsx`, `settings-page.tsx`).
  */
 export async function exportBackup(at: number): Promise<BackupOutcome> {
-  const text = await backupText(at)
-  const filename = backupFilename(at)
-  downloadJson(filename, text)
-
-  let problem: string | null = null
-  try {
-    parseBackupFile(text)
-  } catch (caught) {
-    problem = caught instanceof Error ? caught.message : 'Không rõ vì sao.'
-  }
-
-  if (problem === null) await saveAppState({ lastBackupAt: at })
-  return { filename, importable: problem === null, problem }
+  return downloadPreparedBackup(await prepareBackup(at))
 }
 
 /** Chỉ đọc và kiểm file — **không** chạm vào DB. Sai định dạng thì ném lỗi ở đây, trước mọi thứ khác. */

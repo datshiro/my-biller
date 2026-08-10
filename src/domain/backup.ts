@@ -6,6 +6,29 @@ export const BACKUP_VERSION = 2
 
 const idsOf = (rows: readonly { id: number }[]) => new Set(rows.map((row) => row.id))
 
+const DIAGNOSTIC_LIMIT = 80
+
+function isUnsafeDiagnosticCharacter(character: string): boolean {
+  const point = character.codePointAt(0)
+  if (point === undefined) return false
+  return (
+    point <= 0x1f ||
+    (point >= 0x7f && point <= 0x9f) ||
+    point === 0x061c ||
+    point === 0x200e ||
+    point === 0x200f ||
+    (point >= 0x202a && point <= 0x202e) ||
+    (point >= 0x2066 && point <= 0x2069)
+  )
+}
+
+/** Giữ thông báo hữu ích nhưng không cho dữ liệu tự nhập điều khiển cách dòng lỗi được hiển thị. */
+function boundedDiagnostic(value: string): string {
+  const points = [...value].filter((character) => !isUnsafeDiagnosticCharacter(character))
+  if (points.length <= DIAGNOSTIC_LIMIT) return points.join('')
+  return `${points.slice(0, DIAGNOSTIC_LIMIT - 1).join('')}…`
+}
+
 /** Dòng đầu tiên trỏ tới một `id` không có trong file. `null` ở khoá ngoại là hợp lệ (không gắn ai). */
 function orphan<T>(rows: readonly T[], parents: Set<number>, link: (row: T) => number | null): T | undefined {
   return rows.find((row) => {
@@ -41,19 +64,25 @@ export function validateBackupIntegrity(data: BackupData): string | null {
   const customers = idsOf(data.customers)
 
   const line = orphan(data.orderLines, orders, (row) => row.orderId)
-  if (line) return `dòng hàng “${line.name}” thuộc về đơn số ${line.orderId} mà file không có đơn đó`
+  if (line) {
+    return `dòng hàng “${boundedDiagnostic(line.name)}” thuộc về đơn số ${line.orderId} mà file không có đơn đó`
+  }
 
   const payment = orphan(data.payments, orders, (row) => row.orderId)
   if (payment) return `có phiếu thu ${formatVnd(payment.amount)} của đơn số ${payment.orderId} mà file không có đơn đó`
 
   const order = orphan(data.orders, customers, (row) => row.customerId)
-  if (order) return `đơn ${order.code} ghi cho khách số ${order.customerId} mà file không có khách đó`
+  if (order) {
+    return `đơn ${boundedDiagnostic(order.code)} ghi cho khách số ${order.customerId} mà file không có khách đó`
+  }
 
   const owed = orphan(data.payments, customers, (row) => row.customerId)
   if (owed) return `có phiếu thu ghi cho khách số ${owed.customerId} mà file không có khách đó`
 
   const item = orphan(data.items, idsOf(data.itemGroups), (row) => row.groupId)
-  if (item) return `mặt hàng “${item.name}” thuộc nhóm số ${item.groupId} mà file không có nhóm đó`
+  if (item) {
+    return `mặt hàng “${boundedDiagnostic(item.name)}” thuộc nhóm số ${item.groupId} mà file không có nhóm đó`
+  }
 
   const expense = orphan(data.expenses, idsOf(data.expenseCategories), (row) => row.categoryId)
   if (expense) return `có khoản chi ${formatVnd(expense.amount)} thuộc loại số ${expense.categoryId} mà file không có loại đó`
@@ -81,7 +110,7 @@ function ownerlessDebt(data: BackupData): string | null {
   if (!order) return null
 
   const owing = order.total - (paid.get(order.id) ?? 0)
-  return `đơn ${order.code} còn thiếu ${formatVnd(owing)} nhưng không ghi khách nào — nhập vào thì khoản nợ đó biến mất khỏi mọi màn hình`
+  return `đơn ${boundedDiagnostic(order.code)} còn thiếu ${formatVnd(owing)} nhưng không ghi khách nào — nhập vào thì khoản nợ đó biến mất khỏi mọi màn hình`
 }
 
 export function backupFilename(at: number): string {
@@ -172,6 +201,18 @@ export function cleanPriceRows(data: BackupData): { rows: PriceRow[]; dropped: n
   }
 
   return { rows: [...kept.values()], dropped: data.customerPrices.length - kept.size }
+}
+
+/** Năm nhóm dữ liệu làm nên sổ nghiệp vụ; metadata và danh mục mặc định không được tính vào đây. */
+export function countOperationalRecords(data: BackupData): BackupCounts {
+  return {
+    ...countRecords(data),
+    customerPrices: cleanPriceRows(data).rows.length,
+  }
+}
+
+export function isOperationallyEmpty(counts: BackupCounts): boolean {
+  return Object.values(counts).every((count) => count === 0)
 }
 
 /**

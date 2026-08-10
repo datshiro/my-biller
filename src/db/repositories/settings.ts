@@ -25,6 +25,21 @@ export async function getAppState(): Promise<AppState> {
 }
 
 export async function saveAppState(patch: Partial<AppState>): Promise<void> {
-  const next = AppStateSchema.parse({ ...(await getAppState()), ...patch })
-  await db.settings.put({ key: 'app', value: next })
+  await db.transaction('rw', db.settings, async () => {
+    const row = await db.settings.get('app')
+    const current = { ...DEFAULT_APP_STATE, ...(row?.key === 'app' ? row.value : {}) }
+    const next = AppStateSchema.parse({ ...current, ...patch })
+    await db.settings.put({ key: 'app', value: next })
+  })
+}
+
+/** Hai tab có thể hoàn tất hai snapshot theo thứ tự ngược; mốc đã lưu chỉ được tiến về phía trước. */
+export async function saveLastBackupAt(at: number): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const row = await db.settings.get('app')
+    const current = { ...DEFAULT_APP_STATE, ...(row?.key === 'app' ? row.value : {}) }
+    const lastBackupAt = Math.max(current.lastBackupAt ?? at, at)
+    const next = AppStateSchema.parse({ ...current, lastBackupAt })
+    await db.settings.put({ key: 'app', value: next })
+  })
 }

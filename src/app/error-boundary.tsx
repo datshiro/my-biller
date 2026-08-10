@@ -32,8 +32,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
       this.setState({
         rescuing: false,
         rescue: importable
-          ? `Đã tải ${filename}. Kiểm lại trong thư mục Tải về.`
-          : `Đã tải ${filename}, nhưng file này KHÔNG nhập lại được: ${problem} Giữ file lại và sửa tay chỗ đó.`,
+          ? `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}". Kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`
+          : `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}", nhưng file này KHÔNG nhập lại được: ${problem} Giữ file lại và sửa tay chỗ đó. Hãy kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`,
       })
     } catch (caught) {
       this.setState({

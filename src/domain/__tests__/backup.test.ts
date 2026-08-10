@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   backupFilename,
   cleanPriceRows,
+  countOperationalRecords,
   countRecords,
   describeCounts,
   describeDroppedPrices,
+  isOperationallyEmpty,
   parseBackupFile,
 } from '../backup'
 import type { BackupData } from '../schema'
@@ -237,5 +239,68 @@ describe('countRecords', () => {
     })
     expect(counts).toEqual({ orders: 3, items: 2, customers: 0, expenses: 0, customerPrices: 0 })
     expect(describeCounts(counts)).toBe('3 đơn · 2 mặt hàng · 0 khách · 0 khoản chi · 0 giá riêng')
+  })
+})
+
+describe('dữ liệu nghiệp vụ trong bản sao', () => {
+  it('metadata, danh mục mặc định và giá riêng mồ côi vẫn là kho không có nghiệp vụ', () => {
+    const counts = countOperationalRecords({
+      ...emptyData,
+      settings: [{ key: 'app', value: { lastBackupAt: null, seededExpenseCategories: true } }],
+      itemGroups: [{ id: 1, name: 'Món nước', sortOrder: 0, createdAt: 0, updatedAt: 0 }],
+      expenseCategories: [{ id: 1, name: 'Nguyên liệu', createdAt: 0, updatedAt: 0 }],
+      customerPrices: [price()] as BackupData['customerPrices'],
+    })
+
+    expect(counts).toEqual({ orders: 0, items: 0, customers: 0, expenses: 0, customerPrices: 0 })
+    expect(isOperationallyEmpty(counts)).toBe(true)
+  })
+
+  it.each([
+    ['đơn', { orders: [order()] }],
+    ['mặt hàng', { items: [item()] }],
+    ['khách', { customers: [customer()] }],
+    [
+      'khoản chi',
+      {
+        expenses: [
+          { id: 1, categoryId: null, amount: 10_000, note: '', spentAt: 0, createdAt: 0, updatedAt: 0 },
+        ],
+      },
+    ],
+  ])('chỉ cần một %s là không còn rỗng nghiệp vụ', (_label, patch) => {
+    expect(isOperationallyEmpty(countOperationalRecords({ ...emptyData, ...patch } as BackupData))).toBe(false)
+  })
+
+  it('giá riêng còn dùng được đi qua count đã chuẩn hoá', () => {
+    const counts = countOperationalRecords({
+      ...emptyData,
+      customers: [customer()] as BackupData['customers'],
+      items: [item()] as BackupData['items'],
+      customerPrices: [price()] as BackupData['customerPrices'],
+    })
+
+    expect(counts.customerPrices).toBe(1)
+    expect(isOperationallyEmpty(counts)).toBe(false)
+  })
+})
+
+describe('diagnostic từ bản ghi', () => {
+  it('bỏ control/bidi và giới hạn phần dữ liệu người bán ở 80 code points', () => {
+    const unsafeName = `Phở\u0000\n\u202E${'rất-dài-'.repeat(20)}`
+    let message = ''
+
+    try {
+      parseBackupFile(wholeFile({ orderLines: [orderLine({ orderId: 99, name: unsafeName })] }))
+    } catch (caught) {
+      message = caught instanceof Error ? caught.message : ''
+    }
+
+    const shownName = message.match(/dòng hàng “([^”]*)”/)?.[1] ?? ''
+    expect(shownName).not.toContain('\u0000')
+    expect(shownName).not.toContain('\n')
+    expect(shownName).not.toContain('\u202E')
+    expect([...shownName]).toHaveLength(80)
+    expect(shownName.endsWith('…')).toBe(true)
   })
 })
