@@ -18,3 +18,22 @@ period = 60
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ShopDO"]
+
+[env.staging]
+name = "my-biller-sync-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "SHOP_DO"
+class_name = "ShopDO"
+
+[[env.staging.ratelimits]]
+name = "PAIR_RATE_LIMITER"
+namespace_id = "2608110215"
+
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["ShopDO"]

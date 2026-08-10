@@ -77,6 +77,53 @@ tag đã phát hành.
 Health endpoint đã trả `200 {"status":"ok"}` từ mạng Internet ngày 09/08/2026. Lượt kiểm cuối
 trên điện thoại thật qua 4G vẫn là bước thủ công trước khi đưa máy người bán vào M1.
 
+## Staging tách khỏi production
+
+Staging dùng Worker `my-biller-sync-staging.datshiro.workers.dev` và một namespace Durable Object
+riêng. Frontend staging là preview deployment của project Pages `an-quynh`; production branch vẫn là
+`main`, nên deploy nhánh `release/staging-260811` không đổi `an-quynh.pages.dev`.
+
+Lần đầu tạo môi trường, đặt một `ADMIN_SECRET` **riêng cho staging**; không dùng lại hoặc ghi giá trị
+production vào lệnh, file hay log:
+
+```bash
+npx wrangler secret put ADMIN_SECRET --config worker/wrangler.toml --env staging
+npm run worker:deploy:staging
+curl --fail https://my-biller-sync-staging.datshiro.workers.dev/health
+```
+
+Chỉ sau khi health Worker xanh mới build và deploy Pages preview:
+
+```bash
+npm run build:staging
+npx wrangler pages deploy dist --project-name an-quynh --branch release/staging-260811
+```
+
+`build:staging` đóng cứng URL Worker staging vào bundle; `npm run build` vẫn đóng URL production.
+Sau deploy, kiểm bundle từ preview không chứa URL production trước khi tạo quán thử. Bản staging hiện
+nút dữ liệu mẫu dành riêng cho kiểm thử; production không có nút này.
+
+Runner remote không tự dựng hoặc tái sử dụng Vite/Worker local; nó chỉ chấp nhận Worker staging và
+Pages preview HTTPS, không chấp nhận domain production. Nạp secret staging từ kho secret an toàn vào
+biến đã export của phiên hiện tại, rồi chạy bộ Chrome thật với đúng URL preview bất biến vừa deploy:
+
+```bash
+test -n "${STAGING_ADMIN_SECRET:-}" || exit 1
+BASE_URL=https://<deployment-hash>.an-quynh.pages.dev \
+WORKER_URL=https://my-biller-sync-staging.datshiro.workers.dev \
+ROBOT_WORKER_ADMIN_SECRET="$STAGING_ADMIN_SECRET" \
+npm run test:staging -- robot/tests/hai-may.robot
+unset STAGING_ADMIN_SECRET
+```
+
+Rollback Worker staging bằng version tốt gần nhất; Pages preview giữ URL bất biến của từng deployment,
+nên checkout commit tốt, build lại bằng `build:staging` rồi deploy lại cùng nhánh để đưa alias về bản đó:
+
+```bash
+npx wrangler deployments list --config worker/wrangler.toml --env staging
+npx wrangler rollback <version-id> --config worker/wrangler.toml --env staging
+```
+
 ## 1. Build
 
 ```bash

@@ -4,7 +4,15 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
+  define: {
+    __MY_BILLER_ENABLE_TEST_DATA__: JSON.stringify(command === 'serve' || mode === 'staging'),
+    __MY_BILLER_REMOTE_SYNC_URL__: JSON.stringify(
+      mode === 'staging'
+        ? 'https://my-biller-sync-staging.datshiro.workers.dev'
+        : 'https://my-biller-sync.datshiro.workers.dev',
+    ),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -66,4 +74,4 @@ export default defineConfig({
     // sao lưu). Không đo thì không biết nhánh nào chưa ai chạy qua.
     coverage: { include: ['src/domain/**', 'src/db/**'], reporter: ['text', 'html'] },
   },
-})
+}))

@@ -8,6 +8,8 @@ import { formatAmount } from '@/domain/money'
 import { ListRow } from '@/ui/list-row'
 import { ScreenHeader } from '@/ui/screen-header'
 
+declare const __MY_BILLER_ENABLE_TEST_DATA__: boolean
+
 export function MorePage() {
   const navigate = useNavigate()
   const items = useItems()
@@ -58,7 +60,7 @@ export function MorePage() {
         </li>
       </ul>
 
-      {import.meta.env.DEV ? (
+      {__MY_BILLER_ENABLE_TEST_DATA__ ? (
         <div className="mt-auto border-t border-line px-4 py-4">
           <button
             type="button"
@@ -69,7 +71,7 @@ export function MorePage() {
             }}
             className="h-12 w-full rounded-btn border border-dashed border-line text-[13px] text-muted"
           >
-            {seeding ? 'Đang nạp…' : 'Nạp dữ liệu mẫu (chỉ hiện khi dev)'}
+            {seeding ? 'Đang nạp…' : 'Nạp dữ liệu mẫu (chỉ dùng để kiểm thử)'}
           </button>
         </div>
       ) : null}

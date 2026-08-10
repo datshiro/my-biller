@@ -9,7 +9,7 @@ import { getDeviceIdentity, saveDeviceIdentity } from './repositories/device-sta
 
 const DAY = 86_400_000
 
-/** Dữ liệu mẫu cho lúc dev. Chỉ gọi khi `import.meta.env.DEV` — bản build không được chạy hàm này. */
+/** Dữ liệu mẫu cho dev/staging. Production không được gọi hàm này. */
 export async function seedDemoData(): Promise<void> {
   if ((await db.items.count()) > 0) return
 

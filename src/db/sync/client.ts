@@ -1,11 +1,20 @@
 import type { DeviceConnection } from '@/domain/schema'
 import type { ServerEvent, SyncEvent } from '@shared/sync-events'
 
-const localHostnames = new Set(['127.0.0.1', 'localhost'])
+declare const __MY_BILLER_REMOTE_SYNC_URL__: string
 
-export const DEFAULT_SYNC_URL = localHostnames.has(globalThis.location?.hostname ?? '')
-  ? 'http://127.0.0.1:8787'
-  : 'https://my-biller-sync.datshiro.workers.dev'
+const localHostnames = new Set(['127.0.0.1', 'localhost'])
+const localSyncUrl = 'http://127.0.0.1:8787'
+
+export function resolveDefaultSyncUrl(hostname: string, remoteSyncUrl: string): string {
+  if (localHostnames.has(hostname)) return localSyncUrl
+  return remoteSyncUrl
+}
+
+export const DEFAULT_SYNC_URL = resolveDefaultSyncUrl(
+  globalThis.location?.hostname ?? '',
+  __MY_BILLER_REMOTE_SYNC_URL__,
+)
 
 export type PairedDevice = {
   shopId: string

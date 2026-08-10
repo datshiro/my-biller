@@ -307,6 +307,9 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
     expect(await screen.findByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeDefined()
 
+    await waitFor(() =>
+      expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 10 * 60 * 1000)).toBe(true),
+    )
     const expire = timeoutSpy.mock.calls.find(([, delay]) => delay === 10 * 60 * 1000)?.[0]
     expect(expire).toBeTypeOf('function')
     act(() => {

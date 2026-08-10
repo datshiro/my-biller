@@ -198,8 +198,8 @@ describe('màn báo cáo', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn' }))
 
-    fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-08-03' } })
-    fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-08-05' } })
+    fireEvent.change(await screen.findByLabelText('Từ ngày'), { target: { value: '2026-08-03' } })
+    fireEvent.change(await screen.findByLabelText('Đến ngày'), { target: { value: '2026-08-05' } })
     await userEvent.click(screen.getByRole('button', { name: 'XEM BÁO CÁO' }))
 
     await waitFor(() => expect(within(box('DOANH THU')).getByText('60.000')).toBeDefined())
@@ -210,8 +210,8 @@ describe('màn báo cáo', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn' }))
 
-    fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-08-06' } })
-    fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-08-02' } })
+    fireEvent.change(await screen.findByLabelText('Từ ngày'), { target: { value: '2026-08-06' } })
+    fireEvent.change(await screen.findByLabelText('Đến ngày'), { target: { value: '2026-08-02' } })
 
     const view = screen.getByRole('button', { name: 'XEM BÁO CÁO' })
     expect((view as HTMLButtonElement).disabled).toBe(true)

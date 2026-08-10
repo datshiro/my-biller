@@ -8,29 +8,63 @@
 #   ./robot/run.sh                                  chạy hết
 #   ./robot/run.sh robot/tests/ban-hang.robot       chạy một suite
 #   ./robot/run.sh -i regression robot/tests        chỉ chạy ca gắn thẻ regression
+#   ROBOT_REMOTE=1 BASE_URL=https://... WORKER_URL=https://... \
+#     ROBOT_WORKER_ADMIN_SECRET="$STAGING_ADMIN_SECRET" ./robot/run.sh robot/tests/hai-may.robot
 #
-# Bộ này cần bản `vite` dev, không chạy được trên bản build: nút "Nạp dữ liệu mẫu" — chỗ mọi test
-# lấy dữ liệu ban đầu — chỉ hiện ở chế độ dev.
+# Mặc định runner tự dựng Vite dev và Worker local. `ROBOT_REMOTE=1` dùng đúng hai URL HTTPS đã
+# truyền vào, không dựng hay tái sử dụng process local; bản staging có nút dữ liệu kiểm thử riêng.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/.." && pwd -P)"
 cd "${repo_root}"
 
-PORT="${ROBOT_PORT:-5175}"
-BASE_URL="http://localhost:${PORT}"
-WORKER_PORT=8787
-WORKER_URL="http://127.0.0.1:${WORKER_PORT}"
-WORKER_ADMIN_SECRET="robot-admin-secret"
+REMOTE_MODE="${ROBOT_REMOTE:-0}"
 VENV="${ROBOT_VENV:-.venv-robot}"
 EXPECTED_TITLE="<title>my-biller — Bán hàng</title>"
+STAGING_WORKER_URL="https://my-biller-sync-staging.datshiro.workers.dev"
+HEALTH_TIMEOUT=2
+
+if [[ "${REMOTE_MODE}" == "1" ]]; then
+  BASE_URL="${BASE_URL:-}"
+  WORKER_URL="${WORKER_URL:-}"
+  WORKER_ADMIN_SECRET="${ROBOT_WORKER_ADMIN_SECRET:-}"
+  if [[ -z "${BASE_URL}" ]] || [[ -z "${WORKER_URL}" ]] || [[ -z "${WORKER_ADMIN_SECRET}" ]]; then
+    echo "Remote mode cần BASE_URL, WORKER_URL và ROBOT_WORKER_ADMIN_SECRET." >&2
+    exit 1
+  fi
+  if [[ "${BASE_URL}" != https://* ]] || [[ "${WORKER_URL}" != https://* ]]; then
+    echo "Remote mode chỉ chấp nhận BASE_URL và WORKER_URL dùng HTTPS." >&2
+    exit 1
+  fi
+  BASE_URL="${BASE_URL%/}"
+  WORKER_URL="${WORKER_URL%/}"
+  if [[ "${BASE_URL}" != https://*.an-quynh.pages.dev ]]; then
+    echo "Remote mode chỉ chạy trên Pages preview, không chạy trên domain production." >&2
+    exit 1
+  fi
+  if [[ "${WORKER_URL}" != "${STAGING_WORKER_URL}" ]]; then
+    echo "Remote mode chỉ chạy với Worker staging ${STAGING_WORKER_URL}." >&2
+    exit 1
+  fi
+  HEALTH_TIMEOUT=10
+elif [[ "${REMOTE_MODE}" == "0" ]]; then
+  PORT="${ROBOT_PORT:-5175}"
+  BASE_URL="http://localhost:${PORT}"
+  WORKER_PORT=8787
+  WORKER_URL="http://127.0.0.1:${WORKER_PORT}"
+  WORKER_ADMIN_SECRET="robot-admin-secret"
+else
+  echo "ROBOT_REMOTE chỉ nhận 0 hoặc 1." >&2
+  exit 1
+fi
 
 if [[ ! -x "${VENV}/bin/robot" ]]; then
   echo "Chưa có môi trường Robot. Chạy './robot/install.sh' trước." >&2
   exit 1
 fi
 
-if ! command -v lsof >/dev/null 2>&1; then
+if [[ "${REMOTE_MODE}" == "0" ]] && ! command -v lsof >/dev/null 2>&1; then
   echo "Không tìm thấy lsof để xác minh tiến trình đang giữ cổng ${PORT}." >&2
   exit 1
 fi
@@ -69,7 +103,7 @@ trap 'exit 143' TERM
 
 app_sẵn_sàng() {
   local html
-  html="$(curl -fsS --max-time 2 "${BASE_URL}/" 2>/dev/null)" || return 1
+  html="$(curl -fsS --max-time "${HEALTH_TIMEOUT}" "${BASE_URL}/" 2>/dev/null)" || return 1
   [[ "${html}" == *"${EXPECTED_TITLE}"* ]]
 }
 
@@ -93,9 +127,20 @@ pid_is_descendant_of() {
 }
 
 worker_sẵn_sàng() {
-  curl -fsS --max-time 2 "${WORKER_URL}/health" 2>/dev/null | grep -q '"status":"ok"'
+  curl -fsS --max-time "${HEALTH_TIMEOUT}" "${WORKER_URL}/health" 2>/dev/null | grep -q '"status":"ok"'
 }
 
+if [[ "${REMOTE_MODE}" == "1" ]]; then
+  if ! app_sẵn_sàng; then
+    echo "Pages staging chưa sẵn sàng hoặc không phải my-biller: ${BASE_URL}" >&2
+    exit 1
+  fi
+  if ! worker_sẵn_sàng; then
+    echo "Worker staging chưa sẵn sàng: ${WORKER_URL}" >&2
+    exit 1
+  fi
+  echo "→ Kiểm thử remote tại ${BASE_URL} với Worker ${WORKER_URL}"
+else
 worker_listener_pids="$(port_listener_pids "${WORKER_PORT}")"
 if [[ -n "${worker_listener_pids}" ]]; then
   if [[ "${worker_listener_pids}" == *$'\n'* ]]; then
@@ -197,6 +242,7 @@ else
     echo "Listener ở cổng ${PORT} không phải Vite do lượt Robot này tạo; dừng để tránh chạy nhầm worktree." >&2
     exit 1
   fi
+fi
 fi
 
 if (( $# == 0 )); then

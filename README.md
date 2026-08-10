@@ -18,7 +18,8 @@ npm ci
 npm run dev          # http://localhost:5173
 ```
 
-Màn **Thêm** có nút *Nạp dữ liệu mẫu* (chỉ hiện ở bản dev) để có sẵn mặt hàng, khách, đơn và chi phí.
+Màn **Thêm** có nút *Nạp dữ liệu mẫu* ở dev và staging để có sẵn mặt hàng, khách, đơn và chi phí;
+production không có nút này.
 
 ## Lệnh
 
@@ -32,6 +33,7 @@ Màn **Thêm** có nút *Nạp dữ liệu mẫu* (chỉ hiện ở bản dev) �
 | `npm test` | Vitest (unit + component) |
 | `npm run test:e2e` | Playwright trên Chrome thật, cổng 5174 |
 | `npm run test:live` | Robot Framework: từng tính năng trên app thật, cổng 5175 |
+| `npm run test:staging -- <suite>` | Robot Framework trên Pages/Worker staging đã deploy |
 
 `npm run test:e2e` cần Chrome của máy: `npx playwright install chrome`.
 Sau `npm ci`, cài môi trường local cho `npm run test:live` bằng đúng một lệnh:
