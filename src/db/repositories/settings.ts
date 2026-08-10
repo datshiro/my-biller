@@ -7,6 +7,7 @@ import {
   type AppState,
   type ShopSettings,
 } from '@/domain/schema'
+import { syncTransaction } from '../sync/outbox'
 
 export async function getShop(): Promise<ShopSettings> {
   const row = await db.settings.get('shop')
@@ -16,7 +17,7 @@ export async function getShop(): Promise<ShopSettings> {
 
 export async function saveShop(patch: Partial<ShopSettings>): Promise<void> {
   const next = ShopSettingsSchema.parse({ ...(await getShop()), ...patch })
-  await db.settings.put({ key: 'shop', value: next })
+  await syncTransaction(() => db.settings.put({ key: 'shop', value: next }))
 }
 
 export async function getAppState(): Promise<AppState> {
@@ -25,7 +26,7 @@ export async function getAppState(): Promise<AppState> {
 }
 
 export async function saveAppState(patch: Partial<AppState>): Promise<void> {
-  await db.transaction('rw', db.settings, async () => {
+  await syncTransaction(async () => {
     const row = await db.settings.get('app')
     const current = { ...DEFAULT_APP_STATE, ...(row?.key === 'app' ? row.value : {}) }
     const next = AppStateSchema.parse({ ...current, ...patch })
@@ -35,7 +36,7 @@ export async function saveAppState(patch: Partial<AppState>): Promise<void> {
 
 /** Hai tab có thể hoàn tất hai snapshot theo thứ tự ngược; mốc đã lưu chỉ được tiến về phía trước. */
 export async function saveLastBackupAt(at: number): Promise<void> {
-  await db.transaction('rw', db.settings, async () => {
+  await syncTransaction(async () => {
     const row = await db.settings.get('app')
     const current = { ...DEFAULT_APP_STATE, ...(row?.key === 'app' ? row.value : {}) }
     const lastBackupAt = Math.max(current.lastBackupAt ?? at, at)

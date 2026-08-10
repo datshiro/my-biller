@@ -10,6 +10,7 @@ import {
   listOrdersByCustomer,
   type OrderDraft,
 } from '../repositories/orders'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -29,6 +30,7 @@ const draft = (overrides: Partial<OrderDraft> = {}): OrderDraft => ({
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 describe('createOrder', () => {
@@ -36,7 +38,7 @@ describe('createOrder', () => {
     const { id, code } = await createOrder(draft({ payment: { amount: 110_000, method: 'cash', note: '' } }))
 
     const order = await db.orders.get(id)
-    expect(code).toBe('PBH-260807-001')
+    expect(code).toBe('PBH-260807-A001')
     expect(order).toMatchObject({ subtotal: 110_000, total: 110_000, paidAmount: 110_000, status: 'paid' })
     expect(await getOrderLines(id)).toHaveLength(1)
     expect(await getOrderPayments(id)).toHaveLength(1)
@@ -180,14 +182,14 @@ describe('createOrder', () => {
     const codes = (await db.orders.toArray()).map((order) => order.code).sort()
     expect(codes).toHaveLength(300)
     expect(new Set(codes).size).toBe(300)
-    expect(codes[0]).toBe('PBH-260807-001')
-    expect(codes.at(-1)).toBe('PBH-260807-300')
+    expect(codes[0]).toBe('PBH-260807-A001')
+    expect(codes.at(-1)).toBe('PBH-260807-A300')
   }, 60_000)
 
   it('sang ngày mới thì số phiếu quay về 001', async () => {
     await createOrder(draft())
     const next = await createOrder(draft({ soldAt: new Date(2026, 7, 8, 9, 0).getTime() }))
-    expect((await db.orders.get(next.id))?.code).toBe('PBH-260808-001')
+    expect((await db.orders.get(next.id))?.code).toBe('PBH-260808-A001')
   })
 })
 
@@ -203,6 +205,7 @@ describe('listOrderLinesOfOrders', () => {
   const seedLines = (count: number) =>
     db.orderLines.bulkAdd(
       Array.from({ length: count }, (_, index) => ({
+        gid: testGid(index + 1),
         orderId: index + 1,
         itemId: null,
         name: `Món ${index + 1}`,

@@ -69,18 +69,19 @@ Huỷ đơn chưa thu tiền chỉ báo thôi tính doanh thu
     ${đơn}=    Đơn Mới Nhất
     Should Be Equal    ${đơn}[status]    void
 
-Huỷ đơn đã thu tiền thì hộp xác nhận nói rõ số tiền sắp mất khỏi sổ
-    [Documentation]    Chốt chặn của MR #1: huỷ đơn xoá luôn phiếu thu, nên tiền mặt người bán đã
-    ...    thực sự cầm sẽ không còn ở đâu cả. Hộp xác nhận phải đọc đúng con số đó.
+Huỷ đơn đã thu tiền thì hộp xác nhận nói rõ tiền vẫn ở trong sổ
+    [Documentation]    Lỗi cũ xoá mất phiếu thu thật. Câu xác nhận mới phải nói rõ khoản thu được
+    ...    giữ lại nhưng bỏ khỏi đơn, để người bán xử lý tiếp mà không đòi lại lần nữa.
     [Tags]    regression
     Bán Nhanh    Phở bò
     Mở Chi Tiết Đơn Mới Nhất
     Bấm Nút    Huỷ đơn
     Chờ Hộp Xác Nhận    Huỷ đơn này?
     Chờ Thấy Chữ    đã thu 55.000 đ
-    Chờ Thấy Chữ    hãy trả lại tiền cho khách trước
+    Chờ Thấy Chữ    không xoá lần thu này
 
-Huỷ đơn đã thu tiền thì phiếu thu cũng biến mất khỏi sổ
+Huỷ đơn đã thu tiền thì phiếu thu vẫn còn và chưa gắn đơn
+    [Documentation]    Chốt lỗi mất tiền thật: huỷ đơn chỉ bỏ phân bổ, không xoá sự kiện đã thu.
     [Tags]    regression
     Bán Nhanh    Phở bò
     ${đơn}=    Đơn Mới Nhất
@@ -95,7 +96,8 @@ Huỷ đơn đã thu tiền thì phiếu thu cũng biến mất khỏi sổ
 
     ${phiếu_thu}=    Đọc Bảng    payments
     ${của_đơn}=    Evaluate    [p for p in $phiếu_thu if p['orderId'] == $đơn['id']]
-    Should Be Empty    ${của_đơn}    Đơn đã huỷ mà phiếu thu vẫn nằm lại trong sổ.
+    Length Should Be    ${của_đơn}    1    Huỷ đơn đã làm mất phiếu thu khỏi sổ.
+    Should Be Equal As Integers    ${của_đơn}[0][allocatedOrderId]    0
 
 Bấm Huỷ trong hộp xác nhận thì đơn còn nguyên
     Bán Nhanh    Trà đá

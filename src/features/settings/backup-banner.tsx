@@ -8,7 +8,7 @@ const SNOOZE_KEY = 'my-biller.backup-snoozed-at'
 const SNOOZE_MS = 24 * 60 * 60 * 1000
 
 /**
- * Nhắc sao lưu khi đã quá 7 ngày. Không có backend nên file sao lưu là bản sao duy nhất — đóng được
+ * Nhắc sao lưu khi đã quá 7 ngày. Sổ chung không thay bản sao độc lập do người bán giữ — đóng được
  * banner, nhưng nó quay lại sau 24 giờ chứ không tắt hẳn.
  */
 export function BackupBanner() {

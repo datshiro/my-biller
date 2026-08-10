@@ -1,6 +1,5 @@
 *** Settings ***
 Documentation    Thao tác trên màn Bán hàng — dùng lại ở suite Bán hàng, Đơn hàng, Công nợ, Báo cáo.
-Library          Browser
 Resource         app.resource
 
 *** Variables ***

@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { formatVnd } from './money'
 import { BackupFileSchema, type BackupData, type BackupFile } from './schema'
 
-export const BACKUP_VERSION = 2
+export const BACKUP_VERSION = 4
 
 const idsOf = (rows: readonly { id: number }[]) => new Set(rows.map((row) => row.id))
 
@@ -71,6 +71,13 @@ export function validateBackupIntegrity(data: BackupData): string | null {
   const payment = orphan(data.payments, orders, (row) => row.orderId)
   if (payment) return `có phiếu thu ${formatVnd(payment.amount)} của đơn số ${payment.orderId} mà file không có đơn đó`
 
+  const allocation = orphan(data.payments, orders, (row) =>
+    row.allocatedOrderId === 0 ? null : row.allocatedOrderId,
+  )
+  if (allocation) {
+    return `có phiếu thu ${formatVnd(allocation.amount)} đang trừ vào đơn số ${allocation.allocatedOrderId} mà file không có đơn đó`
+  }
+
   const order = orphan(data.orders, customers, (row) => row.customerId)
   if (order) {
     return `đơn ${boundedDiagnostic(order.code)} ghi cho khách số ${order.customerId} mà file không có khách đó`
@@ -101,7 +108,11 @@ export function validateBackupIntegrity(data: BackupData): string | null {
 function ownerlessDebt(data: BackupData): string | null {
   const paid = new Map<number, number>()
   for (const payment of data.payments) {
-    paid.set(payment.orderId, (paid.get(payment.orderId) ?? 0) + payment.amount)
+    if (payment.allocatedOrderId === 0) continue
+    paid.set(
+      payment.allocatedOrderId,
+      (paid.get(payment.allocatedOrderId) ?? 0) + payment.amount,
+    )
   }
 
   const order = data.orders.find(

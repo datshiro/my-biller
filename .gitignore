@@ -5,6 +5,8 @@ coverage/
 *.local
 .DS_Store
 .vite/
+.wrangler/
+*.tsbuildinfo
 test-results/
 playwright-report/
 .playwright-mcp/

@@ -1,14 +1,29 @@
 import { version as APP_VERSION } from '../../package.json'
 import { db } from './db'
+import { recalcAll } from './recalc'
 import { BACKUP_VERSION, cleanPriceRows } from '@/domain/backup'
 import { BackupFileSchema, type BackupData, type BackupFile } from '@/domain/schema'
+
+/** Các bảng thuộc cuốn sổ. Trạng thái riêng của máy tuyệt đối không đi theo sao lưu/phục hồi. */
+const ledgerTables = () => [
+  db.settings,
+  db.itemGroups,
+  db.items,
+  db.customers,
+  db.customerPrices,
+  db.orders,
+  db.orderLines,
+  db.payments,
+  db.expenseCategories,
+  db.expenses,
+]
 
 /**
  * Ảnh chụp toàn bộ DB, đọc trong **một** transaction: bấm "Sao lưu" đúng lúc một đơn đang được ghi
  * mà đọc từng bảng rời rạc thì ra file có đơn nhưng thiếu dòng đơn — mất tiền mà không ai thấy.
  */
 export function collectBackup(exportedAt: number): Promise<BackupFile> {
-  return db.transaction('r', db.tables, async () => {
+  return db.transaction('r', ledgerTables(), async () => {
     const [
       settings,
       itemGroups,
@@ -66,10 +81,59 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
   })
 }
 
-const clearEveryTable = () => Promise.all(db.tables.map((table) => table.clear()))
+const clearLedger = () => Promise.all(ledgerTables().map((table) => table.clear()))
+
+async function assertOfflineLedgerWriteAllowed(action: 'xoá' | 'nhập'): Promise<void> {
+  const [connection, pairing, writeBlock] = await Promise.all([
+    db.deviceState.get('connection'),
+    db.deviceState.get('pairing'),
+    db.deviceState.get('writeBlock'),
+  ])
+  if (!connection && !pairing && !writeBlock) return
+
+  const verb = action === 'xoá' ? 'xoá sổ cục bộ' : 'nhập file sao lưu'
+  throw new Error(
+    `Máy đã ghép, đang ghép hoặc đã bị thu hồi không thể ${verb} từ đây. Hãy dùng “Kéo lại từ đầu” hoặc ghép lại.`,
+  )
+}
+
+async function offlineLedgerTransaction<T>(
+  action: 'xoá' | 'nhập',
+  callback: () => Promise<T>,
+): Promise<T> {
+  return db.transaction(
+    'rw',
+    [...ledgerTables(), db.deviceState, db.outbox],
+    async () => {
+      // Kiểm ngay trong transaction giữ cả ledger, deviceState và outbox. Một tab không thể đọc
+      // "chưa ghép", xếp hàng sau transaction ghép máy, rồi ghi đè ảnh sổ vừa được stage.
+      await assertOfflineLedgerWriteAllowed(action)
+      return callback()
+    },
+  )
+}
+
+async function replaceLedger(data: BackupData): Promise<void> {
+  const { rows: customerPrices } = cleanPriceRows(data)
+  await clearLedger()
+  await Promise.all([
+    db.settings.bulkPut(data.settings),
+    db.itemGroups.bulkPut(data.itemGroups),
+    db.items.bulkPut(data.items),
+    db.customers.bulkPut(data.customers),
+    db.customerPrices.bulkPut(customerPrices),
+    db.orders.bulkPut(data.orders),
+    db.orderLines.bulkPut(data.orderLines),
+    db.payments.bulkPut(data.payments),
+    db.expenseCategories.bulkPut(data.expenseCategories),
+    db.expenses.bulkPut(data.expenses),
+  ])
+}
 
 export async function wipeAllData(): Promise<void> {
-  await db.transaction('rw', db.tables, clearEveryTable)
+  await offlineLedgerTransaction('xoá', async () => {
+    await clearLedger()
+  })
 }
 
 /**
@@ -82,26 +146,20 @@ export async function wipeAllData(): Promise<void> {
 export async function replaceAllData(data: BackupData): Promise<void> {
   // Dòng giá riêng mồ côi / trùng cặp bị bỏ ở đây thay vì chặn cả file — lý do ở `cleanPriceRows`.
   // Số dòng bị bỏ đã hiện ở cửa xác nhận trước khi tới đây (`describeDroppedPrices`).
-  const { rows: customerPrices } = cleanPriceRows(data)
+  await offlineLedgerTransaction('nhập', async () => {
+    await replaceLedger(data)
+  })
+}
 
-  await db.transaction('rw', db.tables, async () => {
-    await clearEveryTable()
-    await Promise.all([
-      db.settings.bulkPut(data.settings),
-      db.itemGroups.bulkPut(data.itemGroups),
-      db.items.bulkPut(data.items),
-      db.customers.bulkPut(data.customers),
-      db.customerPrices.bulkPut(customerPrices),
-      db.orders.bulkPut(data.orders),
-      db.orderLines.bulkPut(data.orderLines),
-      db.payments.bulkPut(data.payments),
-      db.expenseCategories.bulkPut(data.expenseCategories),
-      db.expenses.bulkPut(data.expenses),
-    ])
+/** Nhập file và dựng lại số tiền trong cùng khóa offline, không mở khe cho tab khác ghép ở giữa. */
+export async function replaceAllDataAndRecalculate(data: BackupData): Promise<number> {
+  return offlineLedgerTransaction('nhập', async () => {
+    await replaceLedger(data)
+    return recalcAll()
   })
 }
 
 export async function countAllRecords(): Promise<number> {
-  const counts = await Promise.all(db.tables.map((table) => table.count()))
+  const counts = await Promise.all(ledgerTables().map((table) => table.count()))
   return counts.reduce((total, count) => total + count, 0)
 }

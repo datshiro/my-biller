@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BackupFileSchema, ItemSchema, OrderSchema, PaymentSchema } from '../schema'
+import { testGid } from '@/test-fixtures'
 
 const emptyBackup = {
   app: 'my-biller',
@@ -27,7 +28,7 @@ describe('BackupFileSchema', () => {
 
   it('từ chối file của app khác hoặc version lạ', () => {
     expect(() => BackupFileSchema.parse({ ...emptyBackup, app: 'knote' })).toThrow()
-    expect(() => BackupFileSchema.parse({ ...emptyBackup, version: 3 })).toThrow()
+    expect(() => BackupFileSchema.parse({ ...emptyBackup, version: 5 })).toThrow()
   })
 
   /**
@@ -43,6 +44,7 @@ describe('BackupFileSchema', () => {
 
 describe('ràng buộc tiền tệ trong schema', () => {
   const order = {
+    gid: testGid(1),
     code: 'PBH-260807-001',
     customerId: null,
     customerName: 'Khách lẻ',
@@ -64,19 +66,43 @@ describe('ràng buộc tiền tệ trong schema', () => {
   })
 
   it('phiếu thu phải lớn hơn 0', () => {
-    const payment = { orderId: 1, customerId: null, amount: 0, method: 'cash', paidAt: 1, note: '' }
+    const payment = {
+      gid: testGid(2),
+      orderId: 1,
+      allocatedOrderId: 0,
+      customerId: null,
+      amount: 0,
+      method: 'cash',
+      paidAt: 1,
+      note: '',
+    }
     expect(() => PaymentSchema.parse(payment)).toThrow()
     expect(PaymentSchema.parse({ ...payment, amount: 1 }).amount).toBe(1)
   })
 
+  it('phiếu thu hiện hành phải nói rõ đang phân bổ vào đơn nào hoặc bằng 0', () => {
+    const payment = {
+      gid: testGid(2),
+      orderId: 1,
+      customerId: null,
+      amount: 1,
+      method: 'cash',
+      paidAt: 1,
+      note: '',
+    }
+
+    expect(() => PaymentSchema.parse(payment)).toThrow()
+    expect(PaymentSchema.parse({ ...payment, allocatedOrderId: 0 }).allocatedOrderId).toBe(0)
+  })
+
   it('cờ isActive lưu 0/1 vì IndexedDB không index được boolean', () => {
-    const item = { name: 'Phở', groupId: null, unit: 'tô', unitPrice: 1_000, costPrice: null, createdAt: 1, updatedAt: 1 }
+    const item = { gid: testGid(3), name: 'Phở', groupId: null, unit: 'tô', unitPrice: 1_000, costPrice: null, createdAt: 1, updatedAt: 1 }
     expect(() => ItemSchema.parse({ ...item, isActive: true })).toThrow()
     expect(ItemSchema.parse({ ...item, isActive: 1 }).isActive).toBe(1)
   })
 
   it('đơn vị toàn khoảng trắng thành rỗng, vì guard `unit ? …` ở các màn không phân biệt được', () => {
-    const item = { name: 'Phở', groupId: null, unitPrice: 1_000, costPrice: null, isActive: 1, createdAt: 1, updatedAt: 1 }
+    const item = { gid: testGid(4), name: 'Phở', groupId: null, unitPrice: 1_000, costPrice: null, isActive: 1, createdAt: 1, updatedAt: 1 }
     // Màn nhập đã tự trim; đường vào còn lại là file sao lưu sửa tay, không qua form nào cả.
     expect(ItemSchema.parse({ ...item, unit: '  ' }).unit).toBe('')
     expect(ItemSchema.parse({ ...item, unit: ' tô ' }).unit).toBe('tô')

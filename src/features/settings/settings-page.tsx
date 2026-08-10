@@ -14,7 +14,7 @@ import {
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
-import { useAppState } from './use-settings'
+import { useAppState, useDeviceConnection, useDeviceIdentity } from './use-settings'
 import {
   countRecords,
   describeCounts,
@@ -27,6 +27,7 @@ import { StatusChip } from '@/ui/chip'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { ListRow } from '@/ui/list-row'
 import { ScreenHeader } from '@/ui/screen-header'
+import { requestFullResync } from '@/db/sync/applier'
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không xong. Thử lại.')
 const SHARE_TARGET_LIFETIME_MS = 10 * 60 * 1000
@@ -57,6 +58,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function SettingsPage() {
   const navigate = useNavigate()
   const state = useAppState()
+  const identity = useDeviceIdentity()
+  const connection = useDeviceConnection()
   const { status, pinning, pin } = useStorageStatus()
   const fileInput = useRef<HTMLInputElement>(null)
   const exportButton = useRef<HTMLButtonElement>(null)
@@ -102,6 +105,19 @@ export function SettingsPage() {
     if (canSharePreparedBackup(prepared)) {
       shareTargetRef.current = prepared
       setShareTarget(prepared)
+    }
+  }
+
+  const requestResync = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await requestFullResync()
+      setNotice('Đang kéo lại toàn bộ sổ chung…')
+    } catch (caught) {
+      setError(message(caught))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -276,22 +292,35 @@ export function SettingsPage() {
         ) : null}
 
         <div className="mt-4">
-          <Button variant="secondary" disabled={busy || modalOpen} onClick={() => fileInput.current?.click()}>
-            Nhập từ file sao lưu
-          </Button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            aria-label="Chọn file sao lưu"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              // Xoá giá trị để chọn lại đúng file vừa chọn vẫn kích hoạt onChange.
-              event.target.value = ''
-              if (file) void pickFile(file)
-            }}
-          />
+          {connection ? (
+            <>
+              <Button variant="secondary" disabled={busy || modalOpen} onClick={() => void requestResync()}>
+                Kéo lại từ đầu
+              </Button>
+              <p className="mt-2 text-[13px] text-muted">
+                Xoá bản sao trên máy này rồi tải lại từ sổ chung. Không ảnh hưởng máy khác.
+              </p>
+            </>
+          ) : (
+            <>
+              <Button variant="secondary" disabled={busy || modalOpen} onClick={() => fileInput.current?.click()}>
+                Nhập từ file sao lưu
+              </Button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                aria-label="Chọn file sao lưu"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  // Xoá giá trị để chọn lại đúng file vừa chọn vẫn kích hoạt onChange.
+                  event.target.value = ''
+                  if (file) void pickFile(file)
+                }}
+              />
+            </>
+          )}
         </div>
       </Section>
 
@@ -329,6 +358,16 @@ export function SettingsPage() {
           onClick={() => void navigate('/them/cua-hang')}
         />
         <ListRow
+          title="Máy bán hàng"
+          subtitle={
+            connection && identity
+              ? `${identity.label} · chữ ${identity.letter} · đã ghép sổ chung`
+              : 'Tên máy, chữ cái và ghép vào sổ chung'
+          }
+          right={<span className="text-[20px] text-muted">›</span>}
+          onClick={() => void navigate('/ghep-may')}
+        />
+        <ListRow
           title="Nhóm mặt hàng"
           subtitle="Gom món để lọc nhanh khi bán"
           right={<span className="text-[20px] text-muted">›</span>}
@@ -342,7 +381,7 @@ export function SettingsPage() {
         />
       </div>
 
-      <DangerZone />
+      {connection ? null : <DangerZone />}
       </div>
 
       {pendingEmptyBackup ? (

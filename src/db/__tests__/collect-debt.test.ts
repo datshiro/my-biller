@@ -5,6 +5,7 @@ import { createCustomer } from '../repositories/customers'
 import { createOrder, listOpenDebtOrders, summarizeDebt, voidOrder } from '../repositories/orders'
 import { addOrderPayment, collectDebt, listCustomerPayments } from '../repositories/payments'
 import { groupDebts, totalDebt } from '@/domain/debt'
+import { installTestDevice } from '@/test-fixtures'
 
 const day = (date: number) => new Date(2026, 7, date, 10, 0).getTime()
 
@@ -13,6 +14,7 @@ let customerId: number
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   customerId = await createCustomer({ name: 'Chị Hoa', phone: '', address: '', note: '' })
 })
 
@@ -109,11 +111,14 @@ describe('thu nợ', () => {
     await addOrderPayment({ orderId: cancelled.id, amount: 30_000, method: 'cash', paidAt: day(1), note: '' })
     await voidOrder(cancelled.id)
 
-    expect((await summarizeDebt()).total).toBe(200_000)
+    expect((await summarizeDebt()).total).toBe(170_000)
 
-    await collect(200_000)
+    await expect(collect(200_000)).rejects.toThrow(/170\.000/)
+    await collect(170_000)
 
-    expect(await db.payments.where('orderId').equals(cancelled.id).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(cancelled.id).toArray()).toMatchObject([
+      { amount: 30_000, allocatedOrderId: 0 },
+    ])
     expect((await summarizeDebt()).total).toBe(0)
   })
 

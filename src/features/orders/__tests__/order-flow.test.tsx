@@ -10,12 +10,14 @@ import { OrderListPage } from '../order-list-page'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder, type OrderDraft } from '@/db/repositories/orders'
+import { installTestDevice } from '@/test-fixtures'
 
 afterEach(cleanup)
 
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 /**
@@ -117,7 +119,7 @@ describe('chi tiết đơn', () => {
     expect(dòng.textContent).toBe('2 × 40.000')
   })
 
-  it('huỷ đơn từ giao diện: phải xác nhận, xong thì đơn thành đã huỷ và mất phiếu thu', async () => {
+  it('huỷ đơn từ giao diện: phải xác nhận, xong thì đơn thành đã huỷ và giữ phiếu thu', async () => {
     const { id } = await createOrder(draft())
     renderApp(`/don/${id}`)
 
@@ -129,7 +131,9 @@ describe('chi tiết đơn', () => {
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Huỷ đơn' }))
 
     await waitFor(async () => expect((await db.orders.get(id))?.status).toBe('void'))
-    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(id).toArray()).toMatchObject([
+      { allocatedOrderId: 0 },
+    ])
     expect(await screen.findByText(/không tính vào doanh thu/)).toBeDefined()
   })
 

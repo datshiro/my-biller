@@ -5,12 +5,19 @@ import { createCustomer } from './repositories/customers'
 import { createExpense, createExpenseCategory } from './repositories/expenses'
 import { createGroup, createItem } from './repositories/items'
 import { saveShop } from './repositories/settings'
+import { getDeviceIdentity, saveDeviceIdentity } from './repositories/device-state'
 
 const DAY = 86_400_000
 
 /** Dữ liệu mẫu cho lúc dev. Chỉ gọi khi `import.meta.env.DEV` — bản build không được chạy hàm này. */
 export async function seedDemoData(): Promise<void> {
   if ((await db.items.count()) > 0) return
+
+  // Dữ liệu mẫu cũng đi qua đúng cửa repository như dữ liệu thật. Từ schema có mã phiếu theo máy,
+  // một hồ sơ dev trắng cần danh tính trước khi tạo đơn; bản production không gọi hàm này.
+  if (!(await getDeviceIdentity())) {
+    await saveDeviceIdentity({ label: 'Máy mẫu', letter: 'A' })
+  }
 
   await saveShop({ name: 'Quán Cơm Bà Tư', phone: '0909 123 456', address: '12 Lê Lợi, Q1' })
 

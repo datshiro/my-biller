@@ -4,8 +4,12 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
+const browserGlobalsDisabled = Object.fromEntries(
+  Object.keys(globals.browser).map((name) => [name, 'off']),
+)
+
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist', 'coverage', 'node_modules'] },
+  { ignores: ['dist', 'dev-dist', 'coverage', 'node_modules', 'worker/.wrangler'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -20,6 +24,15 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
+  },
+  {
+    files: ['worker/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...browserGlobalsDisabled,
+        ...globals.serviceworker,
+      },
     },
   },
   {

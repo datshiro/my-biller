@@ -151,7 +151,7 @@ test('bán 2 món → phiếu mở ra và tải được ảnh PNG thật', asyn
   expect(image.ratio).toBe(2)
   expect(image.width).toBe(720)
   // Một trang thì giữ đúng tên số phiếu, không đánh số thừa.
-  expect(image.filename).toMatch(/^PBH-\d{6}-\d{3}\.png$/)
+  expect(image.filename).toMatch(/^PBH-\d{6}-[A-Z]\d{3}\.png$/)
 })
 
 /**

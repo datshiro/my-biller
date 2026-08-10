@@ -1,12 +1,14 @@
 # Tech Stack — my-biller
 
-Status: approved · Date: 2026-08-06 · Decided in `/ak:bootstrap --full`
+Status: approved · Updated: 2026-08-09
 Research: `plans/reports/research-260806-2326-mobile-biller-pwa.md`
 
 ## Hình thái sản phẩm
 
-PWA mobile-first, **local-first / offline-only**, không backend, không đăng nhập.
-Phiếu bán hàng (không phải hóa đơn điện tử CQT). Tiếng Việt, VND.
+PWA mobile-first với **sổ chung do máy chủ quyết định**. Cloudflare Durable Object giữ sổ chính của
+mỗi quán; IndexedDB trên từng máy là bản sao đọc và hàng đợi ghi khi mạng chập chờn. M1 ghép theo
+thiết bị, chưa có đăng nhập hay vai trò người dùng. Phiếu bán hàng (không phải hóa đơn điện tử CQT).
+Tiếng Việt, VND.
 
 ## Stack đã chốt
 
@@ -17,9 +19,9 @@ Phiếu bán hàng (không phải hóa đơn điện tử CQT). Tiếng Việt, 
 | Ngôn ngữ | TypeScript | **^6.0.3** | KHÔNG dùng TS 7 — xem "Bẫy đã tránh" |
 | Plugin React | @vitejs/plugin-react | ^6.0.5 | peer: vite ^8 ✓ |
 | CSS | tailwindcss + @tailwindcss/vite | ^4.3.3 | Tailwind v4, config trong CSS |
-| DB local | dexie | ^4.4.4 | IndexedDB |
+| DB local | dexie | ^4.4.4 | IndexedDB: bản sao đọc, outbox và danh tính máy |
 | Reactive query | dexie-react-hooks | ^4.4.0 | `useLiveQuery` → UI tự update, **không cần Redux/Zustand** |
-| Backup | *(tự viết)* | — | JSON thuần đọc được bằng mắt, validate bằng zod. Đã cân nhắc `dexie-export-import` nhưng blob của nó không đọc/sửa tay được — với app không backend thì khả năng phục hồi tay quan trọng hơn |
+| Backup | *(tự viết)* | — | JSON thuần, validate bằng zod; cố ý loại token và trạng thái đồng bộ |
 | PWA | vite-plugin-pwa | ^1.3.0 | Workbox, peer vite ^8 ✓ |
 | Router | react-router | ^8.3.0 | declarative mode — cần cho **nút back Android** |
 | Chart | *(CSS thuần)* | — | Đã đo recharts: **93,9 KB gzip** cho một `BarChart` tối thiểu, trong khi cả app chỉ 152,7 KB gzip JS. Biểu đồ duy nhất của app là 7 cột tĩnh (không tooltip, không zoom) nên vẽ bằng flex + `height: %` — xem `src/features/reports/revenue-expense-chart.tsx` |
@@ -31,6 +33,8 @@ Phiếu bán hàng (không phải hóa đơn điện tử CQT). Tiếng Việt, 
 | Lint | typescript-eslint | ^8.66.0 | |
 | Font | Be Vietnam Pro (Google Fonts) | — | self-host, subset `vietnamese` |
 | Deploy | Cloudflare Pages | — | static, HTTPS sẵn (PWA bắt buộc HTTPS) |
+| Sync API | Cloudflare Workers + Durable Objects SQLite | wrangler ^4.120.0 | một Durable Object cho mỗi quán, WebSocket hibernation |
+| Worker test | @cloudflare/vitest-pool-workers | ^0.20.3 | chạy Worker/DO thật trong môi trường Miniflare |
 
 ## Bẫy đã tránh (kiểm chứng bằng `npm view`)
 
@@ -39,8 +43,11 @@ Phiếu bán hàng (không phải hóa đơn điện tử CQT). Tiếng Việt, 
 
 ## Quyết định kiến trúc + lý do
 
-**1. IndexedDB (Dexie), không SQLite-WASM.**
-SQLite trong browser chỉ nhanh khi chạy sync-I/O trong Web Worker → thêm cả lớp worker + ~1MB wasm. Quy mô 1 shop (≤ vài chục nghìn dòng) thì Dexie thừa sức, lại có sẵn export/import JSON cho backup. YAGNI.
+**1. Durable Object là nguồn sự thật; IndexedDB (Dexie) là bản sao đọc.**
+
+Một Durable Object SQLite cho mỗi quán cô lập sổ theo đối tượng vật lý và xếp thứ tự sự kiện bằng
+`seq`. Dexie vẫn giữ UI phản ứng nhanh, làm việc qua mạng chập chờn và backup JSON; lớp đồng bộ nằm
+trong `src/db/sync/`. Không dùng SQLite-WASM trong trình duyệt.
 
 **2. Không dùng thư viện PDF ở bản 1.**
 jsPDF/pdf-lib không có glyph dấu tiếng Việt → phải embed + subset TTF. Thay bằng:
@@ -49,7 +56,8 @@ jsPDF/pdf-lib không có glyph dấu tiếng Việt → phải embed + subset TT
 - Fallback khi `navigator.share` không có: nút tải ảnh + copy text phiếu.
 
 **3. Không state-management library.**
-`useLiveQuery` của Dexie đọc trực tiếp IndexedDB và tự re-render khi DB đổi. DB **là** state. Thêm Zustand/Redux chỉ là tầng cache trùng lặp.
+`useLiveQuery` đọc bản sao Dexie và tự re-render khi applier ghi sự kiện từ máy chủ. Bốn truy vấn
+theo khoảng còn nghe thêm revision của sync applier. Thêm Zustand/Redux chỉ là tầng cache trùng lặp.
 
 **4. Tiền lưu bằng số nguyên VND.**
 Invariant toàn hệ thống: mọi số tiền là `number` nguyên, đơn vị đồng. VND không có phần thập phân → không bao giờ float. Chỉ format khi render.
@@ -66,12 +74,14 @@ Bản 1: gọi từ ô search khi gõ tay. Phase sau: Web Speech API hoặc LLM 
 ```
 src/
   app/         routing, layout, providers, service-worker registration
-  db/          dexie schema + version migrations, backup export/import
+  db/          dexie schema + migrations, backup, outbox, pull/push/applier/leader
   domain/      logic thuần, không import React: money, order totals,
                debt balance, report aggregate, parse-order-text
   features/    sales · items · customers · expenses · debts · reports · settings
   ui/          component dùng chung (Button, Sheet, NumberPad, Money…)
   lib/         format tiền/ngày, share, print, storage-persist
+shared/        schema sự kiện đồng bộ dùng chung
+worker/        Worker routes + ShopDO SQLite
 ```
 `domain/` không được import từ `db/` hay React → test bằng Vitest không cần DOM.
 
@@ -99,7 +109,7 @@ xác nhận. Chặn cả file vì mấy dòng rác thì đường ra duy nhất 
 lớn hơn nhiều lần cái hại. Riêng dòng trùng cặp thì bắt buộc phải lọc: để nguyên là `bulkPut` ăn
 `ConstraintError` và **huỷ cả lượt nhập**, không riêng dòng đó.
 
-**File sao lưu nhận `version: 1 | 2`, xuất `2`.** File v1 ra đời trước bảng giá nên thiếu hẳn khoá
+**File sao lưu nhận các version cũ và xuất version hiện hành.** File v1 ra đời trước bảng giá nên thiếu hẳn khoá
 `customerPrices`; nó được bù `[]` ở bước preprocess **theo đúng `version`**, chứ không phải bằng
 `.default([])` trên trường đó — `.default()` sẽ nuốt luôn một file v2 bị lược mất bảng giá, và khi đó
 `version` chỉ còn là chữ trang trí.
@@ -117,9 +127,13 @@ kết nối và chặn màn, vì giữ kết nối là mọi lệnh ghi hỏng t
 ## Ràng buộc & rủi ro chấp nhận
 
 - **iOS xóa storage sau 7 ngày không dùng** (Safari policy). Mitigation bắt buộc trong bản 1: gọi `navigator.storage.persist()`, banner nhắc backup, hiện "lần backup gần nhất", export 1 chạm. → Backup là tính năng **an toàn dữ liệu**, không phải nice-to-have.
-- Mất máy = mất dữ liệu (hệ quả của offline-only, user đã chấp nhận).
+- Mất một máy không làm mất sổ chung, nhưng làm mất token thiết bị; phải ghép lại. File sao lưu vẫn
+  cần cho phục hồi độc lập và đối soát.
+- M1 tin cậy các máy đã ghép: mọi máy ngang quyền; xác thực người dùng và vai trò chủ/nhân viên để
+  milestone sau.
 - PWA cần HTTPS → không mở bằng `file://`. Dev trên điện thoại thật: `@vitejs/plugin-basic-ssl` hoặc `cloudflared tunnel`.
 
 ## Non-goals (bản 1)
 
-Hóa đơn điện tử CQT/chữ ký số · tồn kho · in bluetooth 58/80mm · cloud sync / đa thiết bị / nhiều nhân viên · voice-AI nhập đơn · VietQR trên phiếu · cổng thanh toán.
+Hóa đơn điện tử CQT/chữ ký số · tồn kho · in bluetooth 58/80mm · tài khoản người dùng và phân quyền
+chủ/nhân viên · voice-AI nhập đơn · VietQR trên phiếu · cổng thanh toán.

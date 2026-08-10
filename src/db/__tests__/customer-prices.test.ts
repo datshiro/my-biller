@@ -9,6 +9,7 @@ import {
 import { createCustomer, deleteCustomer } from '../repositories/customers'
 import { createItem, deleteItem } from '../repositories/items'
 import type { CustomerPrice } from '@/domain/schema'
+import { testGid } from '@/test-fixtures'
 
 const item = { name: 'Phở bò', groupId: null, unit: 'tô', unitPrice: 55_000, costPrice: null, isActive: 1 } as const
 
@@ -74,7 +75,7 @@ describe('savePriceBook', () => {
 
 describe('buildPriceBook', () => {
   const row = (over: Partial<CustomerPrice>): CustomerPrice => ({
-    id: 1, customerId: 1, itemId: 1, unitPrice: 45_000, createdAt: 0, updatedAt: 0, ...over,
+    id: 1, gid: testGid(1), customerId: 1, itemId: 1, unitPrice: 45_000, createdAt: 0, updatedAt: 0, ...over,
   })
 
   it('giá 0 vào được bảng tra — nó là giá, không phải "chưa đặt"', () => {

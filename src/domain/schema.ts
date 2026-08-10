@@ -1,144 +1,106 @@
 import { z } from 'zod'
+import {
+  AppStateSchema,
+  CustomerPriceSchema,
+  CustomerSchema,
+  ExpenseCategorySchema,
+  ExpenseSchema,
+  ItemGroupSchema,
+  ItemSchema,
+  OrderLineSchema,
+  OrderSchema,
+  PaymentSchema,
+  SettingRowSchema,
+  ShopSettingsSchema,
+} from '@shared/ledger-schemas'
+
+export {
+  AppStateSchema,
+  CustomerPriceSchema,
+  CustomerSchema,
+  ExpenseCategorySchema,
+  ExpenseSchema,
+  ItemGroupSchema,
+  ItemSchema,
+  OrderLineSchema,
+  OrderSchema,
+  PaymentSchema,
+  SettingRowSchema,
+  ShopSettingsSchema,
+} from '@shared/ledger-schemas'
 
 const Id = z.number().int().positive()
 const Timestamp = z.number().int()
-const Money = z.number().int().nonnegative()
-const PositiveMoney = z.number().int().positive()
+const Gid = z.string().uuid()
 
-/**
- * IndexedDB không nhận `true/false` làm khoá chỉ mục — bản ghi có giá trị boolean ở trường được index
- * sẽ bị bỏ khỏi index một cách âm thầm. Nên cờ nào có index thì lưu 0/1.
- */
-const Flag = z.union([z.literal(0), z.literal(1)])
-
-export const ShopSettingsSchema = z.object({
-  name: z.string(),
-  phone: z.string(),
-  address: z.string(),
-  footerNote: z.string(),
+export const DeviceIdentitySchema = z.object({
+  key: z.literal('identity'),
+  deviceId: Gid,
+  label: z.string().trim().min(1),
+  letter: z.string().regex(/^[A-Z]$/),
 })
 
-/** Trạng thái của app, khác với thông tin quán ở chỗ người bán không tự gõ ra. */
-export const AppStateSchema = z.object({
-  /** `null` = chưa sao lưu lần nào. Dùng cho banner nhắc sao lưu. */
-  lastBackupAt: Timestamp.nullable(),
-  /**
-   * Đã nạp loại chi phí mặc định một lần rồi. Không suy ra từ "bảng loại đang rỗng" được: người bán
-   * xoá sạch loại vì không muốn dùng thì lần mở app sau chúng sẽ mọc lại.
-   */
-  seededExpenseCategories: z.boolean(),
+export const DeviceSchemaStateSchema = z.object({
+  key: z.literal('schema'),
+  schemaGen: z.number().int().positive(),
 })
 
-export const SettingRowSchema = z.discriminatedUnion('key', [
-  z.object({ key: z.literal('shop'), value: ShopSettingsSchema }),
-  z.object({ key: z.literal('app'), value: AppStateSchema }),
+export const DeviceConnectionSchema = z.object({
+  key: z.literal('connection'),
+  shopId: Gid,
+  token: z.string().min(32),
+  syncUrl: z.string().url(),
+})
+
+export const DeviceSyncStateSchema = z.object({
+  key: z.literal('sync'),
+  lastSeq: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+  resyncRequired: z.boolean(),
+  lastConnectedAt: Timestamp.nullable(),
+})
+
+export const DeviceLeaseSchema = z.object({
+  key: z.literal('lease'),
+  ownerId: Gid,
+  epoch: z.number().int().positive(),
+  expiresAt: Timestamp,
+})
+
+export const DeviceNoticeSchema = z.object({
+  key: z.literal('notice'),
+  id: Gid,
+  kind: z.enum(['sync', 'revoked']).default('sync'),
+  message: z.string().min(1),
+  createdAt: Timestamp,
+})
+
+export const DeviceWriteBlockSchema = z.object({
+  key: z.literal('writeBlock'),
+  reason: z.literal('revoked'),
+  shopId: Gid.nullable().default(null),
+  createdAt: Timestamp,
+})
+
+export const DevicePairingLockSchema = z.object({
+  key: z.literal('pairing'),
+  attemptId: Gid,
+  hasLocalLedger: z.boolean(),
+  localLedgerRows: z.number().int().nonnegative(),
+  connectionSaved: z.boolean(),
+  expiresAt: Timestamp,
+})
+
+export const DeviceStateSchema = z.discriminatedUnion('key', [
+  DeviceIdentitySchema,
+  DeviceSchemaStateSchema,
+  DeviceConnectionSchema,
+  DeviceSyncStateSchema,
+  DeviceLeaseSchema,
+  DeviceNoticeSchema,
+  DeviceWriteBlockSchema,
+  DevicePairingLockSchema,
 ])
-
-export const ItemGroupSchema = z.object({
-  id: Id.optional(),
-  name: z.string().min(1),
-  sortOrder: z.number().int(),
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-export const ItemSchema = z.object({
-  id: Id.optional(),
-  name: z.string().min(1),
-  groupId: Id.nullable(),
-  // `.trim()` ở đây chứ không ở màn nhập: form đã tự trim, nhưng file sao lưu thì người bán sửa tay
-  // được (`settings/backup.ts` nói thẳng vậy), nên `unit: " "` vào lại qua đường khôi phục. Chuỗi đó
-  // truthy, luồn qua mọi guard `unit ? …` và hiện lại đúng dấu gạch chéo lủng lẳng đã đi sửa.
-  unit: z.string().trim(),
-  unitPrice: Money,
-  costPrice: Money.nullable(),
-  isActive: Flag,
-  // `.default('')` để bản ghi tạo trước khi có trường này vẫn đọc/sửa được, không cần nâng version Dexie
-  // (trường không nằm trong index nên `stores()` giữ nguyên).
-  note: z.string().default(''),
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-export const CustomerSchema = z.object({
-  id: Id.optional(),
-  name: z.string().min(1),
-  phone: z.string(),
-  address: z.string(),
-  note: z.string(),
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-/**
- * Giá riêng của một khách cho một mặt hàng. `0` là **giá thật** (hàng biếu, khuyến mãi), không phải
- * "chưa đặt" — chưa đặt thì đơn giản là không có dòng nào ở đây.
- */
-export const CustomerPriceSchema = z.object({
-  id: Id.optional(),
-  customerId: Id,
-  itemId: Id,
-  unitPrice: Money,
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-export const OrderSchema = z.object({
-  id: Id.optional(),
-  code: z.string().min(1),
-  customerId: Id.nullable(),
-  customerName: z.string(),
-  subtotal: Money,
-  discount: Money,
-  surcharge: Money,
-  total: Money,
-  paidAmount: Money,
-  status: z.enum(['paid', 'partial', 'unpaid', 'void']),
-  soldAt: Timestamp,
-  note: z.string(),
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-/** name/unit/unitPrice/costPrice là ảnh chụp lúc bán — sửa giá mặt hàng không được làm sai phiếu cũ. */
-export const OrderLineSchema = z.object({
-  id: Id.optional(),
-  orderId: Id,
-  itemId: Id.nullable(),
-  name: z.string().min(1),
-  unit: z.string(),
-  unitPrice: Money,
-  costPrice: Money.nullable(),
-  qty: z.number().positive(),
-  amount: Money,
-})
-
-export const PaymentSchema = z.object({
-  id: Id.optional(),
-  orderId: Id,
-  customerId: Id.nullable(),
-  amount: PositiveMoney,
-  method: z.enum(['cash', 'transfer']),
-  paidAt: Timestamp,
-  note: z.string(),
-})
-
-export const ExpenseCategorySchema = z.object({
-  id: Id.optional(),
-  name: z.string().min(1),
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
-
-export const ExpenseSchema = z.object({
-  id: Id.optional(),
-  categoryId: Id.nullable(),
-  amount: PositiveMoney,
-  note: z.string(),
-  spentAt: Timestamp,
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-})
 
 /**
  * Trong DB `id` do IndexedDB cấp nên lúc tạo mới còn trống, nhưng trong **file sao lưu** thì bắt buộc:
@@ -163,10 +125,68 @@ export const BackupDataSchema = z.object({
  * khi schema soi `data` — chứ **không** cho trường đó một `.default([])`: `.default()` nuốt luôn file v2
  * bị lược mất bảng giá, và khi đó `version` chỉ còn là chữ trang trí.
  */
-function fillPriceBookOfV1(raw: unknown): unknown {
-  const file = raw as { version?: unknown; data?: object } | null
-  if (file?.version !== 1 || typeof file.data !== 'object' || file.data === null) return raw
-  return { ...file, data: { customerPrices: [], ...file.data } }
+function migrateLegacyBackup(raw: unknown): unknown {
+  const file = raw as { version?: unknown; data?: Record<string, unknown> } | null
+  if (
+    (file?.version !== 1 && file?.version !== 2 && file?.version !== 3) ||
+    typeof file.data !== 'object' ||
+    file.data === null
+  ) {
+    return raw
+  }
+
+  const dataWithPriceBook = file.version === 1 ? { customerPrices: [], ...file.data } : file.data
+  const withGid = (rows: unknown) =>
+    Array.isArray(rows)
+      ? rows.map((row) =>
+          typeof row === 'object' && row !== null ? { gid: crypto.randomUUID(), ...row } : row,
+        )
+      : rows
+
+  const data =
+    file.version < 3
+      ? {
+          ...dataWithPriceBook,
+          itemGroups: withGid(dataWithPriceBook.itemGroups),
+          items: withGid(dataWithPriceBook.items),
+          customers: withGid(dataWithPriceBook.customers),
+          customerPrices: withGid(dataWithPriceBook.customerPrices),
+          orders: withGid(dataWithPriceBook.orders),
+          orderLines: withGid(dataWithPriceBook.orderLines),
+          payments: withGid(dataWithPriceBook.payments),
+          expenseCategories: withGid(dataWithPriceBook.expenseCategories),
+          expenses: withGid(dataWithPriceBook.expenses),
+        }
+      : dataWithPriceBook
+
+  const voidOrderIds = new Set(
+    Array.isArray(data.orders)
+      ? data.orders.flatMap((row) => {
+          const order = row as { id?: unknown; status?: unknown }
+          return order.status === 'void' && typeof order.id === 'number' ? [order.id] : []
+        })
+      : [],
+  )
+
+  return {
+    ...file,
+    data: {
+      ...data,
+      payments: Array.isArray(data.payments)
+        ? data.payments.map((row) => {
+            if (typeof row !== 'object' || row === null) return row
+            const payment = row as { orderId?: unknown }
+            return {
+              ...payment,
+              allocatedOrderId:
+                typeof payment.orderId === 'number' && !voidOrderIds.has(payment.orderId)
+                  ? payment.orderId
+                  : 0,
+            }
+          })
+        : data.payments,
+    },
+  }
 }
 
 /**
@@ -174,10 +194,10 @@ function fillPriceBookOfV1(raw: unknown): unknown {
  * Khi đổi schema sau này, `version` là chỗ rẽ nhánh để file sao lưu cũ vẫn nhập được.
  */
 export const BackupFileSchema = z.preprocess(
-  fillPriceBookOfV1,
+  migrateLegacyBackup,
   z.object({
     app: z.literal('my-biller'),
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
     appVersion: z.string(),
     exportedAt: z.string(),
     data: BackupDataSchema,
@@ -187,6 +207,13 @@ export const BackupFileSchema = z.preprocess(
 export type ShopSettings = z.infer<typeof ShopSettingsSchema>
 export type AppState = z.infer<typeof AppStateSchema>
 export type SettingRow = z.infer<typeof SettingRowSchema>
+export type DeviceIdentity = z.infer<typeof DeviceIdentitySchema>
+export type DeviceSchemaState = z.infer<typeof DeviceSchemaStateSchema>
+export type DeviceConnection = z.infer<typeof DeviceConnectionSchema>
+export type DeviceSyncState = z.infer<typeof DeviceSyncStateSchema>
+export type DeviceLease = z.infer<typeof DeviceLeaseSchema>
+export type DeviceNotice = z.infer<typeof DeviceNoticeSchema>
+export type DeviceState = z.infer<typeof DeviceStateSchema>
 export type ItemGroup = z.infer<typeof ItemGroupSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Customer = z.infer<typeof CustomerSchema>

@@ -13,6 +13,7 @@ import type { DayGroup } from '@/domain/day-grouping'
 import { groupOrdersByDay } from '@/domain/order-grouping'
 import type { Order, OrderLine, Payment } from '@/domain/schema'
 import { useDayTick } from '@/ui/use-day-tick'
+import { useSyncRevision } from '@/features/sync/use-sync-revision'
 
 export type OrderWindow = {
   groups: DayGroup<Order>[]
@@ -28,6 +29,7 @@ export type OrderWindow = {
  */
 export function useOrderWindow(days: number): OrderWindow | undefined {
   const day = useDayTick()
+  const syncRevision = useSyncRevision()
   return useLiveQuery(async () => {
     const now = Date.now()
     const from = startOfDay(subDays(now, days - 1)).getTime()
@@ -37,7 +39,7 @@ export function useOrderWindow(days: number): OrderWindow | undefined {
       hasOrdersBefore(from),
     ])
     return { groups: groupOrdersByDay(orders, now), summaries, hasOlder }
-  }, [days, day])
+  }, [days, day, syncRevision])
 }
 
 export type OrderDetail = { order: Order; lines: OrderLine[]; payments: Payment[] }

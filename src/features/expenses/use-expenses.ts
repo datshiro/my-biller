@@ -4,6 +4,7 @@ import { listExpenseCategories, listExpensesBetween } from '@/db/repositories/ex
 import { groupByDay, type DayGroup } from '@/domain/day-grouping'
 import type { Expense, ExpenseCategory } from '@/domain/schema'
 import { useDayTick } from '@/ui/use-day-tick'
+import { useSyncRevision } from '@/features/sync/use-sync-revision'
 
 export type ExpenseMonth = {
   label: string
@@ -34,6 +35,7 @@ export function useExpenseMonth(
   categoryId: number | null,
 ): ExpenseMonth | undefined {
   const day = useDayTick()
+  const syncRevision = useSyncRevision()
   return useLiveQuery(async () => {
     const now = Date.now()
     const month = startOfMonth(addMonths(now, monthOffset))
@@ -60,7 +62,7 @@ export function useExpenseMonth(
       todayTotal: sum(inToday.filter(matches)),
       now,
     }
-  }, [monthOffset, categoryId, day])
+  }, [monthOffset, categoryId, day, syncRevision])
 }
 
 export function useExpenseCategories(): ExpenseCategory[] | undefined {

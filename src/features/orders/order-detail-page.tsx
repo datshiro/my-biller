@@ -155,10 +155,8 @@ export function OrderDetailPage() {
         <ConfirmDialog
           title="Huỷ đơn này?"
           message={
-            // Nói thẳng số tiền sắp biến khỏi sổ. Huỷ đơn xoá luôn phiếu thu, nên tiền mặt người bán
-            // đã thực sự cầm sẽ không còn ở đâu cả — kể cả trong báo cáo của kỳ đã chốt.
             order.paidAmount > 0
-              ? `${order.code} đã thu ${formatVnd(order.paidAmount)}. Huỷ đơn sẽ xoá luôn số đã thu đó khỏi sổ — hãy trả lại tiền cho khách trước. Đơn cũng thôi tính vào doanh thu và công nợ. Không hoàn tác được.`
+              ? `${order.code} đã thu ${formatVnd(order.paidAmount)}. Huỷ đơn không xoá lần thu này; tiền sẽ được đánh dấu chưa gắn vào đơn để xử lý ở lịch sử khách. Đơn thôi tính vào doanh thu và công nợ. Không hoàn tác được.`
               : `${order.code} sẽ không còn tính vào doanh thu và công nợ. Không hoàn tác được.`
           }
           confirmLabel="Huỷ đơn"

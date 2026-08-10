@@ -29,7 +29,10 @@ export function owingOf(order: DebtOrder): number {
  * là lỗi dữ liệu chứ không phải công nợ. Bán nợ đã bắt buộc chọn khách từ màn bán hàng. Nhờ loại ở
  * đây mà tổng nợ trên trang khách, màn Công nợ và card Báo cáo luôn bằng nhau — cả ba đọc hàm này.
  */
-export function groupDebts(orders: readonly DebtOrder[]): DebtGroup[] {
+export function groupDebts(
+  orders: readonly DebtOrder[],
+  unallocatedByCustomer: ReadonlyMap<number, number> = new Map(),
+): DebtGroup[] {
   const byCustomer = new Map<number, DebtGroup>()
 
   for (const order of orders) {
@@ -49,6 +52,13 @@ export function groupDebts(orders: readonly DebtOrder[]): DebtGroup[] {
         oldestAt: order.soldAt,
       })
     }
+  }
+
+  for (const [customerId, credit] of unallocatedByCustomer) {
+    const group = byCustomer.get(customerId)
+    if (!group) continue
+    group.total = Math.max(0, group.total - credit)
+    if (group.total === 0) byCustomer.delete(customerId)
   }
 
   return [...byCustomer.values()].sort((a, b) => a.oldestAt - b.oldestAt)

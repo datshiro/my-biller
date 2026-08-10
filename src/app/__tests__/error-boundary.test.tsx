@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorBoundary } from '../error-boundary'
 import { db } from '@/db/db'
 import { getAppState } from '@/db/repositories/settings'
+import { testGid } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 
@@ -71,6 +72,7 @@ describe('chắn cuối', () => {
 
   it('bấm đường cứu vẫn tải file không nhập lại được nhưng không đóng dấu an toàn', async () => {
     await db.items.add({
+      gid: testGid(1),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',

@@ -1,6 +1,6 @@
 import { assertMoney } from './money'
 
-export type OpenOrder = { orderId: number; remaining: number; soldAt: number }
+export type OpenOrder = { orderId: number; gid: string; remaining: number; soldAt: number }
 export type Allocation = { orderId: number; amount: number }
 export type AllocationResult = { allocations: Allocation[]; leftover: number }
 
@@ -17,7 +17,7 @@ export function allocateDebtPayment(
 
   const queue = [...openOrders]
     .filter((order) => order.remaining > 0)
-    .sort((a, b) => a.soldAt - b.soldAt || a.orderId - b.orderId)
+    .sort((a, b) => a.soldAt - b.soldAt || a.gid.localeCompare(b.gid))
 
   const allocations: Allocation[] = []
   let left = amount

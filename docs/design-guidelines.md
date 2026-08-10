@@ -92,8 +92,9 @@ Nút back Android phải hoạt động ở mọi màn (dùng `react-router`, kh
 Mỗi màn danh sách phải có: **loading** (skeleton), **empty** (câu hướng dẫn + nút hành động), **error khi ghi DB**.
 Empty state phải nói việc cần làm, ví dụ màn Mặt hàng trống → "Chưa có mặt hàng nào. Thêm mặt hàng để bán nhanh hơn." + nút "＋ Thêm mặt hàng".
 
-## Riêng cho app offline
+## Trạng thái mạng và an toàn dữ liệu
 
 - Banner nhắc sao lưu khi > 7 ngày chưa backup (dismiss được, quay lại sau 24h).
 - Màn Cài đặt hiện: lần sao lưu gần nhất, trạng thái "Bộ nhớ đã được ghim" (`navigator.storage.persist()`), dung lượng đang dùng.
-- Không có spinner "đang đồng bộ" — app không có server, đừng làm user tưởng có.
+- Không hiện spinner liên tục khi mọi thứ bình thường. Chỉ hiện banner toàn cục khi mất kết nối,
+  đang kéo lại sổ, có thay đổi chờ đẩy hoặc máy bị thu hồi; câu chữ phải nói được người bán cần làm gì.

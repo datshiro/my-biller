@@ -1,4 +1,4 @@
-# Deploy lên Cloudflare Pages
+# Deploy my-biller lên Cloudflare
 
 **Bản đang chạy: <https://an-quynh.pages.dev>** (project Cloudflare Pages `an-quynh`, nhánh production
 `main`).
@@ -7,15 +7,81 @@
 > Muốn địa chỉ khác thì phải tạo project mới mang đúng tên đó. Xem
 > [`cloudflare-deploy-giai-thich.html`](./cloudflare-deploy-giai-thich.html).
 
-App không có backend. "Deploy" ở đây chỉ là đưa mấy file tĩnh trong `dist/` lên một host chạy HTTPS,
-để điện thoại cài được về màn hình chính. Dữ liệu vẫn nằm trong IndexedDB của từng máy — deploy
-không đụng gì tới nó.
+Frontend vẫn là các file tĩnh trong `dist/` trên Cloudflare Pages. M1 đồng bộ nhiều máy thêm một
+Cloudflare Worker ở `my-biller-sync.datshiro.workers.dev`; domain riêng để sau. Dữ liệu IndexedDB
+không bị thay đổi chỉ vì frontend hoặc Worker được deploy — migration chỉ chạy khi app mới mở DB.
+
+## Worker đồng bộ và cổng chi phí M1
+
+Số liệu đọc ngày **09/08/2026** từ tài liệu chính thức của Cloudflare:
+
+| Hạn mức Durable Objects SQLite trên Workers Free | Giá trị |
+|---|---:|
+| Request | 100.000/ngày |
+| Thời lượng compute | 13.000 GB-s/ngày |
+| Dòng SQLite đọc | 5.000.000/ngày |
+| Dòng SQLite ghi | 100.000/ngày |
+| Tổng dung lượng tài khoản | 5 GB |
+| Dung lượng một Durable Object | 1 GB |
+
+Nguồn: [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
+[limits](https://developers.cloudflare.com/durable-objects/platform/limits/) và
+[FAQ](https://developers.cloudflare.com/durable-objects/reference/faq/). Free chỉ cho tạo Durable
+Object dùng SQLite. Khi vượt một hạn mức ngày, thao tác tương ứng **thất bại** thay vì tự phát sinh
+phí vượt mức; hạn mức ngày đặt lại lúc 00:00 UTC.
+
+Ước lượng bảo thủ cho một quán: 1.000 sự kiện/ngày, mỗi sự kiện tối đa 10 dòng đọc + 10 dòng ghi,
+và tối đa 5 thông báo WebSocket. Kết quả khoảng 6.000 request, 10.000 dòng đọc và 10.000 dòng ghi
+mỗi ngày — đều dưới 10% hạn mức tương ứng. Giả sử mỗi sự kiện chiếm trung bình 2 KB kể cả index,
+một năm `oplog` khoảng 730 MB, dưới giới hạn 1 GB của một quán nhưng phải đo lại trước năm vận hành
+thứ hai. Với giả định cực đại 1 giây compute ở 128 MB cho mỗi sự kiện thì khoảng 125 GB-s/ngày;
+WebSocket hibernation không tính thời lượng khi idle đủ điều kiện.
+
+**Kết luận Phase 1: đi tiếp ở 0 USD/tháng.** Cổng này chỉ đúng khi tài khoản ở Workers Free và
+mức dùng không vượt các hạn mức trên. Nếu số đo production tiến gần hạn mức, phải dừng mở rộng thay
+vì tự chuyển sang Paid.
+
+### Giới hạn thử mã ghép
+
+Binding `PAIR_RATE_LIMITER` trong [`worker/wrangler.toml`](../worker/wrangler.toml) cho phép 20 lượt
+`POST /pair` mỗi 60 giây theo `cf-connecting-ip`. Worker kiểm lớp này trước khi đọc mã định tuyến và
+chọn Durable Object; request không có header Cloudflare đó được cho qua để local/test vẫn chạy.
+
+Đây là bộ đếm cục bộ, thiên về cho qua của Cloudflare: nó giảm thử mã hàng loạt ở edge nhưng không
+phải lá chắn quota phân tán tuyệt đối. Không dùng nó để nâng dự báo tải hay cam kết không thể vượt
+hạn mức Free; ShopDO vẫn giữ chốt thử sai theo từng quán. M1 tiếp tục dùng domain miễn phí
+`my-biller-sync.datshiro.workers.dev` với `workers_dev = true`, chưa mua domain riêng.
+
+```bash
+npm run worker:dev       # http://127.0.0.1:8787
+curl https://my-biller-sync.datshiro.workers.dev/health
+```
+
+Lần đầu hoặc khi xoay secret, đặt secret phía Worker; không đưa giá trị vào `.env`, frontend hay
+lệnh được lưu trong tài liệu:
+
+```bash
+npx wrangler secret put ADMIN_SECRET --config worker/wrangler.toml
+npm run worker:deploy
+curl --fail https://my-biller-sync.datshiro.workers.dev/health
+```
+
+Deploy Worker và kiểm `/health` **trước** Pages. Frontend production đã trỏ vào domain miễn phí
+`my-biller-sync.datshiro.workers.dev`; chỉ đổi `DEFAULT_SYNC_URL` khi mua domain riêng và phải giữ
+CORS/HTTPS hoạt động. `ADMIN_SECRET` chỉ dùng để operator tạo quán đầu tiên qua `POST /shop`, không
+được đóng gói vào PWA. Protocol pending không thêm endpoint ADMIN: client kích hoạt reservation bằng
+token máy tạm qua `POST /shop/{shopId}/seed` (route `/seed` trong ShopDO). Khi khôi phục sự cố,
+rollback cả hai artifact về cặp phiên bản đã kiểm thử; không xoá Durable Object hoặc đổi migration
+tag đã phát hành.
+
+Health endpoint đã trả `200 {"status":"ok"}` từ mạng Internet ngày 09/08/2026. Lượt kiểm cuối
+trên điện thoại thật qua 4G vẫn là bước thủ công trước khi đưa máy người bán vào M1.
 
 ## 1. Build
 
 ```bash
 npm ci
-npm run build     # tsc --noEmit && vite build → dist/
+npm run build     # tsc -b && vite build → dist/
 ```
 
 Kết quả cần có trong `dist/`: `index.html`, `assets/`, `manifest.webmanifest`, `sw.js`, `icons/`,
@@ -90,7 +156,8 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
 ## Giới hạn đã biết
 
 - **iOS xoá dữ liệu của web app không dùng tới sau ~7 ngày.** Đó là lý do màn Cài đặt có nút ghim bộ
-  nhớ và banner nhắc sao lưu. Sao lưu ra file vẫn là lớp bảo vệ thật sự duy nhất.
+  nhớ và banner nhắc sao lưu. Sổ chung giúp dựng lại bản sao máy, còn file sao lưu vẫn là lớp phục
+  hồi độc lập do người bán tự giữ.
 - **Nút ghim bộ nhớ bị từ chối cho tới khi site được bookmark.** Đo trên Chrome-Android, bốn lượt
   trên máy vừa xoá sạch dữ liệu Chrome:
 
@@ -103,9 +170,10 @@ Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
   Lượt C loại trừ khả năng "cứ chờ là được". Chỉ **một** thao tác bookmark là đủ, không cần cài lên
   màn hình chính. Trước đó nút bấm không hỏng — nó bị Chrome từ chối, mà người bán không nhận ra khác
   biệt vì màn hình vẫn hiện y như cũ. Đáng cân nhắc cho màn Cài đặt tự nói ra điều này.
-- Mỗi máy một kho dữ liệu riêng. Không có đồng bộ; muốn chuyển máy thì Sao lưu ở máy cũ → Nhập ở máy
-  mới.
-- Không có tài khoản, không có phân quyền. Ai cầm máy là dùng được.
+- Mỗi máy giữ bản sao IndexedDB riêng nhưng các máy đã ghép dùng chung một sổ trên Durable Object.
+  Mạng chập chờn được xếp hàng; xung đột nghiệp vụ có thể bị hoàn lại khi kết nối trở lại.
+- M1 chưa có tài khoản và phân quyền người dùng. Mọi máy đã ghép có quyền ngang nhau, gồm tạo mã ghép
+  và thu hồi máy khác.
 
 ## Số đo tham chiếu (đo trên máy dev)
 

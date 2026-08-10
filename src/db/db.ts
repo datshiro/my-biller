@@ -1,8 +1,10 @@
-import Dexie, { type Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
 import { blockDb } from './db-block'
+import { newGid } from '@/domain/gid'
 import type {
   Customer,
   CustomerPrice,
+  DeviceState,
   Expense,
   ExpenseCategory,
   Item,
@@ -12,8 +14,43 @@ import type {
   Payment,
   SettingRow,
 } from '@/domain/schema'
+import { DeviceSchemaStateSchema } from '@/domain/schema'
+import type { OutboxRow } from './sync/outbox'
+import { installOutboxHooks } from './sync/outbox'
 
 type Stamped = { createdAt?: number; updatedAt?: number }
+type MigratedRow = { id?: number; gid?: string; createdAt?: number; updatedAt?: number }
+
+export const CURRENT_SCHEMA_GEN = 5
+
+async function backfillGids(
+  transaction: Transaction,
+  tableName: string,
+  preserveTimestamps: boolean,
+): Promise<void> {
+  const table = transaction.table<MigratedRow, number>(tableName)
+  const rows = await table.toArray()
+  if (rows.length === 0) return
+
+  const migrated = rows.map((row) => ({ ...row, gid: row.gid ?? newGid() }))
+  await table.bulkPut(migrated)
+
+  if (preserveTimestamps) {
+    await table.bulkPut(
+      migrated.map((row, index) => ({
+        ...row,
+        createdAt: rows[index]?.createdAt,
+        updatedAt: rows[index]?.updatedAt,
+      })),
+    )
+  }
+
+  const stored = await table.toArray()
+  const gids = new Set(stored.map((row) => row.gid))
+  if (stored.some((row) => !row.gid) || gids.size !== stored.length) {
+    throw new Error(`Không thể cấp gid duy nhất cho bảng ${tableName}.`)
+  }
+}
 
 /**
  * `createdAt` chỉ được đặt khi bản ghi chưa có — nhập file sao lưu phải giữ nguyên mốc thời gian gốc,
@@ -34,6 +71,7 @@ function stampTimestamps<T extends Stamped>(table: Table<T, number>): void {
 
 export class BillerDb extends Dexie {
   settings!: Table<SettingRow, string>
+  deviceState!: Table<DeviceState, string>
   itemGroups!: Table<ItemGroup, number>
   items!: Table<Item, number>
   customers!: Table<Customer, number>
@@ -43,12 +81,13 @@ export class BillerDb extends Dexie {
   payments!: Table<Payment, number>
   expenseCategories!: Table<ExpenseCategory, number>
   expenses!: Table<Expense, number>
+  outbox!: Table<OutboxRow, number>
 
   constructor(name = 'my-biller') {
     super(name)
 
     // KHÔNG BAO GIỜ sửa version(1). Đổi schema về sau phải thêm version(n+1).stores(...).upgrade(...)
-    // vì app không có backend để migrate hộ — dữ liệu nằm trên máy người dùng.
+    // vì Worker không thể tự nâng IndexedDB nằm trên từng máy người dùng.
     this.version(1).stores({
       settings: 'key',
       itemGroups: '++id, name, sortOrder',
@@ -68,6 +107,73 @@ export class BillerDb extends Dexie {
       customerPrices: '++id, &[customerId+itemId], customerId, itemId',
     })
 
+    this.version(3)
+      .stores({
+        deviceState: 'key',
+        itemGroups: '++id, name, sortOrder, &gid',
+        items: '++id, name, groupId, isActive, &gid',
+        customers: '++id, name, phone, &gid',
+        customerPrices: '++id, &[customerId+itemId], customerId, itemId, &gid',
+        orders: '++id, &code, customerId, soldAt, status, &gid',
+        orderLines: '++id, orderId, itemId, &gid',
+        payments: '++id, orderId, customerId, paidAt, &gid',
+        expenseCategories: '++id, name, &gid',
+        expenses: '++id, categoryId, spentAt, &gid',
+      })
+      .upgrade(async (transaction) => {
+        for (const tableName of [
+          'itemGroups',
+          'items',
+          'customers',
+          'customerPrices',
+          'orders',
+          'expenseCategories',
+          'expenses',
+        ]) {
+          await backfillGids(transaction, tableName, true)
+        }
+        for (const tableName of ['orderLines', 'payments']) {
+          await backfillGids(transaction, tableName, false)
+        }
+
+        await transaction
+          .table<DeviceState, string>('deviceState')
+          .put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: 3 }))
+      })
+
+    this.version(4)
+      .stores({
+        payments: '++id, orderId, customerId, paidAt, &gid, allocatedOrderId',
+      })
+      .upgrade(async (transaction) => {
+        const orders = await transaction.table<Order, number>('orders').toArray()
+        const voidOrderIds = new Set(
+          orders.flatMap((order) =>
+            order.status === 'void' && order.id !== undefined ? [order.id] : [],
+          ),
+        )
+        const payments = await transaction.table<Payment, number>('payments').toArray()
+        await transaction.table<Payment, number>('payments').bulkPut(
+          payments.map((payment) => ({
+            ...payment,
+            allocatedOrderId: voidOrderIds.has(payment.orderId) ? 0 : payment.orderId,
+          })),
+        )
+        await transaction
+          .table<DeviceState, string>('deviceState')
+          .put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: 4 }))
+      })
+
+    this.version(5)
+      .stores({
+        outbox: '++id, &eventId, txId, status, [txId+txOrder]',
+      })
+      .upgrade((transaction) =>
+        transaction
+          .table<DeviceState, string>('deviceState')
+          .put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: 5 })),
+      )
+
     stampTimestamps(this.itemGroups)
     stampTimestamps(this.items)
     stampTimestamps(this.customers)
@@ -75,6 +181,14 @@ export class BillerDb extends Dexie {
     stampTimestamps(this.orders)
     stampTimestamps(this.expenseCategories)
     stampTimestamps(this.expenses)
+    installOutboxHooks(this)
+
+    // `.upgrade()` không chạy khi IndexedDB được tạo mới thẳng ở version mới nhất.
+    this.on('populate', (transaction) =>
+      transaction
+        .table<DeviceState, string>('deviceState')
+        .put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: CURRENT_SCHEMA_GEN })),
+    )
 
     // Một bản JS khác trên cùng máy vừa nâng version. Giữ kết nối thì bản kia treo mãi ở `blocked`;
     // dùng tiếp thì mọi lệnh ghi đều hỏng trong khi màn hình vẫn hiện như thường. Đóng rồi chặn màn
@@ -104,13 +218,21 @@ export class BillerDb extends Dexie {
     // So theo **tên bảng thật**, không so số version: Dexie có đường sửa schema mở lại ở
     // `idbdb.version + 1`, nên một bản v1 hoàn toàn hợp lệ có thể nằm ở version thật 11 — lấy
     // `11 > 1*10` làm dấu hiệu là chặn nhầm chính mình.
-    this.on('ready', () => {
+    this.on('ready', async () => {
       const daKhai = new Set(this.tables.map((table) => table.name))
       const laHoac = [...this.backendDB().objectStoreNames].filter((name) => !daKhai.has(name))
-      if (laHoac.length === 0) return
+      if (laHoac.length > 0) {
+        blockDb('stale-app')
+        throw new Error(`App cũ hơn dữ liệu trong máy (chưa biết bảng: ${laHoac.join(', ')}).`)
+      }
+
+      const schemaState = await this.deviceState.get('schema')
+      if (schemaState?.key !== 'schema' || schemaState.schemaGen <= CURRENT_SCHEMA_GEN) return
 
       blockDb('stale-app')
-      throw new Error(`App cũ hơn dữ liệu trong máy (chưa biết bảng: ${laHoac.join(', ')}).`)
+      throw new Error(
+        `App cũ hơn dữ liệu trong máy (schema ${schemaState.schemaGen} > ${CURRENT_SCHEMA_GEN}).`,
+      )
     })
   }
 }

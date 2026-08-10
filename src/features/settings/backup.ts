@@ -1,5 +1,4 @@
-import { collectBackup, replaceAllData, wipeAllData } from '@/db/backup'
-import { recalcAll } from '@/db/recalc'
+import { collectBackup, replaceAllDataAndRecalculate, wipeAllData } from '@/db/backup'
 import { saveLastBackupAt } from '@/db/repositories/settings'
 import {
   backupFilename,
@@ -8,6 +7,7 @@ import {
   type BackupCounts,
 } from '@/domain/backup'
 import type { BackupData, BackupFile } from '@/domain/schema'
+import { getDeviceConnection } from '@/db/repositories/device-state'
 
 function downloadJson(filename: string, file: File): void {
   const url = URL.createObjectURL(file)
@@ -141,11 +141,16 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
  * con số đã lưu trong file.
  */
 export async function applyBackup(data: BackupData): Promise<void> {
-  await replaceAllData(data)
-  await recalcAll()
+  if (await getDeviceConnection()) {
+    throw new Error('Máy đã ghép không nhập file sao lưu. Hãy dùng “Kéo lại từ đầu”.')
+  }
+  await replaceAllDataAndRecalculate(data)
 }
 
 /** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */
 export async function wipeEverything(): Promise<void> {
+  if (await getDeviceConnection()) {
+    throw new Error('Máy đã ghép không xoá sổ chung từ đây. Hãy dùng “Kéo lại từ đầu”.')
+  }
   await wipeAllData()
 }

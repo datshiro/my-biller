@@ -9,6 +9,7 @@ import { collectBackup } from '@/db/backup'
 import { db } from '@/db/db'
 import { createItem } from '@/db/repositories/items'
 import { getAppState, saveAppState } from '@/db/repositories/settings'
+import { testGid } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 const DAY = 24 * 60 * 60 * 1000
@@ -136,6 +137,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
 
   it('file không nhập lại được ưu tiên đường cứu: tải ngay, không cảnh báo rỗng, không stamp/share', async () => {
     await db.items.add({
+      gid: testGid(98),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',
@@ -418,6 +420,7 @@ describe('bản sao an toàn không nhập lại được', () => {
   /** Ghi thẳng vào bảng, không qua schema: `collectBackup` xuất được, `parseBackupFile` từ chối. */
   const addOddItem = () =>
     db.items.add({
+      gid: testGid(99),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',

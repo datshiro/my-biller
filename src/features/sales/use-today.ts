@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { listOrdersOfDay } from '@/db/repositories/orders'
 import { aggregateRevenue } from '@/domain/report'
 import { useDayTick } from '@/ui/use-day-tick'
+import { useSyncRevision } from '@/features/sync/use-sync-revision'
 
 export type TodaySummary = { revenue: number; orderCount: number }
 
@@ -11,11 +12,12 @@ export type TodaySummary = { revenue: number; orderCount: number }
  */
 export function useToday(): TodaySummary | undefined {
   const day = useDayTick()
+  const syncRevision = useSyncRevision()
   return useLiveQuery(async () => {
     const orders = await listOrdersOfDay(Date.now())
     return {
       revenue: aggregateRevenue(orders),
       orderCount: orders.filter((order) => order.status !== 'void').length,
     }
-  }, [day])
+  }, [day, syncRevision])
 }

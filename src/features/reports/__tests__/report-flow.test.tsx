@@ -9,6 +9,7 @@ import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createExpense, createExpenseCategory } from '@/db/repositories/expenses'
 import { createOrder, type OrderLineDraft } from '@/db/repositories/orders'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 const at = (day: number, hour = 10) => new Date(2026, 7, day, hour).getTime()
@@ -16,6 +17,7 @@ const at = (day: number, hour = 10) => new Date(2026, 7, day, hour).getTime()
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
 })
 
@@ -118,7 +120,9 @@ describe('màn báo cáo', () => {
       customerId,
     })
     await db.payments.add({
+      gid: testGid(999),
       orderId: id,
+      allocatedOrderId: id,
       customerId,
       amount: 200_000,
       method: 'cash',
@@ -221,9 +225,10 @@ describe('màn báo cáo', () => {
 
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Hôm nay' }))
+    await screen.findByText('LỢI NHUẬN HÔM NAY')
 
     const chart = screen.getByText('7 ngày gần nhất').closest('section') as HTMLElement
-    await waitFor(() => expect(within(chart).getAllByRole('listitem')).toHaveLength(7))
+    expect(within(chart).getAllByRole('listitem')).toHaveLength(7)
   })
 
   it('card công nợ tính trên toàn bộ đơn chưa trả đủ, không riêng kỳ đang xem', async () => {

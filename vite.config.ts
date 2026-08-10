@@ -6,7 +6,10 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
+    },
   },
   plugins: [
     react(),
@@ -44,12 +47,21 @@ export default defineConfig({
     }),
   ],
   test: {
-    environment: 'node',
-    // Ranh giới ngày/tháng của app tính theo giờ địa phương người bán. Chạy test ở múi giờ khác thì
-    // mấy ca 23:50 / 00:10 vẫn xanh mà chẳng chứng minh được gì.
-    env: { TZ: 'Asia/Ho_Chi_Minh' },
-    setupFiles: ['./src/test-setup.ts'],
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'app',
+          environment: 'node',
+          // Ranh giới ngày/tháng của app tính theo giờ địa phương người bán. Chạy test ở múi giờ khác
+          // thì mấy ca 23:50 / 00:10 vẫn xanh mà chẳng chứng minh được gì.
+          env: { TZ: 'Asia/Ho_Chi_Minh' },
+          setupFiles: ['./src/test-setup.ts'],
+          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+        },
+      },
+      './worker/vitest.config.ts',
+    ],
     // `src/db` cũng phải nằm trong tầm đo: đó là lớp duy nhất thật sự ghi tiền (transaction, recalc,
     // sao lưu). Không đo thì không biết nhánh nào chưa ai chạy qua.
     coverage: { include: ['src/domain/**', 'src/db/**'], reporter: ['text', 'html'] },
