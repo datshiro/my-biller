@@ -63,13 +63,14 @@ Nạp Dữ Liệu Mẫu
 
 Bộ Dữ Liệu Mẫu Phải Sẵn Sàng
     [Documentation]    Đối chiếu mốc hoàn tất trong IndexedDB thật; mọi bảng đều có số bản ghi cố định.
-    ${mặt_hàng}=    Đọc Bảng    items
+    [Arguments]    ${page}=${None}
+    ${mặt_hàng}=    Đọc Bảng    items    ${page}
     Length Should Be    ${mặt_hàng}    4    Bộ mẫu chưa ghi đủ mặt hàng.
-    ${khách_hàng}=    Đọc Bảng    customers
+    ${khách_hàng}=    Đọc Bảng    customers    ${page}
     Length Should Be    ${khách_hàng}    1    Bộ mẫu chưa ghi đủ khách hàng.
-    ${đơn_hàng}=    Đọc Bảng    orders
+    ${đơn_hàng}=    Đọc Bảng    orders    ${page}
     Length Should Be    ${đơn_hàng}    2    Bộ mẫu chưa ghi đủ đơn hàng.
-    ${chi_phí}=    Đọc Bảng    expenses
+    ${chi_phí}=    Đọc Bảng    expenses    ${page}
     Length Should Be    ${chi_phí}    1    Bộ mẫu chưa ghi đủ chi phí.
 
 # --- Điều hướng ---------------------------------------------------------------------------

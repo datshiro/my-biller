@@ -71,8 +71,7 @@ Mở Hai Máy Đã Ghép
     Chọn Máy A
     Nạp Dữ Liệu Mẫu
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
-    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
-    ...    items    4    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Bộ Dữ Liệu Mẫu Phải Sẵn Sàng    ${MÁY_B_PAGE}
 
 Đặt Tên Máy Hiện Tại
     [Arguments]    ${tên}    ${chữ}
