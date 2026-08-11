@@ -13,6 +13,7 @@ playwright-report/
 
 # Robot Framework: môi trường Python và kết quả mỗi lần chạy
 .venv-robot/
+__pycache__/
 robot/results/
 robot/downloads/
 
