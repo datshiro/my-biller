@@ -43,6 +43,25 @@ ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-t
     Hai Bảng Phải Cùng Gid Và Nội Dung    orderLines
     Hai Bảng Phải Cùng Gid Và Nội Dung    payments
 
+Heartbeat cục bộ giữ lease và đường sync realtime
+    [Documentation]    Khóa lỗi poll mạng dài hơn TTL làm lease hết hạn: heartbeat cục bộ phải giữ
+    ...    lease sống, còn WebSocket vẫn đưa đơn sang máy kia trong 3 giây.
+    Sleep    20s
+    Lease Máy Phải Còn Hạn    ${MÁY_A_PAGE}
+    Lease Máy Phải Còn Hạn    ${MÁY_B_PAGE}
+
+    Chọn Máy A
+    Click    ${NAV_BAN}
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${bắt_đầu}=    Evaluate    __import__('time').monotonic()
+    Wait Until Keyword Succeeds    30x    100ms    Bảng Máy Phải Có Số Dòng
+    ...    orders    3    ${MÁY_B_PAGE}
+    ${độ_trễ}=    Evaluate    __import__('time').monotonic() - ${bắt_đầu}
+    Should Be True    ${độ_trễ} <= 3.0    Đơn mất ${độ_trễ} giây mới hiện ở máy B.
+
 Ba đơn tạo khi mất mạng lên sổ đúng một lần và phiếu vẫn tải được
     [Documentation]    Khóa lối bán lúc chập mạng: ba đơn nằm bền trong outbox, phiếu cuối vẫn dựng
     ...    và tải được, rồi cả ba hội tụ đúng một lần khi có mạng lại.

@@ -6,8 +6,12 @@ declare const __MY_BILLER_REMOTE_SYNC_URL__: string
 const localHostnames = new Set(['127.0.0.1', 'localhost'])
 const localSyncUrl = 'http://127.0.0.1:8787'
 
+export function isLocalSyncHostname(hostname: string): boolean {
+  return localHostnames.has(hostname)
+}
+
 export function resolveDefaultSyncUrl(hostname: string, remoteSyncUrl: string): string {
-  if (localHostnames.has(hostname)) return localSyncUrl
+  if (isLocalSyncHostname(hostname)) return localSyncUrl
   return remoteSyncUrl
 }
 

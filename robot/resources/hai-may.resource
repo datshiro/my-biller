@@ -167,6 +167,14 @@ Epoch Máy Phải Từ
     Length Should Be    ${lease}    1    Chưa có tab nào giữ lease đồng bộ.
     Should Be True    ${lease}[0][epoch] >= ${epoch_tối_thiểu}
 
+Lease Máy Phải Còn Hạn
+    [Arguments]    ${page}
+    ${state}=    Đọc Bảng    deviceState    ${page}
+    ${lease}=    Evaluate    [row for row in $state if row['key'] == 'lease']
+    Length Should Be    ${lease}    1    Chưa có tab nào giữ lease đồng bộ.
+    ${now}=    Evaluate    int(__import__('time').time() * 1000)
+    Should Be True    ${lease}[0][expiresAt] > ${now}    Lease đã hết hạn trước lượt poll mạng kế tiếp.
+
 Cho Lease Hiện Tại Hết Hạn
     [Documentation]    Giả lập đúng trạng thái bền vững mà một tab treo để lại: owner cũ vẫn còn,
     ...    nhưng lease đã quá hạn. Tab cũ vẫn mở để kiểm nó không giành lại epoch sau đó.

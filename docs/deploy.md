@@ -13,7 +13,7 @@ không bị thay đổi chỉ vì frontend hoặc Worker được deploy — mig
 
 ## Worker đồng bộ và cổng chi phí M1
 
-Số liệu đọc ngày **09/08/2026** từ tài liệu chính thức của Cloudflare:
+Số liệu đọc ngày **11/08/2026** từ tài liệu chính thức của Cloudflare:
 
 | Hạn mức Durable Objects SQLite trên Workers Free | Giá trị |
 |---|---:|
@@ -30,12 +30,14 @@ Nguồn: [Durable Objects pricing](https://developers.cloudflare.com/durable-obj
 Object dùng SQLite. Khi vượt một hạn mức ngày, thao tác tương ứng **thất bại** thay vì tự phát sinh
 phí vượt mức; hạn mức ngày đặt lại lúc 00:00 UTC.
 
-Ước lượng bảo thủ cho một quán: 1.000 sự kiện/ngày, mỗi sự kiện tối đa 10 dòng đọc + 10 dòng ghi,
-và tối đa 5 thông báo WebSocket. Kết quả khoảng 6.000 request, 10.000 dòng đọc và 10.000 dòng ghi
-mỗi ngày — đều dưới 10% hạn mức tương ứng. Giả sử mỗi sự kiện chiếm trung bình 2 KB kể cả index,
-một năm `oplog` khoảng 730 MB, dưới giới hạn 1 GB của một quán nhưng phải đo lại trước năm vận hành
-thứ hai. Với giả định cực đại 1 giây compute ở 128 MB cho mỗi sự kiện thì khoảng 125 GB-s/ngày;
-WebSocket hibernation không tính thời lượng khi idle đủ điều kiện.
+Runner remote poll dự phòng mỗi 30 giây; lease cục bộ 5 giây không gọi Cloudflare. Một máy mở 8 giờ
+tạo khoảng 2.880 request nền; hai máy là 5.760. Ước lượng bảo thủ thêm 1.000 sự kiện/ngày, mỗi sự
+kiện tối đa 6 request, 10 dòng đọc và 10 dòng ghi: tổng khoảng 11.760 request, dưới 70.000 dòng đọc
+và dưới 12.000 dòng ghi mỗi ngày — đều dưới 12% hạn mức tương ứng. Localhost vẫn poll 2 giây để
+bù WebSocket local không ổn định, nhưng không dùng quota Cloudflare. Giả sử mỗi sự kiện chiếm trung
+bình 2 KB kể cả index, một năm `oplog` khoảng 730 MB, dưới giới hạn 1 GB của một quán nhưng phải đo
+lại trước năm vận hành thứ hai. Với giả định cực đại 1 giây compute ở 128 MB cho mỗi sự kiện thì
+khoảng 125 GB-s/ngày; WebSocket hibernation không tính thời lượng khi idle đủ điều kiện.
 
 **Kết luận Phase 1: đi tiếp ở 0 USD/tháng.** Cổng này chỉ đúng khi tài khoản ở Workers Free và
 mức dùng không vượt các hạn mức trên. Nếu số đo production tiến gần hạn mức, phải dừng mở rộng thay

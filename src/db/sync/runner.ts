@@ -5,7 +5,12 @@ import {
   getDevicePairingState,
   markDeviceRevoked,
 } from '../repositories/device-state'
-import { activatePairedDevice, claimServerEpoch, SyncApiError } from './client'
+import {
+  activatePairedDevice,
+  claimServerEpoch,
+  isLocalSyncHostname,
+  SyncApiError,
+} from './client'
 import { claimLeadership, renewLeadership, type LeaderToken } from './leader'
 import { drainOutbox } from './pusher'
 import { pullAll } from './puller'
@@ -14,7 +19,10 @@ import { getDeviceSyncState } from '../repositories/device-state'
 import { resetReadReplica } from './applier'
 import { listPendingOutbox, OUTBOX_CHANGED_EVENT } from './outbox'
 
-const POLL_MS = 2_000
+const LOCAL_POLL_MS = 2_000
+const isLocalRuntime = isLocalSyncHostname(globalThis.location?.hostname ?? '')
+const LEASE_MAINTENANCE_MS = 5_000
+const REMOTE_POLL_MS = isLocalRuntime ? LOCAL_POLL_MS : 30_000
 
 let started = false
 
@@ -26,12 +34,14 @@ export function startSyncRunner(): () => void {
   let socket: WebSocket | null = null
   let running = false
   let rerunRequested = false
+  let forceRerunRequested = false
   let stopped = false
 
-  const tick = async () => {
+  const tick = async (forceRemoteSync = true) => {
     if (stopped) return
     if (running) {
       rerunRequested = true
+      forceRerunRequested ||= forceRemoteSync
       return
     }
     running = true
@@ -43,6 +53,7 @@ export function startSyncRunner(): () => void {
         await activatePairedDevice(connection, await listPendingOutbox())
         await completeDevicePairing(pairing.attemptId)
       }
+      const hadLeadership = leader !== null
       leader ??= await claimLeadership(db, ownerId)
       if (!leader) return
 
@@ -52,6 +63,9 @@ export function startSyncRunner(): () => void {
         socket = null
         return
       }
+
+      if (!forceRemoteSync && hadLeadership) return
+
       await claimServerEpoch(connection, leader.epoch)
       if ((await getDeviceSyncState()).resyncRequired) await resetReadReplica(leader)
       await pullAll(connection, leader)
@@ -73,18 +87,22 @@ export function startSyncRunner(): () => void {
     } finally {
       running = false
       if (rerunRequested) {
+        const forceRemoteSync = forceRerunRequested
         rerunRequested = false
-        void tick()
+        forceRerunRequested = false
+        void tick(forceRemoteSync)
       }
     }
   }
 
-  const timer = window.setInterval(() => void tick(), POLL_MS)
+  const leaseTimer = window.setInterval(() => void tick(false), LEASE_MAINTENANCE_MS)
+  const remotePollTimer = window.setInterval(() => void tick(), REMOTE_POLL_MS)
   const onVisible = () => {
     if (document.visibilityState === 'visible') void tick()
   }
+  const onOnline = () => void tick()
   const onOutboxChanged = () => void tick()
-  window.addEventListener('online', tick)
+  window.addEventListener('online', onOnline)
   window.addEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged)
   document.addEventListener('visibilitychange', onVisible)
   void tick()
@@ -92,8 +110,9 @@ export function startSyncRunner(): () => void {
   return () => {
     stopped = true
     started = false
-    window.clearInterval(timer)
-    window.removeEventListener('online', tick)
+    window.clearInterval(leaseTimer)
+    window.clearInterval(remotePollTimer)
+    window.removeEventListener('online', onOnline)
     window.removeEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged)
     document.removeEventListener('visibilitychange', onVisible)
     socket?.close()

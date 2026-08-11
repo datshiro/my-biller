@@ -33,6 +33,11 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
    Áp lại một `seq` đã thấy là no-op. Bốn màn truy vấn theo khoảng nghe thêm sync revision để không
    bỏ qua bản ghi nằm ngoài khoảng IndexedDB đang theo dõi.
 
+Runner duy trì lease cục bộ mỗi 5 giây nhưng chỉ poll Worker dự phòng mỗi 30 giây. Outbox mới,
+WebSocket, sự kiện online và lúc app hiện lại vẫn kích hoạt đồng bộ ngay. Localhost giữ poll 2 giây vì
+WebSocket upgrade của Worker local không phải lúc nào cũng hoạt động; nhịp này không dùng quota
+Cloudflare.
+
 Đường trên dành cho máy đã kích hoạt. Lần nạp sổ đầu tiên khi ghép máy dùng admission nguyên tử riêng,
 không đẩy từng event qua pusher.
 
