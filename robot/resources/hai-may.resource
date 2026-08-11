@@ -41,7 +41,7 @@ Mở Hai Máy Đã Ghép
     TRY
         Fill Secret    ${MÃ_GHÉP_INPUT}    $BOOTSTRAP_CODE
         Bấm Nút    GHÉP MÁY NÀY
-        Wait Until Keyword Succeeds    30x    500ms    Chờ Thấy Chữ    Đã ghép
+        Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible    timeout=30s
     FINALLY
         Register Keyword To Run On Failure    ${failure_keyword}
     END
@@ -62,7 +62,7 @@ Mở Hai Máy Đã Ghép
         Đặt Tên Máy Hiện Tại    Quầy B    B
         Fill Secret    ${MÃ_GHÉP_INPUT}    $PAIR_CODE
         Bấm Nút    GHÉP MÁY NÀY
-        Wait Until Keyword Succeeds    30x    500ms    Chờ Thấy Chữ    Đã ghép
+        Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible    timeout=30s
     FINALLY
         Set Log Level    ${mức_log}
         Register Keyword To Run On Failure    ${failure_keyword}
@@ -160,19 +160,6 @@ Giá Mặt Hàng Phải Là
     ${found}=    Evaluate    [row for row in $items if row['name'] == $tên_món]
     Length Should Be    ${found}    1
     Should Be Equal As Integers    ${found}[0][unitPrice]    ${giá}
-
-Gọi Đường Xoá Sổ Đã Ghép
-    ${message}=    Evaluate JavaScript    ${None}
-    ...    async () => {
-    ...        const { wipeEverything } = await import('/src/features/settings/backup.ts')
-    ...        try {
-    ...            await wipeEverything()
-    ...            return 'KHÔNG BỊ CHẶN'
-    ...        } catch (error) {
-    ...            return error instanceof Error ? error.message : String(error)
-    ...        }
-    ...    }
-    RETURN    ${message}
 
 Epoch Máy Phải Từ
     [Arguments]    ${page}    ${epoch_tối_thiểu}

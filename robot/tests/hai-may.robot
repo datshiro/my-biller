@@ -202,22 +202,23 @@ Máy chủ từ chối đơn ghi thì dòng cục bộ được hoàn lại
     Set Offline    ${False}
     Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
 
-Máy đã ghép không xoá được outbox và danh tính máy
-    [Documentation]    Đường xoá cũ không được làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy.
+Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
+    [Documentation]    Máy đã ghép chỉ được kéo lại bản sao đọc, không được lộ đường xoá/nhập có
+    ...    thể làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy.
     Chọn Máy A
+    Mở Màn    /them/cai-dat
+    Không Được Thấy Chữ    Xoá toàn bộ dữ liệu
+    Không Được Thấy Chữ    Nhập từ file sao lưu
+    Chờ Thấy Chữ    Kéo lại từ đầu
+
     Mở Màn    /them/mat-hang/moi
     Điền Ô    Tên mặt hàng *    Món đang chờ mạng
     Điền Ô    Giá bán *    13000
     Set Offline    ${True}
     Bấm Nút    LƯU MẶT HÀNG
     Chờ Thấy Chữ    Món đang chờ mạng
-    ${outbox_trước}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
-    Should Not Be Empty    ${outbox_trước}
-
-    ${message}=    Gọi Đường Xoá Sổ Đã Ghép
-    Should Contain    ${message}    Máy đã ghép không xoá sổ chung
-    ${outbox_sau}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
-    Should Be Equal    ${outbox_sau}    ${outbox_trước}
+    ${outbox}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+    Should Not Be Empty    ${outbox}
     ${device}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
     ${connection}=    Evaluate    [row for row in $device if row['key'] == 'connection']
     Length Should Be    ${connection}    1
