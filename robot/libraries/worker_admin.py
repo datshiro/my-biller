@@ -21,7 +21,10 @@ def create_test_shop(worker_url: str) -> str:
         request = Request(
             endpoint,
             method="POST",
-            headers={"authorization": f"Bearer {admin_secret}"},
+            headers={
+                "authorization": f"Bearer {admin_secret}",
+                "user-agent": "my-biller-staging-regression/1.0",
+            },
         )
         try:
             with urlopen(request, timeout=10) as response:
