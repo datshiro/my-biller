@@ -126,6 +126,52 @@ npx wrangler deployments list --config worker/wrangler.toml --env staging
 npx wrangler rollback <version-id> --config worker/wrangler.toml --env staging
 ```
 
+## Phục hồi schema v5 cùng origin
+
+`dist-recovery/` là artifact sự cố riêng của 2.0.0. Nó mở cùng Dexie schema v5 nhưng chỉ hiển thị số
+bản ghi và tải file sao lưu; không khởi động sync runner, không bán hàng, nhập file, ghép máy, kéo lại
+từ đầu hoặc ghi ledger/outbox. File tải xuống vẫn chứa toàn bộ sổ và thông tin khách nên phải được
+lưu ở nơi tin cậy.
+
+IndexedDB bị cô lập theo origin. Bản recovery trên localhost, staging hoặc một Pages preview URL
+không thể đọc dữ liệu của `an-quynh.pages.dev`. Chỉ kích hoạt recovery trên **đúng production origin**
+khi app 2.x chính không mở được mà cần lấy dữ liệu ra. Đây là deployment production, cần authorization
+riêng và vẫn phải đi qua quy trình CI/CD/Tech Ops; không dùng lệnh deploy thủ công như một đường tắt.
+
+Chuẩn bị và kiểm artifact ở local/CI:
+
+```bash
+npm ci
+npm run test:e2e:recovery
+npm run test:live:recovery
+npm run build:recovery
+```
+
+Ba lệnh cuối phải xanh và `dist-recovery/` phải tách khỏi `dist/`. Trước khi kích hoạt trong sự cố:
+
+1. Xác nhận version/source của recovery khớp schema đang chạy và Worker không cần thay đổi.
+2. Yêu cầu người dùng đóng hoàn toàn mọi tab Safari, PWA Màn hình chính và app 2.x cũ đang mở; một
+   context cũ còn chạy vẫn có thể ghi dữ liệu hoặc đẩy outbox.
+3. Deploy artifact recovery bằng pipeline production lên đúng origin. Không deploy Worker và không
+   xoá Durable Object, IndexedDB hay service-worker storage.
+4. Mở origin để trình duyệt nhận service worker recovery. Recovery worker dùng `skipWaiting` và
+   `clientsClaim` để tự kích hoạt; normal build vẫn giữ cơ chế hỏi trước khi cập nhật. Nếu còn thấy
+   app bán hàng, không thao tác với sổ: chờ worker mới giành quyền, đóng hẳn context rồi mở lại/tải lại.
+5. Trước khi đọc hoặc tải file, bắt buộc kiểm đủ ba dấu: title tab là
+   **“my-biller — Phục hồi chỉ đọc”**, banner đỏ **“CHẾ ĐỘ PHỤC HỒI — KHÔNG BÁN HÀNG”** và phần tử
+   gốc có `data-app-mode="recovery"`. Thiếu một dấu thì dừng canary, không xem đó là recovery.
+6. Chỉ sau canary trên mới đối chiếu số bản ghi, tải file và giữ file ở nơi tin cậy. Không tiếp tục
+   bán hàng trong thời gian recovery đang được kích hoạt.
+
+Thoát recovery bằng **roll-forward**: build và deploy artifact app 2.x đã sửa qua pipeline, sau đó
+yêu cầu người dùng chấp nhận cập nhật service worker/tải lại rồi kiểm số liệu. Không rollback frontend
+về 1.0.2 sau khi schema v5 đã được mở; 1.0.2 không hiểu schema mới. Nếu cần rollback Worker, chỉ dùng
+Worker version tương thích với frontend/schema v5 và version đã qua kiểm thử.
+
+Normal và staging đều ghi vào `dist/`, còn recovery ghi vào `dist-recovery/`. Khi chuẩn bị local
+release candidate, build staging và recovery trước rồi chạy `npm run build` cuối cùng để `dist/` còn
+lại là artifact production normal.
+
 ## 1. Build
 
 ```bash

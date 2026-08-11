@@ -27,12 +27,16 @@ production không có nút này.
 |---|---|
 | `npm run dev` | Dev server |
 | `npm run build` | `tsc -b` rồi `vite build` → `dist/` |
+| `npm run build:staging` | Build Pages staging → `dist/` với Worker staging |
+| `npm run build:recovery` | Build app phục hồi chỉ đọc → `dist-recovery/` |
 | `npm run preview` | Xem thử bản build |
 | `npm run typecheck` | Chỉ kiểm kiểu |
 | `npm run lint` | ESLint |
 | `npm test` | Vitest (unit + component) |
 | `npm run test:e2e` | Playwright trên Chrome thật, cổng 5174 |
+| `npm run test:e2e:recovery` | Playwright trên recovery artifact, cổng 5176 |
 | `npm run test:live` | Robot Framework: từng tính năng trên app thật, cổng 5175 |
+| `npm run test:live:recovery` | Robot Framework trên recovery artifact, cổng 5176 |
 | `npm run test:staging -- <suite>` | Robot Framework trên Pages/Worker staging đã deploy |
 
 `npm run test:e2e` cần Chrome của máy: `npx playwright install chrome`.
@@ -67,6 +71,11 @@ giao diện: [`docs/design-guidelines.md`](docs/design-guidelines.md) ·
 deploy: [`docs/deploy.md`](docs/deploy.md) ·
 kiểm thử live: [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md) ·
 ghi chú phát hành: [`docs/ghi-chu-phat-hanh.md`](docs/ghi-chu-phat-hanh.md).
+
+Artifact phục hồi là ứng dụng riêng, chỉ đọc và tải file sao lưu; nó không có màn bán hàng, ghép máy
+hay runner đồng bộ. Vì IndexedDB bị cô lập theo origin, artifact này chỉ đọc được dữ liệu sự cố khi
+được kích hoạt trên đúng production origin. Quy trình vận hành và ranh giới rollback nằm trong
+[`docs/deploy.md`](docs/deploy.md#phục-hồi-schema-v5-cùng-origin).
 
 ## Bất biến (vi phạm = sai số tiền)
 
@@ -116,7 +125,7 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
 - M1 không có tài khoản hay vai trò: mọi máy đã ghép ngang quyền, đều tạo mã ghép và thu hồi máy
   khác. Authentication và authorization người dùng thuộc milestone sau.
 
-## Không làm ở bản 1
+## Ngoài phạm vi milestone M1
 
 Hoá đơn điện tử có mã CQT · tồn kho · in bluetooth 58/80mm · tài khoản người dùng / phân quyền ·
 nhập đơn bằng giọng nói · VietQR trên phiếu · dark mode · đa ngôn ngữ.
