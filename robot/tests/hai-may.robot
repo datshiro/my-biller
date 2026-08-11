@@ -24,8 +24,7 @@ ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-t
 
     ${bắt_đầu}=    Evaluate    __import__('time').monotonic()
     ${hội_tụ}=    Run Keyword And Return Status
-    ...    Wait Until Keyword Succeeds    30x    100ms    Bảng Máy Phải Có Số Dòng
-    ...    orders    3    ${MÁY_B_PAGE}
+    ...    Wait Until Keyword Succeeds    30x    100ms    Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     ${độ_trễ}=    Evaluate    __import__('time').monotonic() - ${bắt_đầu}
     IF    not ${hội_tụ}
         ${orders_a}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
@@ -39,9 +38,6 @@ ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-t
         Fail    Chưa hội tụ: A=${a_count}, B=${b_count}, outbox=${pending_count}, notice=${notice}
     END
     Should Be True    ${độ_trễ} <= 3.0    Đơn mất ${độ_trễ} giây mới hiện ở máy B.
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orderLines
-    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
 
 Heartbeat cục bộ giữ lease và đường sync realtime
     [Documentation]    Khóa lỗi poll mạng dài hơn TTL làm lease hết hạn: heartbeat cục bộ phải giữ
@@ -327,6 +323,11 @@ Tab dẫn đầu bị treo thì epoch mới fence tab cũ
     Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
 
 *** Keywords ***
+Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
+    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
+    Hai Bảng Phải Cùng Gid Và Nội Dung    orderLines
+    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+
 Mở Sheet Thu Nợ Hai Máy
     [Arguments]    ${tên}
     Mở Màn    /cong-no
