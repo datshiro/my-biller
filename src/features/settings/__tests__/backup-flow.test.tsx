@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPage } from '../settings-page'
+import { downloadRecoveryBackup, prepareBackup } from '../backup'
 import { collectBackup } from '@/db/backup'
 import { db } from '@/db/db'
 import { createItem } from '@/db/repositories/items'
@@ -73,6 +74,20 @@ const pick = (contents: string) =>
   fireEvent.change(screen.getByLabelText('Chọn file sao lưu'), {
     target: { files: [new File([contents], 'backup.json', { type: 'application/json' })] },
   })
+
+describe('sao lưu trong recovery chỉ đọc', () => {
+  it('tải đúng snapshot nhưng không ghi mốc hoặc tạo outbox', async () => {
+    await seedItem()
+    const prepared = await prepareBackup(NOW)
+    expect(JSON.parse(await prepared.file.text())).toMatchObject({ appVersion: '2.0.0' })
+
+    await downloadRecoveryBackup(prepared)
+
+    expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
+    expect((await getAppState()).lastBackupAt).toBeNull()
+    expect(await db.outbox.count()).toBe(0)
+  })
+})
 
 describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
   it('chỉ mở cảnh báo; huỷ không tải, không báo thành công và không ghi mốc', async () => {

@@ -8,6 +8,7 @@
 #   ./robot/run.sh                                  chạy hết
 #   ./robot/run.sh robot/tests/ban-hang.robot       chạy một suite
 #   ./robot/run.sh -i regression robot/tests        chỉ chạy ca gắn thẻ regression
+#   ROBOT_APP_MODE=recovery ./robot/run.sh robot/recovery
 #   ROBOT_REMOTE=1 BASE_URL=https://... WORKER_URL=https://... \
 #     ROBOT_WORKER_ADMIN_SECRET="$STAGING_ADMIN_SECRET" ./robot/run.sh robot/tests/hai-may.robot
 #
@@ -20,10 +21,23 @@ repo_root="$(cd "${script_dir}/.." && pwd -P)"
 cd "${repo_root}"
 
 REMOTE_MODE="${ROBOT_REMOTE:-0}"
+APP_MODE="${ROBOT_APP_MODE:-normal}"
 VENV="${ROBOT_VENV:-.venv-robot}"
 EXPECTED_TITLE="<title>my-biller — Bán hàng</title>"
 STAGING_WORKER_URL="https://my-biller-sync-staging.datshiro.workers.dev"
 HEALTH_TIMEOUT=2
+
+if [[ "${APP_MODE}" != "normal" ]] && [[ "${APP_MODE}" != "recovery" ]]; then
+  echo "ROBOT_APP_MODE chỉ nhận normal hoặc recovery." >&2
+  exit 1
+fi
+if [[ "${REMOTE_MODE}" == "1" ]] && [[ "${APP_MODE}" == "recovery" ]]; then
+  echo "Recovery Robot chỉ chạy artifact local; không dùng remote mode." >&2
+  exit 1
+fi
+if [[ "${APP_MODE}" == "recovery" ]]; then
+  EXPECTED_TITLE="<title>my-biller — Phục hồi chỉ đọc</title>"
+fi
 
 if [[ "${REMOTE_MODE}" == "1" ]]; then
   BASE_URL="${BASE_URL:-}"
@@ -49,7 +63,11 @@ if [[ "${REMOTE_MODE}" == "1" ]]; then
   fi
   HEALTH_TIMEOUT=10
 elif [[ "${REMOTE_MODE}" == "0" ]]; then
-  PORT="${ROBOT_PORT:-5175}"
+  if [[ "${APP_MODE}" == "recovery" ]]; then
+    PORT="${ROBOT_PORT:-5176}"
+  else
+    PORT="${ROBOT_PORT:-5175}"
+  fi
   BASE_URL="http://localhost:${PORT}"
   WORKER_PORT=8787
   WORKER_URL="http://127.0.0.1:${WORKER_PORT}"
@@ -81,7 +99,7 @@ worker_listener_pid=""
 dọn_dẹp() {
   local exit_code=$?
   if [[ -n "${server_pid}" ]] && kill -0 "${server_pid}" 2>/dev/null; then
-    echo "→ Tắt dev server do lượt Robot này tạo"
+    echo "→ Tắt app server do lượt Robot này tạo"
     kill "${server_pid}" 2>/dev/null || true
   fi
   [[ -z "${server_pid}" ]] || wait "${server_pid}" 2>/dev/null || true
@@ -141,6 +159,7 @@ if [[ "${REMOTE_MODE}" == "1" ]]; then
   fi
   echo "→ Kiểm thử remote tại ${BASE_URL} với Worker ${WORKER_URL}"
 else
+if [[ "${APP_MODE}" == "normal" ]]; then
 worker_listener_pids="$(port_listener_pids "${WORKER_PORT}")"
 if [[ -n "${worker_listener_pids}" ]]; then
   if [[ "${worker_listener_pids}" == *$'\n'* ]]; then
@@ -185,6 +204,7 @@ else
   fi
   worker_listener_pid="${started_worker_pids}"
 fi
+fi
 
 listener_pids="$(port_listener_pids "${PORT}")"
 
@@ -213,15 +233,26 @@ if [[ -n "${listener_pids}" ]]; then
     exit 1
   fi
 
-  echo "→ Dùng lại dev server đang chạy ở ${BASE_URL}"
+  echo "→ Dùng lại app server đang chạy ở ${BASE_URL}"
 else
-  echo "→ Dựng dev server ở ${BASE_URL}"
-  ./node_modules/.bin/vite --host 127.0.0.1 --port "${PORT}" --strictPort >robot/results/vite.log 2>&1 &
+  if [[ "${APP_MODE}" == "recovery" ]]; then
+    if [[ ! -f dist-recovery/index.html ]]; then
+      echo "Chưa có dist-recovery. Chạy 'npm run build:recovery' trước." >&2
+      exit 1
+    fi
+    echo "→ Dựng recovery artifact ở ${BASE_URL}"
+    ./node_modules/.bin/vite preview --outDir dist-recovery --host 127.0.0.1 \
+      --port "${PORT}" --strictPort >robot/results/vite-recovery.log 2>&1 &
+  else
+    echo "→ Dựng dev server ở ${BASE_URL}"
+    ./node_modules/.bin/vite --host 127.0.0.1 --port "${PORT}" --strictPort \
+      >robot/results/vite.log 2>&1 &
+  fi
   server_pid=$!
 
   for _ in {1..60}; do
     if ! kill -0 "${server_pid}" 2>/dev/null; then
-      echo "Dev server dừng trước khi sẵn sàng. Xem robot/results/vite.log." >&2
+      echo "App server dừng trước khi sẵn sàng. Xem log Vite trong robot/results/." >&2
       exit 1
     fi
     app_sẵn_sàng && break
@@ -229,7 +260,7 @@ else
   done
 
   if ! app_sẵn_sàng; then
-    echo "Dev server không lên sau 30 giây. Xem robot/results/vite.log." >&2
+    echo "App server không lên sau 30 giây. Xem log Vite trong robot/results/." >&2
     exit 1
   fi
 
@@ -246,7 +277,11 @@ fi
 fi
 
 if (( $# == 0 )); then
-  set -- robot/tests
+  if [[ "${APP_MODE}" == "recovery" ]]; then
+    set -- robot/recovery
+  else
+    set -- robot/tests
+  fi
 fi
 
 # Không `exec`: `exec` thay luôn tiến trình shell nên cái trap ở trên không bao giờ chạy và dev

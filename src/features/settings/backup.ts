@@ -81,6 +81,19 @@ export async function downloadPreparedBackup(prepared: PreparedBackup): Promise<
   }
 }
 
+/**
+ * Recovery chỉ đọc không được ghi `lastBackupAt`: settings là ledger table, nên đóng dấu thành công
+ * sẽ tạo outbox trên máy đã ghép. Artifact sự cố chỉ phát file và giữ nguyên toàn bộ state cục bộ.
+ */
+export async function downloadRecoveryBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
+  downloadJson(prepared.filename, prepared.file)
+  return {
+    filename: prepared.filename,
+    importable: prepared.importable,
+    problem: prepared.problem,
+  }
+}
+
 /** Chỉ hiện CTA khi trình duyệt chấp nhận chính file JSON sẽ gửi. Probe lỗi = không hỗ trợ. */
 export function canSharePreparedBackup(prepared: PreparedBackup): boolean {
   try {
