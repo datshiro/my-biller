@@ -117,7 +117,9 @@ Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nố
     Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    4    ${MÁY_A_PAGE}
     Bảng Máy Phải Có Số Dòng    orders    4    ${MÁY_B_PAGE}
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
+    # Outbox rỗng chỉ chứng minh Worker đã nhận thao tác. Phiếu thu còn sinh thêm bản order chuẩn
+    # từ Worker, nên chờ đúng điều kiện hội tụ thay vì đọc giữa hai sự kiện hoặc Sleep cứng.
+    Wait Until Keyword Succeeds    30x    100ms    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
 
 Thu nợ ở máy A thì máy B không còn đòi lại
     [Documentation]    Khóa lỗi hai cuốn sổ cùng đòi một khoản: tiền và dư nợ phải hội tụ ở cả hai máy.
