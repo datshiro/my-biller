@@ -34,8 +34,12 @@ jobs:
       - name: Vitest (unit + component)
         run: npm test
 
+      - name: Build staging
+        run: npm run build:staging
+
+      # Build normal chạy cuối để `dist/` không giữ bundle staging.
       # `npm run build` chạy `tsc --noEmit` trước `vite build`, nên đây cũng là bước kiểm kiểu.
-      - name: Build
+      - name: Build normal
         run: npm run build
 
       # e2e chạy trên Chrome thật (`channel: 'chrome'`), không phải chromium đóng gói kèm.
@@ -44,6 +48,9 @@ jobs:
 
       - name: Playwright e2e
         run: npm run test:e2e
+
+      - name: Playwright recovery artifact
+        run: npm run test:e2e:recovery
 
       # `trace: 'retain-on-failure'` để lại trace trong test-results/ — mở bằng `npx playwright
       # show-trace` là xem lại được đúng lượt chạy đã đỏ, không phải đoán từ log.
@@ -80,6 +87,9 @@ jobs:
 
       - name: Robot Framework live
         run: npm run test:live
+
+      - name: Robot Framework recovery artifact
+        run: npm run test:live:recovery
 
       - if: failure()
         uses: actions/upload-artifact@v7
