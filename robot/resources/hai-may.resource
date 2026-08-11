@@ -4,6 +4,7 @@ Documentation    Hạ tầng hai máy thật: hai Browser Context có IndexedDB 
 Resource         app.resource
 Resource         sales.resource
 Library          Collections
+Library          ../libraries/worker_admin.py
 
 *** Variables ***
 ${WORKER_URL}       http://127.0.0.1:8787
@@ -21,18 +22,7 @@ Mở Hai Máy Đã Ghép
     ${mức_log}=    Set Log Level    NONE
     TRY
         Environment Variable Should Be Set    ROBOT_WORKER_ADMIN_SECRET
-        ${bootstrap_code}=    Evaluate JavaScript    ${None}
-        ...    async (adminSecret) => {
-        ...        const response = await fetch('${WORKER_URL}/shop', {
-        ...            method: 'POST',
-        ...            headers: {
-        ...                authorization: ['Bearer', adminSecret].join(' '),
-        ...            },
-        ...        })
-        ...        if (!response.ok) throw new Error('Không tạo được quán thử: ' + response.status)
-        ...        return (await response.json()).code
-        ...    }
-        ...    arg=%{ROBOT_WORKER_ADMIN_SECRET}
+        ${bootstrap_code}=    Tạo Quán Thử Qua Worker    ${WORKER_URL}
         Set Test Variable    ${BOOTSTRAP_CODE}    ${bootstrap_code}
     FINALLY
         Set Log Level    ${mức_log}
