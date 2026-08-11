@@ -99,6 +99,32 @@ Huỷ đơn đã thu tiền thì phiếu thu vẫn còn và chưa gắn đơn
     Length Should Be    ${của_đơn}    1    Huỷ đơn đã làm mất phiếu thu khỏi sổ.
     Should Be Equal As Integers    ${của_đơn}[0][allocatedOrderId]    0
 
+Khách lẻ xử lý khoản thu sau huỷ ngay tại chi tiết đơn
+    [Documentation]    Lỗi cũ để khoản thu khách lẻ chờ vô hạn vì chỉ lịch sử khách mới có nút xử lý;
+    ...    ca này xác nhận UI và đọc thẳng payment để khoá trạng thái hoàn tiền có ghi vết.
+    [Tags]    regression
+    Bán Nhanh    Phở bò
+    ${đơn}=    Đơn Mới Nhất
+    Mở Chi Tiết Đơn Mới Nhất
+    Bấm Nút    Huỷ đơn
+    Chờ Hộp Xác Nhận    Huỷ đơn này?
+    Chờ Thấy Chữ    xử lý ngay tại chi tiết đơn
+    Xác Nhận Trong Hộp    Huỷ đơn
+
+    Chờ Thấy Chữ    Khoản thu chờ xử lý
+    Bấm Nút    Đã trả lại khách
+    Chờ Hộp Xác Nhận    Đã trả lại tiền cho khách?
+    Xác Nhận Trong Hộp    Xác nhận
+    Chờ Thấy Chữ    Đã trả lại khách
+    Không Được Thấy Chữ    Bỏ có ghi vết
+
+    ${phiếu_thu}=    Đọc Bảng    payments
+    ${của_đơn}=    Evaluate    [p for p in $phiếu_thu if p['orderId'] == $đơn['id']]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Integers    ${của_đơn}[0][allocatedOrderId]    0
+    Should Be Equal    ${của_đơn}[0][unallocatedStatus]    refunded
+    Should Contain    ${của_đơn}[0][resolutionNote]    Đã trả lại tiền khách lẻ
+
 Bấm Huỷ trong hộp xác nhận thì đơn còn nguyên
     Bán Nhanh    Trà đá
     Mở Chi Tiết Đơn Mới Nhất

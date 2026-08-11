@@ -314,6 +314,17 @@ describe('oplog đồng bộ', () => {
         )
       ).status,
     ).toBe(201)
+
+    const legacyDetachEvent = event('payments', paymentGid, payment, paymentRefs, 'put', payment)
+    const legacyDetach = await push(legacyDetachEvent)
+    expect(legacyDetach.status).toBe(201)
+    const duplicateLegacyDetach = await push(legacyDetachEvent)
+    expect(duplicateLegacyDetach.status).toBe(200)
+    await expect(duplicateLegacyDetach.json()).resolves.toMatchObject({ duplicate: true })
+    expect(
+      (await pullAll()).filter((entry) => entry.table === 'payments').at(-1)?.refs,
+    ).toMatchObject({ allocatedOrderId: orderGid })
+
     expect(
       (
         await push(
@@ -328,6 +339,18 @@ describe('oplog đồng bộ', () => {
     expect(detached?.after).not.toHaveProperty('allocatedOrderId')
     expect(voidOrder?.after).toMatchObject({ paidAmount: 0, status: 'void' })
 
+    const lateLegacyDetach = await push(
+      event('payments', paymentGid, payment, paymentRefs, 'put', payment),
+    )
+    expect(lateLegacyDetach.status).toBe(201)
+    expect((await pullAll()).filter((entry) => entry.table === 'payments').at(-1)).toMatchObject({
+      after: {
+        unallocatedStatus: 'pending',
+        resolutionNote: 'Đơn đã huỷ; khoản thu chờ xử lý.',
+      },
+      refs: { allocatedOrderId: null },
+    })
+
     const allocated = await push(
       event(
         'payments',
@@ -339,6 +362,163 @@ describe('oplog đồng bộ', () => {
       ),
     )
     expect(allocated.status).toBe(409)
+  })
+
+  it('keeps an allocated payment terminal against stale resolution and reallocation', async () => {
+    const customerGid = crypto.randomUUID()
+    const firstOrderGid = crypto.randomUUID()
+    const secondOrderGid = crypto.randomUUID()
+    const paymentGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+
+    const firstOrder = orderRow(firstOrderGid, customerGid)
+    const secondOrder = orderRow(secondOrderGid, customerGid)
+    secondOrder.after.code = 'PBH-260810-A002'
+    expect(
+      (await push(event('orders', firstOrderGid, firstOrder.after, firstOrder.refs))).status,
+    ).toBe(201)
+    expect(
+      (await push(event('orders', secondOrderGid, secondOrder.after, secondOrder.refs))).status,
+    ).toBe(201)
+
+    const pendingPayment = {
+      ...paymentRow(paymentGid, 40_000),
+      unallocatedStatus: 'pending',
+      resolutionNote: 'Đơn đã huỷ; khoản thu chờ xử lý.',
+    }
+    const pendingRefs = {
+      orderId: firstOrderGid,
+      allocatedOrderId: null,
+      customerId: customerGid,
+    }
+    expect((await push(event('payments', paymentGid, pendingPayment, pendingRefs))).status).toBe(201)
+
+    const allocatedRefs = { ...pendingRefs, allocatedOrderId: firstOrderGid }
+    expect(
+      (
+        await push(
+          event('payments', paymentGid, pendingPayment, allocatedRefs, 'put', pendingPayment),
+        )
+      ).status,
+    ).toBe(201)
+
+    const staleRefund = await push(
+      event(
+        'payments',
+        paymentGid,
+        {
+          ...pendingPayment,
+          unallocatedStatus: 'refunded',
+          resolutionNote: 'Thiết bị cũ đánh dấu đã hoàn.',
+        },
+        pendingRefs,
+        'put',
+        pendingPayment,
+      ),
+    )
+    expect(staleRefund.status).toBe(409)
+
+    const staleDiscard = await push(
+      event(
+        'payments',
+        paymentGid,
+        {
+          ...pendingPayment,
+          unallocatedStatus: 'discarded',
+          resolutionNote: 'Thiết bị cũ bỏ khoản thu.',
+        },
+        pendingRefs,
+        'put',
+        pendingPayment,
+      ),
+    )
+    expect(staleDiscard.status).toBe(409)
+
+    const staleReallocation = await push(
+      event(
+        'payments',
+        paymentGid,
+        pendingPayment,
+        { ...pendingRefs, allocatedOrderId: secondOrderGid },
+        'put',
+        pendingPayment,
+      ),
+    )
+    expect(staleReallocation.status).toBe(409)
+
+    const paymentEvents = (await pullAll()).filter((entry) => entry.table === 'payments')
+    expect(paymentEvents.at(-1)).toMatchObject({
+      after: { unallocatedStatus: 'pending' },
+      refs: { allocatedOrderId: firstOrderGid },
+    })
+  })
+
+  it('keeps a resolved payment terminal when a stale device sends another decision', async () => {
+    const customerGid = crypto.randomUUID()
+    const orderGid = crypto.randomUUID()
+    const paymentGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+    const order = orderRow(orderGid, customerGid)
+    expect((await push(event('orders', orderGid, order.after, order.refs))).status).toBe(201)
+
+    const pendingPayment = {
+      ...paymentRow(paymentGid, 40_000),
+      unallocatedStatus: 'pending',
+      resolutionNote: 'Đơn đã huỷ; khoản thu chờ xử lý.',
+    }
+    const paymentRefs = { orderId: orderGid, allocatedOrderId: null, customerId: customerGid }
+    expect((await push(event('payments', paymentGid, pendingPayment, paymentRefs))).status).toBe(201)
+
+    const refunded = {
+      ...pendingPayment,
+      unallocatedStatus: 'refunded',
+      resolutionNote: 'Đã trả lại tiền cho khách.',
+    }
+    expect(
+      (
+        await push(
+          event('payments', paymentGid, refunded, paymentRefs, 'put', pendingPayment),
+        )
+      ).status,
+    ).toBe(201)
+
+    const staleDiscard = await push(
+      event(
+        'payments',
+        paymentGid,
+        {
+          ...pendingPayment,
+          unallocatedStatus: 'discarded',
+          resolutionNote: 'Thiết bị cũ chọn bỏ khoản thu.',
+        },
+        paymentRefs,
+        'put',
+        pendingPayment,
+      ),
+    )
+    expect(staleDiscard.status).toBe(409)
+    await expect(staleDiscard.json()).resolves.toMatchObject({ error: 'business-rejected' })
+
+    const staleAllocation = await push(
+      event(
+        'payments',
+        paymentGid,
+        pendingPayment,
+        { ...paymentRefs, allocatedOrderId: orderGid },
+        'put',
+        pendingPayment,
+      ),
+    )
+    expect(staleAllocation.status).toBe(409)
+
+    const paymentEvents = (await pullAll()).filter((entry) => entry.table === 'payments')
+    expect(paymentEvents.at(-1)).toMatchObject({
+      after: {
+        unallocatedStatus: 'refunded',
+        resolutionNote: 'Đã trả lại tiền cho khách.',
+      },
+      refs: { allocatedOrderId: null },
+    })
   })
 
   it('rejects deleting a parent while a concurrently-created child still references it', async () => {

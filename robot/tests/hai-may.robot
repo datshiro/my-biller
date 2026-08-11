@@ -172,6 +172,44 @@ Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_A_PAGE}
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_B_PAGE}
 
+Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
+    [Documentation]    Hai máy cùng mở khoản thu pending; quyết định hoàn tiền đã lên Worker phải là
+    ...    terminal, nên lựa chọn “bỏ” từ bản sao offline cũ bị từ chối rồi hội tụ về refunded.
+    Chọn Máy A
+    Bán Nhanh    Phở bò
+    ${orders_a}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
+    ${order_a}=    Evaluate    max($orders_a, key=lambda row: row['id'])
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /don/${order_a}[id]
+    Bấm Nút    Huỷ đơn
+    Xác Nhận Trong Hộp    Huỷ đơn
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Chưa Phân Bổ
+    ...    ${order_a}[gid]    ${MÁY_B_PAGE}
+
+    ${orders_b}=    Đọc Bảng    orders    ${MÁY_B_PAGE}
+    ${order_b}=    Evaluate    [row for row in $orders_b if row['gid'] == $order_a['gid']][0]
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /don/${order_b}[id]
+    Chờ Thấy Chữ    Khoản thu chờ xử lý
+    Set Offline    ${True}
+
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /don/${order_a}[id]
+    Bấm Nút    Đã trả lại khách
+    Xác Nhận Trong Hộp    Xác nhận
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+
+    Chọn Máy B
+    Bấm Nút    Bỏ có ghi vết
+    Xác Nhận Trong Hộp    Xác nhận
+    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    discarded    ${MÁY_B_PAGE}
+    Set Offline    ${False}
+
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
+    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
+    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
+
 Đóng tab dẫn đầu thì tab còn lại tiếp quản và vẫn đẩy đơn
     [Documentation]    Lease không được mắc kẹt ở tab đã đóng; epoch mới phải tiếp tục đường ghi.
     Chọn Máy A
@@ -353,3 +391,13 @@ Phiếu Của Đơn Phải Chưa Phân Bổ
     ${found}=    Evaluate    [row for row in $payments if row['orderId'] == $order['id']]
     Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
     Should Be Equal As Integers    ${found}[0][allocatedOrderId]    0
+
+Phiếu Của Đơn Phải Có Trạng Thái
+    [Arguments]    ${order_gid}    ${trạng_thái}    ${page}
+    ${orders}=    Đọc Bảng    orders    ${page}
+    ${order}=    Evaluate    [row for row in $orders if row['gid'] == $order_gid][0]
+    ${payments}=    Đọc Bảng    payments    ${page}
+    ${found}=    Evaluate    [row for row in $payments if row['orderId'] == $order['id']]
+    Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
+    Should Be Equal As Integers    ${found}[0][allocatedOrderId]    0
+    Should Be Equal    ${found}[0][unallocatedStatus]    ${trạng_thái}

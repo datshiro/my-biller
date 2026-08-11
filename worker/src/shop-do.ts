@@ -655,6 +655,9 @@ export class ShopDO extends DurableObject<Env> {
     if (event.operation === 'delete' || !event.after) return { problem: 'Phiếu thu không được xoá.' }
     const stored = this.ledgerPayload('payments', event.entityKey)
     if (!stored) return { problem: 'Không tìm thấy phiếu thu cần cập nhật.' }
+    if (['refunded', 'discarded'].includes(String(stored.after.unallocatedStatus))) {
+      return { problem: 'Phiếu thu đã được xử lý và không thể thay đổi.' }
+    }
 
     for (const field of ['gid', 'amount', 'method', 'note'] as const) {
       if (event.after[field] !== stored.after[field]) {
@@ -666,6 +669,46 @@ export class ShopDO extends DurableObject<Env> {
       event.refs.customerId !== stored.refs.customerId
     ) {
       return { problem: 'Đơn và khách gốc của phiếu thu không được sửa.' }
+    }
+
+    if (stored.refs.allocatedOrderId) {
+      const requestsLegacyVoidDetachment =
+        event.refs.allocatedOrderId === null &&
+        !['refunded', 'discarded'].includes(String(event.after.unallocatedStatus))
+      if (!requestsLegacyVoidDetachment) {
+        return { problem: 'Phiếu thu đã được phân bổ và không thể thay đổi.' }
+      }
+
+      // Client cũ gửi payment-detach trước order-void. Không tin cú detach riêng lẻ: ghi một event
+      // no-op để client được đi tiếp tới order-void; chính order-void phía server mới gọi
+      // detachPaymentsForVoid và tạo trạng thái pending canonical.
+      return {
+        event: {
+          ...event,
+          before: stored.after,
+          after: stored.after,
+          refs: stored.refs,
+        },
+      }
+    }
+
+    const storedStatus = String(stored.after.unallocatedStatus ?? 'pending')
+    const proposedStatus = String(event.after.unallocatedStatus ?? 'pending')
+    if (
+      storedStatus === 'pending' &&
+      proposedStatus === 'pending' &&
+      event.refs.allocatedOrderId === null
+    ) {
+      // Order-void phía server có thể đã detach trước khi event detach của client tới. Giữ nguyên
+      // reason canonical thay vì để client cũ (chưa có hai field này) vô tình xoá nó.
+      return {
+        event: {
+          ...event,
+          before: stored.after,
+          after: stored.after,
+          refs: stored.refs,
+        },
+      }
     }
 
     const after: Record<string, unknown> = {

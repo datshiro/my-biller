@@ -8,8 +8,11 @@ import {
   getOrderPayments,
   listOrderLinesOfOrders,
   listOrdersByCustomer,
+  listPaymentsBetween,
   type OrderDraft,
+  voidOrder,
 } from '../repositories/orders'
+import { resolveUnallocatedPayment } from '../repositories/payments'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
@@ -152,6 +155,26 @@ describe('createOrder', () => {
     )
 
     expect(await db.orders.get(id)).toMatchObject({ customerId: null, status: 'paid' })
+  })
+
+  it('khoản thu khách lẻ đã hoàn không còn đi vào nguồn “Đã thu” của báo cáo', async () => {
+    const { id } = await createOrder(
+      draft({
+        customerId: null,
+        customerName: 'Khách lẻ',
+        payment: { amount: 110_000, method: 'cash', note: '' },
+      }),
+    )
+    await voidOrder(id)
+    const payment = await db.payments.where('orderId').equals(id).first()
+    expect(payment?.id).toBeDefined()
+
+    await resolveUnallocatedPayment(payment?.id ?? 0, {
+      kind: 'refunded',
+      reason: 'Đã trả lại khách.',
+    })
+
+    expect(await listPaymentsBetween(soldAt - 1, soldAt + 1)).toEqual([])
   })
 
   /** Bấm XONG hai lần bằng hai ngón, hoặc màn hình đơ rồi nhả một lượt — hai lệnh ghi cùng lúc thật. */

@@ -4,15 +4,19 @@ import { addDays, startOfDay } from 'date-fns'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OrderDetailPage } from '../order-detail-page'
 import { OrderListPage } from '../order-list-page'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder, type OrderDraft } from '@/db/repositories/orders'
+import * as paymentRepository from '@/db/repositories/payments'
 import { installTestDevice } from '@/test-fixtures'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 beforeEach(async () => {
   await db.open()
@@ -135,6 +139,82 @@ describe('chi tiết đơn', () => {
       { allocatedOrderId: 0 },
     ])
     expect(await screen.findByText(/không tính vào doanh thu/)).toBeDefined()
+  })
+
+  it('đơn khách lẻ đã huỷ cho hoàn khoản thu ngay tại chi tiết và giữ dấu vết', async () => {
+    const { id } = await createOrder(draft())
+    renderApp(`/don/${id}`)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Huỷ đơn' }))
+
+    expect(await screen.findByText(/Khoản thu chờ xử lý/)).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: 'Đã trả lại khách' }))
+    expect(screen.getByRole('alertdialog', { name: 'Đã trả lại tiền cho khách?' })).toBeDefined()
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Xác nhận' }),
+    )
+
+    const payment = await db.payments.where('orderId').equals(id).first()
+    await waitFor(async () =>
+      expect(await db.payments.get(payment?.id ?? 0)).toMatchObject({
+        allocatedOrderId: 0,
+        unallocatedStatus: 'refunded',
+        resolutionNote: `Đã trả lại tiền khách lẻ sau khi huỷ ${
+          (await db.orders.get(id))?.code
+        }.`,
+      }),
+    )
+    expect(await screen.findByText(/Đã trả lại khách/)).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Bỏ có ghi vết' })).toBeNull()
+  })
+
+  it('xử lý khoản thu khách lẻ là single-flight khi xác nhận nhanh hai lần', async () => {
+    const { id } = await createOrder(draft())
+    const resolvePayment = paymentRepository.resolveUnallocatedPayment
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const resolveSpy = vi
+      .spyOn(paymentRepository, 'resolveUnallocatedPayment')
+      .mockImplementation(async (...args) => {
+        await held
+        return resolvePayment(...args)
+      })
+    renderApp(`/don/${id}`)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Huỷ đơn' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Bỏ có ghi vết' }))
+    const confirm = within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Xác nhận' })
+    await userEvent.dblClick(confirm)
+
+    expect(resolveSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alertdialog').getAttribute('aria-busy')).toBe('true')
+    release()
+    await waitFor(async () =>
+      expect(await db.payments.where('orderId').equals(id).first()).toMatchObject({
+        unallocatedStatus: 'discarded',
+        resolutionNote: expect.stringContaining('Bỏ khoản thu khách lẻ'),
+      }),
+    )
+  })
+
+  it('đơn có khách tiếp tục xử lý tiền ở lịch sử khách, không lộ action khách lẻ', async () => {
+    const customerId = await createCustomer({ name: 'Chị Hoa', phone: '', address: '', note: '' })
+    const { id } = await createOrder(
+      draft({ customerId, customerName: 'Chị Hoa' }),
+    )
+    renderApp(`/don/${id}`)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }))
+    expect(screen.getByText(/xử lý ở lịch sử khách/)).toBeDefined()
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Huỷ đơn' }))
+    await screen.findByText('Đã huỷ')
+
+    expect(screen.queryByRole('button', { name: 'Đã trả lại khách' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Bỏ có ghi vết' })).toBeNull()
   })
 
   it('bấm Huỷ trong hộp xác nhận thì đơn còn nguyên', async () => {
