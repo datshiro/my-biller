@@ -31,7 +31,7 @@ Mở Hai Máy Đã Ghép
     TRY
         Fill Secret    ${MÃ_GHÉP_INPUT}    $BOOTSTRAP_CODE
         Bấm Nút    GHÉP MÁY NÀY
-        Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible    timeout=30s
+        Chờ Máy Hoàn Tất Ghép    ${MÁY_A_PAGE}    Quầy A
     FINALLY
         Register Keyword To Run On Failure    ${failure_keyword}
     END
@@ -52,7 +52,7 @@ Mở Hai Máy Đã Ghép
         Đặt Tên Máy Hiện Tại    Quầy B    B
         Fill Secret    ${MÃ_GHÉP_INPUT}    $PAIR_CODE
         Bấm Nút    GHÉP MÁY NÀY
-        Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible    timeout=30s
+        Chờ Máy Hoàn Tất Ghép    ${MÁY_B_PAGE}    Quầy B
     FINALLY
         Set Log Level    ${mức_log}
         Register Keyword To Run On Failure    ${failure_keyword}
@@ -62,6 +62,28 @@ Mở Hai Máy Đã Ghép
     Nạp Dữ Liệu Mẫu
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Bộ Dữ Liệu Mẫu Phải Sẵn Sàng    ${MÁY_B_PAGE}
+
+Chờ Máy Hoàn Tất Ghép
+    [Documentation]    Chờ UI active; nếu timeout thì chỉ ghi state đã che secret và timing request
+    ...    để phân biệt lỗi Worker, runner hay render mà không làm lộ mã ghép/token.
+    [Arguments]    ${page}    ${tên_máy}
+    ${đã_xong}=    Run Keyword And Return Status
+    ...    Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible    timeout=30s
+    IF    not ${đã_xong}
+        ${state}=    Đọc Bảng    deviceState    ${page}
+        ${page_trước}=    Switch Page    ${page}    context=ALL    browser=ALL
+        ${nội_dung}=    Get Text    css=body
+        ${requests}=    Evaluate JavaScript    ${None}
+        ...    () => performance.getEntriesByType('resource')
+        ...        .filter((entry) => entry.name.includes('my-biller-sync'))
+        ...        .map((entry) => ({
+        ...            path: new URL(entry.name).pathname,
+        ...            duration: Math.round(entry.duration),
+        ...            responseStatus: entry.responseStatus ?? 0,
+        ...        }))
+        Switch Page    ${page_trước}    context=ALL    browser=ALL
+        Fail    ${tên_máy} chưa hoàn tất ghép sau 30 giây. state=${state}; UI=${nội_dung}; requests=${requests}
+    END
 
 Đặt Tên Máy Hiện Tại
     [Arguments]    ${tên}    ${chữ}
@@ -106,6 +128,12 @@ Hai Bảng Phải Cùng Gid Và Nội Dung
     ${a_sạch}=    Evaluate    sorted([{k: v for k, v in row.items() if k not in ('id', 'createdAt', 'updatedAt')} for row in $a], key=lambda row: str(row.get('gid', row.get('key'))))
     ${b_sạch}=    Evaluate    sorted([{k: v for k, v in row.items() if k not in ('id', 'createdAt', 'updatedAt')} for row in $b], key=lambda row: str(row.get('gid', row.get('key'))))
     Should Be Equal    ${a_sạch}    ${b_sạch}    Bảng ${bảng} của hai máy chưa giống nhau.
+
+Hai Bảng Phải Hội Tụ
+    [Documentation]    WebSocket chỉ đánh thức puller; poll remote 30 giây là đường dự phòng khi
+    ...    tín hiệu đến trước lúc máy vừa nối mạng lại mở socket. Chờ theo trạng thái thật, không Sleep.
+    [Arguments]    ${bảng}
+    Wait Until Keyword Succeeds    80x    500ms    Hai Bảng Phải Cùng Gid Và Nội Dung    ${bảng}
 
 Làm Hỏng Quan Hệ Của Event Mặt Hàng
     [Documentation]    Chỉ dùng trong ca từ chối: sửa event pending, không sửa dòng nghiệp vụ.

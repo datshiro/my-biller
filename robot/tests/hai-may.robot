@@ -94,9 +94,9 @@ Ba đơn tạo khi mất mạng lên sổ đúng một lần và phiếu vẫn t
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    5    ${MÁY_B_PAGE}
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orderLines
-    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    orderLines
+    Hai Bảng Phải Hội Tụ    payments
 
 Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nối lại
     [Documentation]    Chữ máy phải chống đụng mã ngay tại chỗ, không mượn mạng hoặc đổi mã sau bán.
@@ -134,7 +134,7 @@ Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nố
     Bảng Máy Phải Có Số Dòng    orders    4    ${MÁY_B_PAGE}
     # Outbox rỗng chỉ chứng minh Worker đã nhận thao tác. Phiếu thu còn sinh thêm bản order chuẩn
     # từ Worker, nên chờ đúng điều kiện hội tụ thay vì đọc giữa hai sự kiện hoặc Sleep cứng.
-    Wait Until Keyword Succeeds    30x    100ms    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
+    Hai Bảng Phải Hội Tụ    orders
 
 Thu nợ ở máy A thì máy B không còn đòi lại
     [Documentation]    Khóa lỗi hai cuốn sổ cùng đòi một khoản: tiền và dư nợ phải hội tụ ở cả hai máy.
@@ -145,14 +145,14 @@ Thu nợ ở máy A thì máy B không còn đòi lại
     Điền Ô    Thu bao nhiêu    100000
     Bấm Nút Thu Hai Máy
 
-    Wait Until Keyword Succeeds    40x    500ms    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+    Hai Bảng Phải Hội Tụ    payments
     Chọn Máy B
     Click    css=[role=dialog][aria-label^="Thu nợ"] >> css=button:has-text("THU ")
     Chờ Thấy Chữ    Khách chỉ còn nợ 0 đ
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /cong-no
     Wait Until Keyword Succeeds    40x    500ms    Chờ Thấy Chữ    Chưa ai nợ tiền
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
-    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
 
 Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
     [Documentation]    Lỗi cũ xoá tiền thật khi huỷ đơn; hai bản sao phải giữ phiếu và chỉ bỏ phân bổ.
@@ -167,8 +167,8 @@ Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
 
     Wait Until Keyword Succeeds    40x    500ms    Đơn Theo Gid Phải Có Trạng Thái
     ...    ${order}[gid]    void    ${MÁY_B_PAGE}
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
-    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_A_PAGE}
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_B_PAGE}
 
@@ -320,8 +320,8 @@ Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
     ${payments_sau}=    Đọc Bảng    payments    ${MÁY_B_PAGE}
     ${tổng_sau}=    Evaluate    sum(row['amount'] for row in $payments_sau)
     Should Be Equal As Integers    ${tổng_sau}    ${tổng_trước}
-    Hai Bảng Phải Cùng Gid Và Nội Dung    orders
-    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
 
 Máy chủ từ chối sửa giá thì giá cũ trở lại trên cả hai máy
     [Documentation]    Event sửa phải mang ảnh trước; bị từ chối không được để giá ma trong bản sao A.
