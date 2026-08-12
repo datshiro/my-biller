@@ -59,25 +59,31 @@ npm run worker:dev       # http://127.0.0.1:8787
 curl https://my-biller-sync.datshiro.workers.dev/health
 ```
 
-Lần đầu hoặc khi xoay secret, đặt secret phía Worker; không đưa giá trị vào `.env`, frontend hay
-lệnh được lưu trong tài liệu:
+Lần đầu hoặc khi xoay secret, đặt secret phía Worker qua một phiên operator được duyệt; không đưa giá
+trị vào `.env`, frontend, GitHub Actions hay lệnh được lưu trong tài liệu:
 
 ```bash
 npx wrangler secret put ADMIN_SECRET --config worker/wrangler.toml
-npm run worker:deploy
 curl --fail https://my-biller-sync.datshiro.workers.dev/health
 ```
+
+Repo không cung cấp lệnh deploy Worker production thủ công. Staging dùng riêng
+`npm run worker:deploy:staging`; production Worker chỉ deploy bằng workflow được bảo vệ ở phần phát
+hành production bên dưới.
 
 Deploy Worker và kiểm `/health` **trước** Pages. Frontend production đã trỏ vào domain miễn phí
 `my-biller-sync.datshiro.workers.dev`; chỉ đổi `DEFAULT_SYNC_URL` khi mua domain riêng và phải giữ
 CORS/HTTPS hoạt động. `ADMIN_SECRET` chỉ dùng để operator tạo quán đầu tiên qua `POST /shop`, không
 được đóng gói vào PWA. Protocol pending không thêm endpoint ADMIN: client kích hoạt reservation bằng
-token máy tạm qua `POST /shop/{shopId}/seed` (route `/seed` trong ShopDO). Khi khôi phục sự cố,
-rollback cả hai artifact về cặp phiên bản đã kiểm thử; không xoá Durable Object hoặc đổi migration
-tag đã phát hành.
+token máy tạm qua `POST /shop/{shopId}/seed` (route `/seed` trong ShopDO). Trước khi Pages 2.x cắt
+traffic, Worker mới phải tương thích cả frontend 1.0.3 đang chạy và frontend mới. Nếu Worker smoke
+không đạt thì chỉ rollback về một Worker version đã chứng minh tương thích; rollback Worker không
+khôi phục Durable Object. Sau khi bất kỳ client nào đã mở schema v5, không rollback Pages về 1.x:
+chỉ roll-forward một bản 2.x đã kiểm hoặc kích hoạt recovery cùng schema.
 
-Health endpoint đã trả `200 {"status":"ok"}` từ mạng Internet ngày 09/08/2026. Lượt kiểm cuối
-trên điện thoại thật qua 4G vẫn là bước thủ công trước khi đưa máy người bán vào M1.
+Health endpoint đã trả `200 {"status":"ok"}` từ mạng Internet ngày 09/08/2026. Release 2.0.0 chấp
+nhận bỏ cổng iPhone/4G theo quyết định người vận hành ngày 12/08/2026; đây là residual risk được ghi
+nhận, không phải bằng chứng đường mạng di động hay native share đã được kiểm.
 
 ## Staging tách khỏi production
 
@@ -165,12 +171,76 @@ Ba lệnh cuối phải xanh và `dist-recovery/` phải tách khỏi `dist/`. T
 
 Thoát recovery bằng **roll-forward**: build và deploy artifact app 2.x đã sửa qua pipeline, sau đó
 yêu cầu người dùng chấp nhận cập nhật service worker/tải lại rồi kiểm số liệu. Không rollback frontend
-về 1.0.2 sau khi schema v5 đã được mở; 1.0.2 không hiểu schema mới. Nếu cần rollback Worker, chỉ dùng
+về bất kỳ frontend 1.x nào sau khi schema v5 đã được mở; 1.x không hiểu schema mới. Nếu cần rollback Worker, chỉ dùng
 Worker version tương thích với frontend/schema v5 và version đã qua kiểm thử.
 
 Normal và staging đều ghi vào `dist/`, còn recovery ghi vào `dist-recovery/`. Khi chuẩn bị local
 release candidate, build staging và recovery trước rồi chạy `npm run build` cuối cùng để `dist/` còn
 lại là artifact production normal.
+
+## Pipeline phát hành production 2.x
+
+Production không deploy bằng lệnh local. Workflow
+[`phat-hanh-production.yml`](../.github/workflows/phat-hanh-production.yml) chỉ nhận tag
+`vMAJOR.MINOR.PATCH` trỏ đúng HEAD hiện tại của `main`, có version khớp `package.json` và có một run
+push `Kiểm thử` thành công trên đúng SHA. Run CI đó đóng gói `dist/`, `dist-recovery/`, Worker bundle,
+Wrangler config và `SHA256SUMS`; workflow phát hành tải đúng artifact bằng run/artifact ID và không
+build lại Pages hay Worker.
+
+Trước lần phát hành đầu tiên, operator phải hoàn tất các cấu hình và đọc lại chúng trên GitHub:
+
+1. Bật **immutable releases** cho repository; tag của release đã publish không được di chuyển/xoá.
+2. Tạo environment `production`, `production-bootstrap` và `production-recovery`, có required
+   reviewer không phải tác giả/người chạy workflow, bật prevent self-review và tắt admin bypass.
+   `production` chỉ nhận tag `v*.*.*`; hai workflow dispatch chỉ chạy từ nhánh production mặc định
+   và tự ràng buộc input vào main SHA đã qua CI hoặc immutable tag đã kiểm.
+3. Environment `production` giữ `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_WORKERS_API_TOKEN` và
+   `CLOUDFLARE_PAGES_API_TOKEN`; `production-bootstrap` giữ account ID và Worker token;
+   `production-recovery` chỉ giữ account ID và Pages token. Có thể cùng giá trị nhưng phải đặt riêng
+   theo scope environment. Hai API token chỉ có quyền ghi đúng Worker hoặc Pages trong tài khoản.
+4. `production` còn giữ token của một **quán tổng hợp không có dữ liệu người thật** qua
+   `PRODUCTION_SMOKE_SHOP_ID` và `PRODUCTION_SMOKE_DEVICE_TOKEN`. Smoke kiểm health, CORS, Durable
+   Object read/write và WebSocket trước khi chạm Pages.
+5. `ADMIN_SECRET` không nằm trong GitHub. Khởi tạo/xoay secret là thao tác riêng được duyệt; deploy
+   Worker giữ secret hiện có.
+6. Trước khi approve environment, xác nhận đã sao lưu từng container production đang có dữ liệu và
+   PR đã được một người không phải tác giả review/approve. Việc bỏ các gate trên iPhone vật lý
+   (native share và 4G) không bỏ hai cổng này.
+
+### Bootstrap lần đầu từ Worker health-only
+
+Production 1.0.3 chỉ có Worker `/health`, chưa có Durable Object nên chưa thể tạo trước quán smoke.
+Sau khi merge 2.0.0 và CI push trên `main` xanh, chưa tạo tag. Chạy
+[`khoi-tao-worker-production.yml`](../.github/workflows/khoi-tao-worker-production.yml) trên nhánh mặc
+định với full SHA hiện tại của `main` và lấy non-author approval cho `production-bootstrap`. Workflow
+chỉ nhận SHA có đúng hai job CI push đã xanh; nó chỉ deploy
+Worker đã qua CI, kiểm health/CORS/401 và lưu version trước/sau; nó không deploy Pages và không nhận
+`ADMIN_SECRET`.
+
+Sau bootstrap, operator đặt `ADMIN_SECRET` trực tiếp qua Cloudflare/Wrangler trong phiên được duyệt,
+tạo một quán tổng hợp không có dữ liệu người thật, lưu riêng shop ID/device token vào environment
+`production`, rồi xoá secret khỏi shell. Chỉ khi contract smoke bằng quán này chạy được mới approve
+workflow phát hành chính. Sau đó mới tạo tag `vMAJOR.MINOR.PATCH`; không tạo tag trước bootstrap vì
+tag tự kích hoạt workflow release. Không dùng một lượt release cố tình fail sau Worker deploy để
+bootstrap.
+
+Workflow ghi lại Worker/Pages trước deploy, đưa `dist/` lên một Pages preview bất biến và smoke trước
+khi chạm production. Sau đó workflow publish rồi xác minh immutable release + recovery asset. Chỉ
+khi hai cổng này xanh nó mới deploy Worker bundle đã đóng gói trong CI, chạy contract smoke và cuối
+cùng deploy Pages production.
+Preview chỉ chứng minh bytes, route,
+manifest, service worker và cold-offline của artifact; vì khác origin, nó không chứng minh migration
+IndexedDB hoặc update service worker của người dùng production. Sau deploy vẫn phải canary trên
+production origin: thấy prompt cập nhật, nhận controller/service worker mới, đối chiếu số liệu rồi
+thử offline. Thiếu canary này thì release chưa hoàn tất vận hành.
+
+Nếu fail trước Pages cutover, giữ Pages cũ và chỉ rollback Worker khi có version tương thích đã xác
+minh. Nếu fail sau khi schema v5 đã mở, không đưa frontend 1.x trở lại: dùng workflow
+[`kich-hoat-recovery.yml`](../.github/workflows/kich-hoat-recovery.yml) với immutable release 2.x đã
+deploy để đưa đúng `dist-recovery/` lên production, hoặc roll-forward một tag 2.x mới. Workflow
+recovery còn kiểm lịch sử Cloudflare phải có Pages production đúng release SHA, không deploy Worker
+và không rebuild artifact. Thoát recovery cũng qua workflow phát hành
+normal của một tag 2.x tương thích.
 
 ## 1. Build
 
@@ -185,23 +255,20 @@ Kết quả cần có trong `dist/`: `index.html`, `assets/`, `manifest.webmanif
 `_redirects` chứa `/*  /index.html  200`. Thiếu dòng đó thì mở thẳng `https://…/bao-cao` hoặc bấm F5
 ở màn Báo cáo sẽ ra trang 404 của Cloudflare, vì router nằm ở phía trình duyệt.
 
-## 2. Đưa lên Cloudflare Pages
+## 2. Khởi tạo project Cloudflare Pages (một lần)
 
-Cách nhanh nhất, không cần nối Git:
+Chỉ dùng các lệnh dưới đây khi project chưa tồn tại; đây không phải đường phát hành production:
 
 ```bash
 npx wrangler login                                                    # chỉ lần đầu, mở trình duyệt
 npx wrangler pages project create an-quynh --production-branch main   # chỉ lần đầu
-npx wrangler pages deploy dist --project-name an-quynh --branch main
 ```
 
 Bỏ bước `project create` thì lệnh deploy báo `Project not found [code: 8000007]` — ở chế độ không
 tương tác `wrangler` không tự tạo project.
 
-Mỗi lần deploy in ra một URL xem trước dạng `https://<hash>.an-quynh.pages.dev`; bản chính luôn ở
-`https://an-quynh.pages.dev`. Ngay sau khi tạo project mới, DNS mất khoảng nửa phút mới phân giải, và
-sau đó vài lượt đầu còn trả **522** — edge chưa propagate xong, chờ rồi thử lại chứ không phải cấu
-hình sai.
+Release production chỉ chạy qua workflow được bảo vệ ở trên. Ngay sau khi tạo project mới, DNS mất
+khoảng nửa phút mới phân giải, và sau đó vài lượt đầu còn trả **522** — edge chưa propagate xong.
 
 Hai mã lỗi hay gặp lúc đặt tên project, phân biệt cho khỏi mất công:
 
@@ -210,15 +277,8 @@ Hai mã lỗi hay gặp lúc đặt tên project, phân biệt cho khỏi mất 
 | `8000002` | A project with this name already exists | Trùng tên project **trong tài khoản của mình** |
 | `8000029` | Subdomain is unavailable | Tên đã bị người khác **trên toàn cầu** chiếm |
 
-Nếu muốn tự build mỗi lần push, nối repo trong Cloudflare Dashboard → Workers & Pages → Create →
-Pages → Connect to Git, với:
-
-| Thiết lập | Giá trị |
-|---|---|
-| Framework preset | None |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Node version | 22 trở lên |
+Không nối auto-build Cloudflare Git cho production: nó sẽ tạo artifact khác CI và bỏ qua environment
+approval. Project này dùng Direct Upload từ workflow chính thức.
 
 ## 3. Kiểm sau khi deploy
 

@@ -2,8 +2,8 @@
 
 ## 2.0.0 — chưa phát hành (11/8/2026)
 
-> Mục này là phần chênh của release candidate 2.0.0 so với production đang chạy commit `4a8e45c`
-> (bản 1.0.2). Production chưa bị thay đổi; mục này không phải bằng chứng đã deploy release.
+> Mục này là phần chênh của release candidate 2.0.0 so với production đang chạy commit `978f766`
+> (bản 1.0.3). Production chưa bị thay đổi; mục này không phải bằng chứng đã deploy release.
 
 ### ⚠️ Việc phải làm khi cập nhật
 
@@ -16,14 +16,14 @@
    ghi đè một bên. Xem ranh giới và quy trình tại [`dong-bo.md`](./dong-bo.md).
 4. **Máy đã ghép không nhập file hoặc xoá sổ từ Cài đặt.** Khi bản sao cục bộ có vấn đề, dùng
    **Kéo lại từ đầu** để dựng lại từ sổ chung. File sao lưu vẫn phải được giữ như lớp phục hồi độc lập.
-5. **Không quay lại app 1.0.2 sau khi đã mở 2.0.0.** Schema v5 là nâng cấp một chiều. Nếu app chính
+5. **Không quay lại app 1.x (bao gồm 1.0.3) sau khi đã mở 2.0.0.** Schema v5 là nâng cấp một chiều. Nếu app chính
    không mở được, operator dùng recovery artifact 2.0.0 trên đúng production origin để tải bản sao,
-   rồi sửa bằng một bản 2.x mới hơn; không deploy lại 1.0.2.
+   rồi sửa bằng một bản 2.x mới hơn; không deploy lại frontend 1.x.
 
 Nâng schema IndexedDB từ production hiện tại lên schema mới là tự động. Dữ liệu sổ cũ được cấp danh
 tính đồng bộ và phiếu thu cũ được bổ sung trạng thái phân bổ; không có bước sửa file bằng tay. Nếu
 app hiện khoản thu “chưa gắn vào đơn”, người bán cần vào lịch sử khách để gắn vào đơn còn nợ, xác
-nhận đã trả lại khách hoặc bỏ có ghi vết. Việc nâng schema không xoá dữ liệu, nhưng app 1.0.2 không
+nhận đã trả lại khách hoặc bỏ có ghi vết. Việc nâng schema không xoá dữ liệu, nhưng app 1.x không
 hiểu schema v5 và không phải đường rollback hợp lệ.
 
 ### Người bán sẽ thấy
@@ -54,7 +54,7 @@ hiểu schema v5 và không phải đường rollback hợp lệ.
   chứa token, mã máy, hàng đợi hay trạng thái đồng bộ.
 - Dấu “lần cuối sao lưu” chỉ được cập nhật khi file có thể nhập lại; cảnh báo, chia sẻ và tải file
   được chặn bấm lặp để không đóng dấu hoặc chia sẻ nhầm bản.
-- File backup version 4 không nhập ngược vào production 1.0.2. Giữ file đó để phục hồi bằng app 2.x;
+- File backup version 4 không nhập ngược vào production 1.0.3 hoặc bất kỳ app 1.x nào. Giữ file đó để phục hồi bằng app 2.x;
   không dùng việc đổi trường `version` bằng tay làm đường downgrade.
 
 ### Phục hồi schema v5
