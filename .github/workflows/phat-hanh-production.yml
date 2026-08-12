@@ -1,0 +1,303 @@
+name: Phát hành production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: my-biller-production
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Xác minh nguồn phát hành
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.provenance.outputs.artifact_id }}
+      release_sha: ${{ steps.provenance.outputs.release_sha }}
+      release_tag: ${{ steps.provenance.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - id: provenance
+        name: Ràng buộc tag, main, CI và artifact đúng SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_REF#refs/tags/}"
+          if [[ ! "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag phải là vMAJOR.MINOR.PATCH chuẩn." >&2
+            exit 1
+          fi
+          package_version="$(node -p 'require("./package.json").version')"
+          test "$release_tag" = "v$package_version"
+
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse origin/main)"
+          release_sha="$(git rev-list -n 1 "$release_tag")"
+          test "$release_sha" = "$main_sha"
+
+          workflow_id="$(gh api "repos/$REPOSITORY/actions/workflows" \
+            --jq '.workflows[] | select(.path == ".github/workflows/kiem-thu.yml") | .id')"
+          test -n "$workflow_id"
+          runs="$(gh api "repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=main&event=push&status=success&per_page=20")"
+          run_id="$(jq -r --arg sha "$release_sha" \
+            '[.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .head_branch == "main" and .conclusion == "success")][0].id // empty' \
+            <<<"$runs")"
+          test "$run_id" != "null" -a -n "$run_id"
+
+          jobs="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/jobs?per_page=100")"
+          jq -e '[.jobs[] | select(.name == "Code quality and Playwright" and .conclusion == "success")] | length == 1' <<<"$jobs"
+          jq -e '[.jobs[] | select(.name == "Robot live" and .conclusion == "success")] | length == 1' <<<"$jobs"
+
+          artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
+            --jq ".artifacts[] | select(.name == \"release-$release_sha\" and .expired == false) | .id" | head -1)"
+          test -n "$artifact_id"
+          {
+            echo "artifact_id=$artifact_id"
+            echo "release_sha=$release_sha"
+            echo "release_tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Worker rồi Pages
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+    environment:
+      name: production
+      url: https://an-quynh.pages.dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cài Chrome cho smoke production
+        run: npx playwright install --with-deps chrome
+
+      - name: Xác minh lại main sau environment approval
+        env:
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          tag_refs="$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}")"
+          remote_tag_sha="$(awk '$2 ~ /\^\{\}$/ { print $1 }' <<<"$tag_refs")"
+          if [ -z "$remote_tag_sha" ]; then
+            remote_tag_sha="$(awk 'NR == 1 { print $1 }' <<<"$tag_refs")"
+          fi
+          test "$RELEASE_SHA" = "$remote_tag_sha"
+
+      - name: Tải đúng artifact CI đã kiểm
+        env:
+          ARTIFACT_ID: ${{ needs.provenance.outputs.artifact_id }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > release.zip
+          unzip -q release.zip -d release-artifact
+          cd release-artifact
+          sha256sum -c SHA256SUMS
+          artifact_version="$(node -p 'require("./package.json").version')"
+          test "v$artifact_version" = "${{ needs.provenance.outputs.release_tag }}"
+
+      - name: Xác minh production bundle trước deploy
+        run: |
+          set -euo pipefail
+          grep -Rql 'my-biller-sync.datshiro.workers.dev' release-artifact/dist/assets
+          if grep -Rql 'my-biller-sync-staging.datshiro.workers.dev' release-artifact/dist; then exit 1; fi
+          if grep -Rql 'Nạp dữ liệu mẫu' release-artifact/dist/assets; then exit 1; fi
+          grep -q '<title>my-biller — Bán hàng</title>' release-artifact/dist/index.html
+          grep -q '<title>my-biller — Phục hồi chỉ đọc</title>' release-artifact/dist-recovery/index.html
+          test -s release-artifact/worker-bundle/index.js
+          test -s release-artifact/worker/wrangler.toml
+
+      - name: Ghi trạng thái Worker trước deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deployments status --config worker/wrangler.toml --json > worker-before.json
+
+      - name: Ghi trạng thái Pages trước deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deployment list --project-name an-quynh --json > pages-before.json
+
+      - name: Deploy production artifact vào preview bất biến
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          output="$(npx wrangler pages deploy release-artifact/dist --project-name an-quynh \
+            --branch "release-$RELEASE_TAG" --commit-hash "$RELEASE_SHA" --commit-dirty=false \
+            --commit-message "release $RELEASE_TAG canary")"
+          printf '%s\n' "$output"
+          preview_url="$(grep -Eo 'https://[0-9a-f]+\.an-quynh\.pages\.dev' <<<"$output" | tail -1)"
+          test -n "$preview_url"
+          echo "PREVIEW_URL=$preview_url" >> "$GITHUB_ENV"
+
+      - name: Smoke production artifact preview
+        env:
+          ARTIFACT_DIR: release-artifact/dist
+          BASE_URL: ${{ env.PREVIEW_URL }}
+        run: npm run pages:smoke -- normal
+
+      - name: Publish immutable release và recovery asset trước cutover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(gh api "repos/${{ github.repository }}/commits/$RELEASE_TAG" --jq '.sha')"
+          test "$RELEASE_SHA" = "$remote_sha"
+          {
+            echo "## $RELEASE_TAG — artifact sẵn sàng để deploy"
+            echo
+            echo "Commit: \`$RELEASE_SHA\`"
+            echo "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            sed -n '7,/^## 1\.0\.3 /p' docs/ghi-chu-phat-hanh.md | sed '$d'
+          } > release-notes.md
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            find release-artifact -exec touch -t 198001010000 {} +
+            (cd release-artifact && find dist dist-recovery worker-bundle worker package.json SHA256SUMS \
+              -type f -print | LC_ALL=C sort | zip -Xq "../release-$RELEASE_TAG.zip" -@)
+            gh release create "$RELEASE_TAG" "release-$RELEASE_TAG.zip" \
+              --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md
+          else
+            existing_release="$(gh api "repos/${{ github.repository }}/releases/tags/$RELEASE_TAG")"
+            jq -e '.draft == false and .prerelease == false and .immutable == true' <<<"$existing_release"
+            published_run_url="$(jq -r '.body // ""' <<<"$existing_release" \
+              | grep -F 'Workflow run:' | head -1 | sed 's/^Workflow run: //')"
+            test "$published_run_url" = \
+              "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            gh release download "$RELEASE_TAG" --pattern "release-$RELEASE_TAG.zip" \
+              --output "release-$RELEASE_TAG.zip"
+          fi
+          release_json="$(gh api "repos/${{ github.repository }}/releases/tags/$RELEASE_TAG")"
+          jq -e '.draft == false and .prerelease == false and .immutable == true' <<<"$release_json"
+          asset_digest="$(jq -r --arg name "release-$RELEASE_TAG.zip" \
+            '.assets[] | select(.name == $name and .state == "uploaded") | .digest' <<<"$release_json")"
+          test "$asset_digest" = "sha256:$(shasum -a 256 "release-$RELEASE_TAG.zip" | awk '{print $1}')"
+          for attempt in {1..12}; do
+            if gh release verify-asset "$RELEASE_TAG" "release-$RELEASE_TAG.zip"; then break; fi
+            if [ "$attempt" -eq 12 ]; then exit 1; fi
+            sleep 5
+          done
+
+      - name: Deploy Worker production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          npx wrangler deploy release-artifact/worker-bundle/index.js \
+            --config release-artifact/worker/wrangler.toml \
+            --env="" --no-bundle --strict \
+            --tag "$RELEASE_TAG" --message "release $RELEASE_TAG"
+
+      - name: Smoke Worker production bằng quán tổng hợp
+        env:
+          WORKER_URL: https://my-biller-sync.datshiro.workers.dev
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+          PRODUCTION_SMOKE_SHOP_ID: ${{ secrets.PRODUCTION_SMOKE_SHOP_ID }}
+          PRODUCTION_SMOKE_DEVICE_TOKEN: ${{ secrets.PRODUCTION_SMOKE_DEVICE_TOKEN }}
+        run: npm run worker:smoke:production
+
+      - name: Deploy Pages production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          npx wrangler pages deploy release-artifact/dist --project-name an-quynh --branch main \
+            --commit-hash "$RELEASE_SHA" --commit-dirty=false --commit-message "release $RELEASE_TAG"
+
+      - name: Xác minh deployment metadata đúng release SHA
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            npx wrangler pages deployment list --project-name an-quynh --environment production \
+              --json > pages-deployed.json
+            if jq -e --arg sha "$RELEASE_SHA" --arg short_sha "${RELEASE_SHA:0:7}" \
+              '.[0].Environment == "Production" and .[0].Branch == "main" and \
+                (.[0].Source == $sha or .[0].Source == $short_sha)' pages-deployed.json; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then exit 1; fi
+            sleep 5
+          done
+
+      - name: Smoke Pages production và đối chiếu bytes
+        env:
+          ARTIFACT_DIR: release-artifact/dist
+          BASE_URL: https://an-quynh.pages.dev
+        run: npm run pages:smoke -- normal
+
+      - name: Ghi trạng thái Worker sau lượt phát hành
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deployments status --config worker/wrangler.toml --json > worker-after.json
+
+      - name: Ghi trạng thái Pages sau lượt phát hành
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deployment list --project-name an-quynh --json > pages-after.json
+
+      - name: Lưu bằng chứng phát hành
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: production-evidence-${{ needs.provenance.outputs.release_tag }}
+          path: |
+            release-artifact/SHA256SUMS
+            worker-before.json
+            worker-after.json
+            pages-before.json
+            pages-deployed.json
+            pages-after.json
+          if-no-files-found: ignore
+          retention-days: 90

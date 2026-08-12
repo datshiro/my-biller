@@ -1,0 +1,170 @@
+name: Kích hoạt recovery production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable v2 release đã được phê duyệt để cứu dữ liệu
+        required: true
+        type: string
+
+concurrency:
+  group: my-biller-production
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Xác minh artifact recovery
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release_sha: ${{ steps.provenance.outputs.release_sha }}
+      release_tag: ${{ steps.provenance.outputs.release_tag }}
+    steps:
+      - id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(2|[3-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Recovery chỉ nhận immutable release tag v2 trở lên." >&2
+            exit 1
+          fi
+          release_json="$(gh api "repos/$REPOSITORY/releases/tags/$RELEASE_TAG")"
+          jq -e '.draft == false and .prerelease == false and .immutable == true' <<<"$release_json"
+          release_sha="$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')"
+          jq -e --arg name "release-$RELEASE_TAG.zip" \
+            '[.assets[] | select(.name == $name and .state == "uploaded")] | length == 1' <<<"$release_json"
+          {
+            echo "release_sha=$release_sha"
+            echo "release_tag=$RELEASE_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy recovery Pages only
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    environment:
+      name: production-recovery
+      url: https://an-quynh.pages.dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.provenance.outputs.release_sha }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cài Chrome cho smoke recovery
+        run: npx playwright install --with-deps chrome
+
+      - name: Tải đúng artifact recovery đã phát hành
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          asset="release-$RELEASE_TAG.zip"
+          gh release download "$RELEASE_TAG" --pattern "$asset" --output "$asset"
+          for attempt in {1..12}; do
+            if gh release verify-asset "$RELEASE_TAG" "$asset"; then break; fi
+            if [ "$attempt" -eq 12 ]; then exit 1; fi
+            sleep 5
+          done
+          unzip -q "$asset" -d release-artifact
+          cd release-artifact
+          sha256sum -c SHA256SUMS
+          artifact_version="$(node -p 'require("./package.json").version')"
+          test "v$artifact_version" = "${{ needs.provenance.outputs.release_tag }}"
+          grep -q '<title>my-biller — Phục hồi chỉ đọc</title>' dist-recovery/index.html
+
+      - name: Ghi trạng thái Pages trước recovery
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deployment list --project-name an-quynh --json > pages-before.json
+
+      - name: Chỉ nhận release đã từng lên Pages production
+        env:
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          jq -e --arg sha "$RELEASE_SHA" --arg short_sha "${RELEASE_SHA:0:7}" \
+            '[.[] | select(.Environment == "Production" and .Branch == "main" and \
+              (.Source == $sha or .Source == $short_sha))] | length >= 1' \
+            pages-before.json
+
+      - name: Deploy recovery artifact vào preview bất biến
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          output="$(npx wrangler pages deploy release-artifact/dist-recovery --project-name an-quynh \
+            --branch "recovery-$RELEASE_TAG" --commit-hash "$RELEASE_SHA" --commit-dirty=false \
+            --commit-message "recovery $RELEASE_TAG canary")"
+          printf '%s\n' "$output"
+          preview_url="$(grep -Eo 'https://[0-9a-f]+\.an-quynh\.pages\.dev' <<<"$output" | tail -1)"
+          test -n "$preview_url"
+          echo "PREVIEW_URL=$preview_url" >> "$GITHUB_ENV"
+
+      - name: Smoke recovery preview
+        env:
+          ARTIFACT_DIR: release-artifact/dist-recovery
+          BASE_URL: ${{ env.PREVIEW_URL }}
+        run: npm run pages:smoke -- recovery
+
+      - name: Deploy recovery Pages production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.provenance.outputs.release_tag }}
+        run: |
+          npx wrangler pages deploy release-artifact/dist-recovery --project-name an-quynh --branch main \
+            --commit-hash "$RELEASE_SHA" --commit-dirty=false --commit-message "recovery $RELEASE_TAG"
+
+      - name: Smoke recovery production
+        env:
+          ARTIFACT_DIR: release-artifact/dist-recovery
+          BASE_URL: https://an-quynh.pages.dev
+        run: npm run pages:smoke -- recovery
+
+      - name: Ghi trạng thái Pages sau lượt recovery
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deployment list --project-name an-quynh --json > pages-after.json
+
+      - name: Lưu bằng chứng recovery
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: recovery-evidence-${{ needs.provenance.outputs.release_tag }}
+          path: |
+            release-artifact/SHA256SUMS
+            pages-before.json
+            pages-after.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Nhắc ranh giới vận hành
+        run: |
+          echo 'Recovery đang chạy. Không bán hàng; chỉ đối chiếu và tải backup.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Thoát recovery bằng workflow phát hành một tag 2.x tương thích; không rollback về 1.x.' >> "$GITHUB_STEP_SUMMARY"

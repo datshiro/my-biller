@@ -19,9 +19,11 @@ jobs:
     name: Code quality and Playwright
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -37,10 +39,16 @@ jobs:
       - name: Build staging
         run: npm run build:staging
 
+      - name: Build recovery
+        run: npm run build:recovery
+
       # Build normal chạy cuối để `dist/` không giữ bundle staging.
       # `npm run build` chạy `tsc --noEmit` trước `vite build`, nên đây cũng là bước kiểm kiểu.
       - name: Build normal
         run: npm run build
+
+      - name: Bundle Worker production đúng commit
+        run: npx wrangler deploy --config worker/wrangler.toml --env="" --dry-run --outdir worker-bundle
 
       # e2e chạy trên Chrome thật (`channel: 'chrome'`), không phải chromium đóng gói kèm.
       - name: Cài Chrome cho Playwright
@@ -50,12 +58,35 @@ jobs:
         run: npm run test:e2e
 
       - name: Playwright recovery artifact
-        run: npm run test:e2e:recovery
+        run: npm run test:e2e:recovery:built
+
+      - name: Đóng gói artifact phát hành đúng commit
+        if: github.event_name == 'push'
+        run: |
+          mkdir release-artifact
+          cp -R dist dist-recovery worker-bundle release-artifact/
+          cp package.json release-artifact/
+          mkdir release-artifact/worker
+          cp worker/wrangler.toml release-artifact/worker/
+          cd release-artifact
+          find dist dist-recovery worker-bundle worker package.json -type f -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 shasum -a 256 > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - name: Lưu artifact phát hành bất biến
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-${{ github.sha }}
+          path: release-artifact/
+          if-no-files-found: error
+          retention-days: 90
 
       # `trace: 'retain-on-failure'` để lại trace trong test-results/ — mở bằng `npx playwright
       # show-trace` là xem lại được đúng lượt chạy đã đỏ, không phải đoán từ log.
       - if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace
           path: test-results/
@@ -67,14 +98,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.14"
           cache: pip
@@ -92,7 +125,7 @@ jobs:
         run: npm run test:live:recovery
 
       - if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: robot-live-results
           path: robot/results/

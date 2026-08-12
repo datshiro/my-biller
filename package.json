@@ -15,14 +15,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:recovery": "npm run build && npm run build:recovery && playwright test --config playwright.recovery.config.ts",
+    "test:e2e:recovery": "npm run build && npm run build:recovery && npm run test:e2e:recovery:built",
+    "test:e2e:recovery:built": "playwright test --config playwright.recovery.config.ts",
     "test:live": "./robot/run.sh",
     "test:live:recovery": "npm run build:recovery && ROBOT_APP_MODE=recovery ./robot/run.sh robot/recovery",
     "test:staging": "ROBOT_REMOTE=1 ./robot/run.sh",
     "test:regression": "./robot/run.sh -i regression robot/tests",
     "worker:dev": "wrangler dev --config worker/wrangler.toml",
-    "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
-    "worker:deploy:staging": "wrangler deploy --config worker/wrangler.toml --env staging"
+    "worker:deploy:staging": "wrangler deploy --config worker/wrangler.toml --env staging",
+    "worker:smoke:bootstrap": "node worker/scripts/smoke-bootstrap.mjs",
+    "worker:smoke:production": "node worker/scripts/smoke-production.mjs",
+    "pages:smoke": "node scripts/verify-pages-deployment.mjs"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

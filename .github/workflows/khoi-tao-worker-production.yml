@@ -1,0 +1,165 @@
+name: Khởi tạo Worker production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full SHA hiện tại của main đã có CI xanh
+        required: true
+        type: string
+
+concurrency:
+  group: my-biller-production
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Xác minh nguồn bootstrap
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.provenance.outputs.artifact_id }}
+      release_sha: ${{ steps.provenance.outputs.release_sha }}
+      release_version: ${{ steps.provenance.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - id: provenance
+        name: Ràng buộc tag, main và CI đúng SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "release_sha phải là full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          release_version="$(git show "$RELEASE_SHA:package.json" | node -e \
+            'let value=""; process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => console.log(JSON.parse(value).version))')"
+          if [[ ! "$release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "package.json phải có version semver chuẩn." >&2
+            exit 1
+          fi
+
+          workflow_id="$(gh api "repos/$REPOSITORY/actions/workflows" \
+            --jq '.workflows[] | select(.path == ".github/workflows/kiem-thu.yml") | .id')"
+          runs="$(gh api "repos/$REPOSITORY/actions/workflows/$workflow_id/runs?branch=main&event=push&status=success&per_page=20")"
+          run_id="$(jq -r --arg sha "$RELEASE_SHA" \
+            '[.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .head_branch == "main" and .conclusion == "success")][0].id // empty' \
+            <<<"$runs")"
+          test -n "$run_id"
+          jobs="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/jobs?per_page=100")"
+          jq -e '[.jobs[] | select(.name == "Code quality and Playwright" and .conclusion == "success")] | length == 1' <<<"$jobs"
+          jq -e '[.jobs[] | select(.name == "Robot live" and .conclusion == "success")] | length == 1' <<<"$jobs"
+          artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
+            --jq ".artifacts[] | select(.name == \"release-$RELEASE_SHA\" and .expired == false) | .id" | head -1)"
+          test -n "$artifact_id"
+          {
+            echo "artifact_id=$artifact_id"
+            echo "release_sha=$RELEASE_SHA"
+            echo "release_version=$release_version"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Worker bootstrap, không chạm Pages
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    environment:
+      name: production-bootstrap
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.provenance.outputs.release_sha }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tải đúng Worker bundle CI đã kiểm
+        env:
+          ARTIFACT_ID: ${{ needs.provenance.outputs.artifact_id }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > release.zip
+          unzip -q release.zip -d release-artifact
+          cd release-artifact
+          sha256sum -c SHA256SUMS
+          test -s worker-bundle/index.js
+          test -s worker/wrangler.toml
+
+      - name: Xác minh lại main sau environment approval
+        env:
+          RELEASE_SHA: ${{ needs.provenance.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+
+      - name: Ghi trạng thái Worker trước bootstrap
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deployments status --config worker/wrangler.toml --json > worker-before.json
+
+      - name: Deploy Worker production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_VERSION: ${{ needs.provenance.outputs.release_version }}
+        run: |
+          npx wrangler deploy release-artifact/worker-bundle/index.js \
+            --config release-artifact/worker/wrangler.toml --env="" --no-bundle --strict \
+            --tag "v$RELEASE_VERSION-bootstrap" --message "bootstrap v$RELEASE_VERSION"
+
+      - name: Smoke health, CORS và chặn tạo quán ẩn danh
+        env:
+          WORKER_URL: https://my-biller-sync.datshiro.workers.dev
+          RELEASE_TAG: v${{ needs.provenance.outputs.release_version }}-bootstrap
+        run: npm run worker:smoke:bootstrap
+
+      - name: Ghi trạng thái Worker sau lượt bootstrap
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deployments status --config worker/wrangler.toml --json > worker-after.json
+
+      - name: Lưu bằng chứng bootstrap
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: worker-bootstrap-evidence-v${{ needs.provenance.outputs.release_version }}
+          path: |
+            worker-before.json
+            worker-after.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Nhắc bước khởi tạo ngoài CI
+        run: |
+          echo 'Worker đã bootstrap; Pages chưa thay đổi.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Operator phải khởi tạo ADMIN_SECRET/quán smoke qua kênh riêng rồi mới approve workflow release.' >> "$GITHUB_STEP_SUMMARY"
