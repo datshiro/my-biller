@@ -13,6 +13,7 @@ import { createCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
 import { addOrderPayment } from '@/db/repositories/payments'
 import { getAppState, saveAppState, saveLastBackupAt } from '@/db/repositories/settings'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
@@ -20,6 +21,7 @@ const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   // Spy đặt trên prototype nên số lần gọi dồn qua các ca nếu không dọn.
   vi.restoreAllMocks()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
@@ -90,6 +92,7 @@ describe('exportBackup', () => {
   /** Ghi thẳng vào bảng, không qua schema: giả bản build cũ hoặc người dùng sửa tay qua DevTools. */
   const addOddItem = () =>
     db.items.add({
+      gid: testGid(99),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { receiptToText } from '../receipt-text'
 import { DEFAULT_SHOP, type Order, type OrderLine, type Payment } from '@/domain/schema'
+import { testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 14, 32).getTime()
 
 const order = (overrides: Partial<Order> = {}): Order => ({
   id: 1,
+  gid: testGid(1),
   code: 'PBH-260807-001',
+  originalCode: '',
   customerId: null,
   customerName: 'Khách lẻ',
   subtotal: 113_000,
@@ -23,13 +26,15 @@ const order = (overrides: Partial<Order> = {}): Order => ({
 })
 
 const lines: OrderLine[] = [
-  { id: 1, orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000 },
-  { id: 2, orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000 },
+  { id: 1, gid: testGid(1), orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000 },
+  { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000 },
 ]
 
 const payment = (overrides: Partial<Payment> = {}): Payment => ({
   id: 1,
+  gid: testGid(1),
   orderId: 1,
+  allocatedOrderId: 1,
   customerId: null,
   amount: 113_000,
   method: 'cash',

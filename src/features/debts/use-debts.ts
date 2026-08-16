@@ -1,7 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { listCustomers } from '@/db/repositories/customers'
 import { listOpenDebtOrders } from '@/db/repositories/orders'
-import { listCustomerPayments } from '@/db/repositories/payments'
+import {
+  listCustomerPayments,
+  listUnallocatedPayments,
+  unallocatedByCustomer,
+} from '@/db/repositories/payments'
 import { groupDebts, totalDebt, type DebtGroup } from '@/domain/debt'
 import type { Payment } from '@/domain/schema'
 import { useDayTick } from '@/ui/use-day-tick'
@@ -18,9 +22,13 @@ export type Debts = {
 export function useDebts(): Debts | undefined {
   const day = useDayTick()
   return useLiveQuery(async () => {
-    const [orders, customers] = await Promise.all([listOpenDebtOrders(), listCustomers()])
+    const [orders, customers, unallocated] = await Promise.all([
+      listOpenDebtOrders(),
+      listCustomers(),
+      listUnallocatedPayments(),
+    ])
     const names = new Map(customers.flatMap((c) => (c.id === undefined ? [] : [[c.id, c.name] as const])))
-    const groups = groupDebts(orders)
+    const groups = groupDebts(orders, unallocatedByCustomer(unallocated))
 
     return {
       rows: groups.map((group) => ({ ...group, name: names.get(group.customerId) ?? 'Khách đã xoá' })),

@@ -4,8 +4,11 @@ import { useNavigate, useParams } from 'react-router'
 import { useCustomerPriceCount } from './use-customer-prices'
 import { useCustomer, useCustomerOrders } from './use-customers'
 import { deleteCustomer } from '@/db/repositories/customers'
+import { resolveUnallocatedPayment, unallocatedByCustomer } from '@/db/repositories/payments'
 import { groupDebts, totalDebt } from '@/domain/debt'
 import { formatAmount, formatVnd } from '@/domain/money'
+import { remainingOf } from '@/domain/order-status'
+import type { Payment } from '@/domain/schema'
 import { CollectDebtSheet } from '@/features/debts/collect-debt-sheet'
 import { useCustomerPayments } from '@/features/debts/use-debts'
 import { OrderStatusChip } from '@/features/orders/order-status-chip'
@@ -30,6 +33,11 @@ export function CustomerDetailPage() {
   const [confirming, setConfirming] = useState(false)
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paymentAction, setPaymentAction] = useState<
+    | { kind: 'allocate'; payment: Payment; orderId: number; orderCode: string }
+    | { kind: 'refunded' | 'discarded'; payment: Payment }
+    | null
+  >(null)
 
   // Chặn cả `orders`: hai query này độc lập, query quét index luôn về sau, và trong khoảng đó
   // hai ô tiền sẽ vẽ "0 đ" y như số thật — người bán đọc nhầm là khách hết nợ.
@@ -48,7 +56,9 @@ export function CustomerDetailPage() {
   const active = (orders ?? []).filter((order) => order.status !== 'void')
   const spent = active.reduce((sum, order) => sum + order.total, 0)
   // Cùng một hàm với màn Công nợ và card ở Báo cáo — ba chỗ hiện nợ, một chỗ tính.
-  const debt = totalDebt(groupDebts(active))
+  const debt = totalDebt(
+    groupDebts(active, unallocatedByCustomer(history?.payments ?? [])),
+  )
 
   const codes = new Map(
     (orders ?? []).flatMap((order) => (order.id === undefined ? [] : [[order.id, order.code] as const])),
@@ -61,6 +71,45 @@ export function CustomerDetailPage() {
       void navigate('/them/khach-hang', { replace: true })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không xoá được.')
+    }
+  }
+
+  const chooseAllocation = (payment: Payment) => {
+    const target = [...active]
+      .filter(
+        (order) =>
+          order.id !== undefined && remainingOf(order.total, order.paidAmount) >= payment.amount,
+      )
+      .sort((left, right) => left.soldAt - right.soldAt)[0]
+    if (!target?.id) {
+      setError('Không có đơn nào của khách còn nợ đủ để gắn khoản thu này.')
+      return
+    }
+    setPaymentAction({ kind: 'allocate', payment, orderId: target.id, orderCode: target.code })
+  }
+
+  const resolvePayment = async () => {
+    if (!paymentAction?.payment.id) return
+    setError(null)
+    try {
+      if (paymentAction.kind === 'allocate') {
+        await resolveUnallocatedPayment(paymentAction.payment.id, {
+          kind: 'allocate',
+          orderId: paymentAction.orderId,
+        })
+      } else {
+        await resolveUnallocatedPayment(paymentAction.payment.id, {
+          kind: paymentAction.kind,
+          reason:
+            paymentAction.kind === 'refunded'
+              ? 'Người bán xác nhận đã trả lại tiền cho khách.'
+              : 'Người bán xác nhận bỏ khoản ghi nhận sai; phiếu thu được giữ làm dấu vết.',
+        })
+      }
+      setPaymentAction(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không xử lý được khoản thu.')
+      setPaymentAction(null)
     }
   }
 
@@ -171,8 +220,38 @@ export function CustomerDetailPage() {
                   title={formatVnd(payment.amount)}
                   subtitle={`${format(payment.paidAt, 'dd/MM/yyyy · HH:mm')} · ${
                     payment.method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'
-                  } · ${codes.get(payment.orderId) ?? ''}`}
+                  } · ${
+                    payment.allocatedOrderId === 0
+                      ? `${
+                          payment.unallocatedStatus === 'refunded'
+                            ? 'đã trả lại khách'
+                            : payment.unallocatedStatus === 'discarded'
+                              ? 'đã bỏ, có ghi vết'
+                              : 'chưa gắn vào đơn'
+                        } · thu tại ${codes.get(payment.orderId) ?? 'đơn cũ'}`
+                      : codes.get(payment.orderId) ?? ''
+                  }`}
                 />
+                {payment.allocatedOrderId === 0 &&
+                (payment.unallocatedStatus ?? 'pending') === 'pending' ? (
+                  <div className="flex flex-wrap gap-2 border-b border-line px-4 pb-3">
+                    <Button variant="secondary" onClick={() => chooseAllocation(payment)}>
+                      Gắn đơn còn nợ
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setPaymentAction({ kind: 'refunded', payment })}
+                    >
+                      Đã trả lại khách
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => setPaymentAction({ kind: 'discarded', payment })}
+                    >
+                      Bỏ có ghi vết
+                    </Button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -196,6 +275,28 @@ export function CustomerDetailPage() {
           confirmLabel="Xoá"
           onConfirm={() => void remove()}
           onCancel={() => setConfirming(false)}
+        />
+      ) : null}
+
+      {paymentAction ? (
+        <ConfirmDialog
+          title={
+            paymentAction.kind === 'allocate'
+              ? `Gắn vào ${paymentAction.orderCode}?`
+              : paymentAction.kind === 'refunded'
+                ? 'Đã trả lại tiền cho khách?'
+                : 'Bỏ khoản ghi nhận này?'
+          }
+          message={
+            paymentAction.kind === 'allocate'
+              ? `Khoản ${formatVnd(paymentAction.payment.amount)} sẽ trừ vào đơn còn nợ cũ nhất phù hợp.`
+              : paymentAction.kind === 'refunded'
+                ? 'Phiếu thu vẫn nằm trong lịch sử với dấu “đã trả lại”, nhưng không còn trừ vào công nợ hay tổng đã thu.'
+                : 'Phiếu thu không bị xoá; sổ giữ lại dấu vết rằng người bán đã xác nhận đây là khoản ghi nhận sai.'
+          }
+          confirmLabel={paymentAction.kind === 'allocate' ? 'Gắn vào đơn' : 'Xác nhận'}
+          onConfirm={() => void resolvePayment()}
+          onCancel={() => setPaymentAction(null)}
         />
       ) : null}
     </div>

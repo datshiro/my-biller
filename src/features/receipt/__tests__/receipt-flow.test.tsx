@@ -9,6 +9,7 @@ import { db } from '@/db/db'
 import { createItem, updateItem } from '@/db/repositories/items'
 import { createOrder } from '@/db/repositories/orders'
 import { saveShop } from '@/db/repositories/settings'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 14, 32).getTime()
 
@@ -30,6 +31,7 @@ afterEach(() => {
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   vi.stubGlobal('navigator', Object.create(navigator))
 })
 
@@ -76,7 +78,7 @@ describe('màn phiếu', () => {
     renderReceipt(id)
 
     expect(await screen.findByText('PHIẾU BÁN HÀNG')).toBeDefined()
-    expect(screen.getByText('Số: PBH-260807-001')).toBeDefined()
+    expect(screen.getByText('Số: PBH-260807-A001')).toBeDefined()
     expect(screen.getByText('07/08/2026 14:32')).toBeDefined()
 
     const totalRow = screen.getByText('Tổng cộng').parentElement as HTMLElement
@@ -104,6 +106,7 @@ describe('màn phiếu', () => {
 
   it('đơn trả thiếu → phiếu ghi rõ "Còn nợ"', async () => {
     const customerId = await db.customers.add({
+      gid: testGid(101),
       name: 'Chị Hoa',
       phone: '',
       address: '',
@@ -149,7 +152,7 @@ describe('màn phiếu', () => {
 
     await waitFor(() => expect(share).toHaveBeenCalledOnce())
     const shared = share.mock.calls[0]?.[0].files
-    expect(shared?.[0]?.name).toBe('PBH-260807-001.png')
+    expect(shared?.[0]?.name).toBe('PBH-260807-A001.png')
     expect(shared?.[0]?.type).toBe('image/png')
   })
 
@@ -244,7 +247,7 @@ describe('phiếu dài chia thành nhiều tấm ảnh', () => {
 
     await waitFor(() => expect(share).toHaveBeenCalledOnce())
     const shared = share.mock.calls[0]?.[0].files
-    expect(shared?.map((file) => file.name)).toEqual(['PBH-260807-001-1.png', 'PBH-260807-001-2.png'])
+    expect(shared?.map((file) => file.name)).toEqual(['PBH-260807-A001-1.png', 'PBH-260807-A001-2.png'])
   })
 
   it('phiếu một trang giữ nguyên tên theo số phiếu, không bị đánh số thừa', async () => {
@@ -257,6 +260,6 @@ describe('phiếu dài chia thành nhiều tấm ảnh', () => {
     await userEvent.click(button)
 
     await waitFor(() => expect(share).toHaveBeenCalledOnce())
-    expect(share.mock.calls[0]?.[0].files?.map((file) => file.name)).toEqual(['PBH-260807-001.png'])
+    expect(share.mock.calls[0]?.[0].files?.map((file) => file.name)).toEqual(['PBH-260807-A001.png'])
   })
 })

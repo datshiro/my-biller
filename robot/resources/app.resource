@@ -4,7 +4,7 @@ Documentation    Nền chung cho mọi suite: mở trình duyệt, dựng phiên
 ...
 ...              Mỗi test chạy trong một `New Context` riêng — context của Playwright là một hồ sơ
 ...              trình duyệt trắng, nên IndexedDB rỗng và không test nào ăn dữ liệu của test khác.
-Library          Browser
+Library          Browser    enable_playwright_debug=disabled
 Library          OperatingSystem
 Library          Collections
 
@@ -63,13 +63,14 @@ Nạp Dữ Liệu Mẫu
 
 Bộ Dữ Liệu Mẫu Phải Sẵn Sàng
     [Documentation]    Đối chiếu mốc hoàn tất trong IndexedDB thật; mọi bảng đều có số bản ghi cố định.
-    ${mặt_hàng}=    Đọc Bảng    items
+    [Arguments]    ${page}=${None}
+    ${mặt_hàng}=    Đọc Bảng    items    ${page}
     Length Should Be    ${mặt_hàng}    4    Bộ mẫu chưa ghi đủ mặt hàng.
-    ${khách_hàng}=    Đọc Bảng    customers
+    ${khách_hàng}=    Đọc Bảng    customers    ${page}
     Length Should Be    ${khách_hàng}    1    Bộ mẫu chưa ghi đủ khách hàng.
-    ${đơn_hàng}=    Đọc Bảng    orders
+    ${đơn_hàng}=    Đọc Bảng    orders    ${page}
     Length Should Be    ${đơn_hàng}    2    Bộ mẫu chưa ghi đủ đơn hàng.
-    ${chi_phí}=    Đọc Bảng    expenses
+    ${chi_phí}=    Đọc Bảng    expenses    ${page}
     Length Should Be    ${chi_phí}    1    Bộ mẫu chưa ghi đủ chi phí.
 
 # --- Điều hướng ---------------------------------------------------------------------------
@@ -151,7 +152,12 @@ Bỏ Qua Hộp Xác Nhận
 
 Đọc Bảng
     [Documentation]    Toàn bộ bản ghi của một bảng trong IndexedDB thật, dạng list of dict.
-    [Arguments]    ${tên_bảng}
+    ...    Có thể truyền page của máy khác; keyword tự quay về page đang đứng. `deviceState` luôn
+    ...    che token và deviceId trước khi giá trị có cơ hội đi vào output.xml/log.html.
+    [Arguments]    ${tên_bảng}    ${page}=${None}
+    IF    $page is not None
+        ${page_trước}=    Switch Page    ${page}    context=ALL    browser=ALL
+    END
     ${rows}=    Evaluate JavaScript    ${None}
     ...    async (store) => {
     ...        const db = await new Promise((resolve, reject) => {
@@ -165,9 +171,21 @@ Bỏ Qua Hộp Xác Nhận
     ...            request.onerror = () => reject(request.error)
     ...        })
     ...        db.close()
-    ...        return rows
+    ...        if (store !== 'deviceState') return rows
+    ...        return rows.map((row) => {
+    ...            const safe = { ...row }
+    ...            if ('token' in safe) {
+    ...                safe.hasToken = typeof safe.token === 'string' && safe.token.length > 0
+    ...                delete safe.token
+    ...            }
+    ...            delete safe.deviceId
+    ...            return safe
+    ...        })
     ...    }
     ...    arg=${tên_bảng}
+    IF    $page is not None
+        Switch Page    ${page_trước}    context=ALL    browser=ALL
+    END
     RETURN    ${rows}
 
 Đơn Mới Nhất

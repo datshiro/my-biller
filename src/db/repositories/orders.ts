@@ -1,6 +1,10 @@
 import { endOfDay, startOfDay } from 'date-fns'
 import { db } from '../db'
+import { requireDeviceIdentity } from './device-state'
+import { syncTransaction } from '../sync/outbox'
+import { listUnallocatedPayments, unallocatedByCustomer } from './payments'
 import { groupDebts, totalDebt } from '@/domain/debt'
+import { newGid } from '@/domain/gid'
 import { buildOrderCode, nextSeqOfDay } from '@/domain/order-code'
 import { deriveStatus } from '@/domain/order-status'
 import { calcLineAmount, calcOrderTotals } from '@/domain/order-total'
@@ -14,7 +18,7 @@ import {
   type Payment,
 } from '@/domain/schema'
 
-export type OrderLineDraft = Omit<OrderLine, 'id' | 'orderId' | 'amount'>
+export type OrderLineDraft = Omit<OrderLine, 'id' | 'gid' | 'orderId' | 'amount'>
 
 export type OrderDraft = {
   customerId: number | null
@@ -114,7 +118,11 @@ export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promi
 
 /** Phiếu thu theo `paidAt` — dòng tiền của kỳ, khác doanh thu khi có bán nợ hoặc thu nợ cũ. */
 export function listPaymentsBetween(from: number, to: number): Promise<Payment[]> {
-  return db.payments.where('paidAt').between(from, to, true, true).toArray()
+  return db.payments
+    .where('paidAt')
+    .between(from, to, true, true)
+    .filter((payment) => !['refunded', 'discarded'].includes(payment.unallocatedStatus ?? 'pending'))
+    .toArray()
 }
 
 export type DebtSummary = { total: number; customerCount: number }
@@ -134,7 +142,11 @@ export async function listOpenDebtOrders(): Promise<Order[]> {
 }
 
 export async function summarizeDebt(): Promise<DebtSummary> {
-  const groups = groupDebts(await listOpenDebtOrders())
+  const [orders, unallocated] = await Promise.all([
+    listOpenDebtOrders(),
+    listUnallocatedPayments(),
+  ])
+  const groups = groupDebts(orders, unallocatedByCustomer(unallocated))
   return { total: totalDebt(groups), customerCount: groups.length }
 }
 
@@ -172,8 +184,9 @@ export async function summarizeOrders(orderIds: readonly number[]): Promise<Map<
  */
 export async function createOrder(draft: OrderDraft): Promise<{ id: number; code: string }> {
   if (draft.lines.length === 0) throw new Error('Đơn phải có ít nhất một mặt hàng.')
+  const identity = await requireDeviceIdentity()
 
-  return db.transaction('rw', db.orders, db.orderLines, db.payments, async () => {
+  return syncTransaction(async () => {
     const lines = draft.lines.map((line) => ({ ...line, amount: calcLineAmount(line) }))
     const totals = calcOrderTotals({ lines, discount: draft.discount, surcharge: draft.surcharge })
 
@@ -194,11 +207,20 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
       .where('soldAt')
       .between(startOfDay(draft.soldAt).getTime(), endOfDay(draft.soldAt).getTime(), true, true)
       .toArray()
-    const code = buildOrderCode(draft.soldAt, nextSeqOfDay(sameDayCodes.map((order) => order.code), draft.soldAt))
+    const code = buildOrderCode(
+      draft.soldAt,
+      nextSeqOfDay(
+        sameDayCodes.map((order) => order.code),
+        draft.soldAt,
+        identity.letter,
+      ),
+      identity.letter,
+    )
 
     const stamp = Date.now()
     const orderId = await db.orders.add(
       OrderSchema.parse({
+        gid: newGid(),
         code,
         customerId: draft.customerId,
         customerName: draft.customerName,
@@ -213,13 +235,15 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
     )
 
     await db.orderLines.bulkAdd(
-      lines.map((line) => OrderLineSchema.parse({ ...line, orderId })),
+      lines.map((line) => OrderLineSchema.parse({ ...line, gid: newGid(), orderId })),
     )
 
     if (draft.payment) {
-      await db.payments.add(
+      const paymentId = await db.payments.add(
         PaymentSchema.parse({
+          gid: newGid(),
           orderId,
+          allocatedOrderId: 0,
           customerId: draft.customerId,
           amount: draft.payment.amount,
           method: draft.payment.method,
@@ -227,6 +251,7 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
           note: draft.payment.note,
         }),
       )
+      await db.payments.update(paymentId, { allocatedOrderId: orderId })
     }
 
     return { id: orderId, code }
@@ -234,23 +259,23 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
 }
 
 export async function updateOrderNote(id: number, note: string): Promise<void> {
-  await db.orders.update(id, { note })
+  await syncTransaction(() => db.orders.update(id, { note }))
 }
 
 /**
- * Huỷ đơn: xoá sạch phiếu thu của đơn rồi đặt `status='void'`, `paidAmount=0` — tất cả trong một
- * transaction để không bao giờ còn đơn huỷ mà vẫn treo phiếu thu.
+ * Huỷ đơn giữ nguyên sự kiện đã thu tiền, nhưng bỏ phân bổ của chúng khỏi đơn rồi đặt
+ * `status='void'`, `paidAmount=0` trong cùng transaction.
  *
  * Đơn huỷ **không** bị xoá khỏi DB: người bán cần thấy nó từng tồn tại, và số phiếu đã đưa cho khách
  * thì không được tái sử dụng. Doanh thu và công nợ đều bỏ qua `status='void'`.
  */
 export async function voidOrder(id: number): Promise<void> {
-  await db.transaction('rw', db.orders, db.payments, async () => {
+  await syncTransaction(async () => {
     const order = await db.orders.get(id)
     if (!order) throw new Error('Không tìm thấy đơn.')
     if (order.status === 'void') return
 
-    await db.payments.where('orderId').equals(id).delete()
+    await db.payments.where('allocatedOrderId').equals(id).modify({ allocatedOrderId: 0 })
     await db.orders.update(id, { paidAmount: 0, status: 'void' })
   })
 }

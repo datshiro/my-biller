@@ -8,14 +8,18 @@ import { DebtListPage } from '../debt-list-page'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
+import { newGid } from '@/domain/gid'
+import { PaymentSchema } from '@/domain/schema'
 import { CustomerDetailPage } from '@/features/customers/customer-detail-page'
 import { ReportPage } from '@/features/reports/report-page'
+import { installTestDevice } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
 })
 
@@ -43,16 +47,28 @@ async function seed() {
       payment: paid > 0 ? { amount: paid, method: 'cash', note: '' } : null,
     })
 
-  await sell(hoa, 'Chị Hoa', 200_000, 1, 50_000) // còn 150.000
+  const first = await sell(hoa, 'Chị Hoa', 200_000, 1, 50_000) // còn 150.000
   await sell(hoa, 'Chị Hoa', 100_000, 3, 0) //      còn 100.000
   const voided = await sell(hoa, 'Chị Hoa', 900_000, 4, 0)
   await db.orders.update(voided.id, { status: 'void', paidAmount: 0 })
+  await db.payments.add(
+    PaymentSchema.parse({
+      gid: newGid(),
+      orderId: first.id,
+      allocatedOrderId: 0,
+      customerId: hoa,
+      amount: 20_000,
+      method: 'cash',
+      paidAt: NOW,
+      note: 'Tiền đã thu đang chờ đối soát',
+    }),
+  )
 
   return hoa
 }
 
-/** 250.000 phải xuất hiện y hệt ở cả ba màn — đây là tiêu chí "3 chỗ, 1 nguồn" của Phase 7. */
-const OWED = '250.000'
+/** Nợ gốc 250.000 trừ 20.000 đã thu chưa gắn đơn phải giống nhau ở cả ba màn. */
+const OWED = '230.000'
 
 describe('tổng nợ ở ba màn', () => {
   it('màn Công nợ', async () => {
@@ -114,9 +130,9 @@ describe('tổng nợ ở ba màn', () => {
 
     await waitFor(() => expect(within(debtBox()).getByText('0 đ')).toBeDefined())
 
-    // 1 phiếu lúc bán + 2 phiếu vừa thu (một cho mỗi đơn còn nợ).
+    // 1 phiếu lúc bán + 1 phiếu chưa phân bổ + 2 phiếu vừa thu (một cho mỗi đơn còn nợ).
     expect(screen.getByText('Lịch sử thu tiền')).toBeDefined()
-    expect(await db.payments.count()).toBe(3)
+    expect(await db.payments.count()).toBe(4)
     expect(screen.queryByRole('button', { name: 'THU NỢ' })).toBeNull()
   })
 })

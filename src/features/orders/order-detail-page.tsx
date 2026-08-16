@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { useNavigate, useParams } from 'react-router'
 import { OrderStatusChip } from './order-status-chip'
 import { useOrderDetail } from './use-orders'
 import { updateOrderNote, voidOrder } from '@/db/repositories/orders'
+import { resolveUnallocatedPayment } from '@/db/repositories/payments'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import { remainingOf } from '@/domain/order-status'
 import type { Payment } from '@/domain/schema'
@@ -15,6 +16,18 @@ import { TextField } from '@/ui/text-field'
 
 const METHOD: Record<Payment['method'], string> = { cash: 'Tiền mặt', transfer: 'Chuyển khoản' }
 
+type RetailPaymentAction = {
+  kind: 'refunded' | 'discarded'
+  payment: Payment
+}
+
+function paymentLabel(payment: Payment, voidedRetailOrder: boolean): string {
+  if (!voidedRetailOrder || payment.allocatedOrderId !== 0) return 'Đã trả'
+  if (payment.unallocatedStatus === 'refunded') return 'Đã trả lại khách'
+  if (payment.unallocatedStatus === 'discarded') return 'Đã bỏ, có ghi vết'
+  return 'Khoản thu chờ xử lý'
+}
+
 export function OrderDetailPage() {
   const { id } = useParams()
   const orderId = Number(id)
@@ -23,6 +36,9 @@ export function OrderDetailPage() {
 
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [paymentAction, setPaymentAction] = useState<RetailPaymentAction | null>(null)
+  const [resolvingPayment, setResolvingPayment] = useState(false)
+  const resolvingPaymentRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   if (detail === undefined) return <p className="p-6 text-center text-muted">Đang mở đơn…</p>
@@ -39,6 +55,7 @@ export function OrderDetailPage() {
   const { order, lines, payments } = detail
   const remaining = remainingOf(order.total, order.paidAmount)
   const voided = order.status === 'void'
+  const voidedRetailOrder = voided && order.customerId === null
 
   const saveNote = async () => {
     if (noteDraft === null) return
@@ -56,6 +73,28 @@ export function OrderDetailPage() {
       await voidOrder(orderId)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không huỷ được đơn.')
+    }
+  }
+
+  const resolveRetailPayment = async () => {
+    if (!paymentAction?.payment.id || resolvingPaymentRef.current) return
+    resolvingPaymentRef.current = true
+    setResolvingPayment(true)
+    setError(null)
+    try {
+      await resolveUnallocatedPayment(paymentAction.payment.id, {
+        kind: paymentAction.kind,
+        reason:
+          paymentAction.kind === 'refunded'
+            ? `Đã trả lại tiền khách lẻ sau khi huỷ ${order.code}.`
+            : `Bỏ khoản thu khách lẻ sau khi huỷ ${order.code}.`,
+      })
+      setPaymentAction(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không xử lý được khoản thu.')
+    } finally {
+      resolvingPaymentRef.current = false
+      setResolvingPayment(false)
     }
   }
 
@@ -103,14 +142,39 @@ export function OrderDetailPage() {
           <span className="label-xs text-muted">TỔNG CỘNG</span>
           <span className="money money-lg">{formatVnd(order.total)}</span>
         </div>
-        {payments.map((payment) => (
-          <div key={payment.id} className="mt-1 flex items-baseline justify-between text-[13px]">
-            <span className="text-muted">
-              Đã trả · {METHOD[payment.method]} · {format(payment.paidAt, 'dd/MM HH:mm')}
-            </span>
-            <span className="money font-semibold">{formatAmount(payment.amount)}</span>
-          </div>
-        ))}
+        {payments.map((payment) => {
+          const pendingRetailPayment =
+            voidedRetailOrder &&
+            payment.allocatedOrderId === 0 &&
+            (payment.unallocatedStatus ?? 'pending') === 'pending'
+          return (
+            <div key={payment.id} className="mt-1 text-[13px]">
+              <div className="flex items-baseline justify-between">
+                <span className="text-muted">
+                  {paymentLabel(payment, voidedRetailOrder)} · {METHOD[payment.method]} ·{' '}
+                  {format(payment.paidAt, 'dd/MM HH:mm')}
+                </span>
+                <span className="money font-semibold">{formatAmount(payment.amount)}</span>
+              </div>
+              {pendingRetailPayment ? (
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setPaymentAction({ kind: 'refunded', payment })}
+                  >
+                    Đã trả lại khách
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => setPaymentAction({ kind: 'discarded', payment })}
+                  >
+                    Bỏ có ghi vết
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
         {remaining > 0 && !voided ? (
           <div className="mt-1 flex items-baseline justify-between">
             <span className="label-xs text-warn">CÒN NỢ</span>
@@ -155,15 +219,36 @@ export function OrderDetailPage() {
         <ConfirmDialog
           title="Huỷ đơn này?"
           message={
-            // Nói thẳng số tiền sắp biến khỏi sổ. Huỷ đơn xoá luôn phiếu thu, nên tiền mặt người bán
-            // đã thực sự cầm sẽ không còn ở đâu cả — kể cả trong báo cáo của kỳ đã chốt.
             order.paidAmount > 0
-              ? `${order.code} đã thu ${formatVnd(order.paidAmount)}. Huỷ đơn sẽ xoá luôn số đã thu đó khỏi sổ — hãy trả lại tiền cho khách trước. Đơn cũng thôi tính vào doanh thu và công nợ. Không hoàn tác được.`
+              ? `${order.code} đã thu ${formatVnd(order.paidAmount)}. Huỷ đơn không xoá lần thu này; tiền sẽ được đánh dấu chưa gắn vào đơn để ${
+                  order.customerId === null
+                    ? 'xử lý ngay tại chi tiết đơn'
+                    : 'xử lý ở lịch sử khách'
+                }. Đơn thôi tính vào doanh thu và công nợ. Không hoàn tác được.`
               : `${order.code} sẽ không còn tính vào doanh thu và công nợ. Không hoàn tác được.`
           }
           confirmLabel="Huỷ đơn"
           onConfirm={() => void doVoid()}
           onCancel={() => setConfirming(false)}
+        />
+      ) : null}
+
+      {paymentAction ? (
+        <ConfirmDialog
+          title={
+            paymentAction.kind === 'refunded'
+              ? 'Đã trả lại tiền cho khách?'
+              : 'Bỏ khoản ghi nhận này?'
+          }
+          message={
+            paymentAction.kind === 'refunded'
+              ? 'Phiếu thu vẫn nằm trong sổ với dấu “đã trả lại”, nhưng không còn tính vào tổng đã thu.'
+              : 'Phiếu thu không bị xoá; sổ giữ dấu vết rằng người bán xác nhận đây là khoản ghi nhận sai.'
+          }
+          confirmLabel="Xác nhận"
+          pending={resolvingPayment}
+          onConfirm={() => void resolveRetailPayment()}
+          onCancel={() => setPaymentAction(null)}
         />
       ) : null}
     </div>

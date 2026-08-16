@@ -12,6 +12,7 @@ import { getCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
 import { useItemGroups, useItems } from '@/features/items/use-items'
 import { BackupBanner } from '@/features/settings/backup-banner'
+import { useDeviceIdentity } from '@/features/settings/use-settings'
 import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
 import { formatAmount, formatVnd } from '@/domain/money'
 import { normalizeName, parseOrderText } from '@/domain/order-draft/parse-order-text'
@@ -34,6 +35,7 @@ export function SalesPage() {
   const items = useItems()
   const groups = useItemGroups()
   const today = useToday()
+  const deviceIdentity = useDeviceIdentity()
   const { cart, dispatch, reset, restored } = useCart()
 
   const [query, setQuery] = useState('')
@@ -221,6 +223,26 @@ export function SalesPage() {
       // `replace` để nút back không quay lại giỏ đã chốt.
       void navigate(`/don/${id}/phieu`, { replace: true })
     })
+
+  if (deviceIdentity === undefined) {
+    return (
+      <div className="p-4">
+        <ListSkeleton rows={5} />
+      </div>
+    )
+  }
+
+  if (deviceIdentity === null) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <EmptyState
+          message="Đặt tên máy trước khi bán. Máy cần một chữ cái riêng để mã phiếu không trùng với điểm bán khác."
+          actionLabel="ĐẶT TÊN MÁY"
+          onAction={() => void navigate('/cai-dat-may', { state: { returnTo: '/' } })}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col">

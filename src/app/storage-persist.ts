@@ -1,7 +1,7 @@
 /**
  * Xin trình duyệt "ghim" bộ nhớ để hệ điều hành không xoá dữ liệu khi thiếu dung lượng
- * hoặc khi lâu không mở app. App không có backend nên đây là lớp phòng vệ đầu tiên;
- * lớp thứ hai là sao lưu ra file (Phase 9).
+ * hoặc khi lâu không mở app. Việc này bảo vệ bản sao đọc và hàng đợi chưa đồng bộ trên máy;
+ * sổ chung không thay thế cho file sao lưu độc lập.
  *
  * Chrome/Safari chỉ chấp nhận khi có tương tác thật của người dùng → chờ gesture đầu tiên.
  */

@@ -2,9 +2,11 @@ import { db } from '../db'
 import { deleteByCustomer } from './customer-prices'
 import { matchesCustomer } from '@/domain/customer-search'
 import { remainingOf } from '@/domain/order-status'
+import { newGid } from '@/domain/gid'
 import { CustomerSchema, type Customer } from '@/domain/schema'
+import { syncTransaction } from '../sync/outbox'
 
-export type CustomerInput = Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>
+export type CustomerInput = Omit<Customer, 'id' | 'gid' | 'createdAt' | 'updatedAt'>
 
 const now = () => Date.now()
 
@@ -21,15 +23,21 @@ export async function searchCustomers(keyword: string): Promise<Customer[]> {
   return all.filter((customer) => matchesCustomer(customer, keyword))
 }
 
-export function createCustomer(input: CustomerInput): Promise<number> {
+export async function createCustomer(input: CustomerInput): Promise<number> {
   const stamp = now()
-  return db.customers.add(CustomerSchema.parse({ ...input, createdAt: stamp, updatedAt: stamp }))
+  return syncTransaction(() =>
+    db.customers.add(
+      CustomerSchema.parse({ ...input, gid: newGid(), createdAt: stamp, updatedAt: stamp }),
+    ),
+  )
 }
 
 export async function updateCustomer(id: number, patch: Partial<CustomerInput>): Promise<void> {
   const current = await db.customers.get(id)
   if (!current) throw new Error(`Không tìm thấy khách hàng #${id}`)
-  await db.customers.put(CustomerSchema.parse({ ...current, ...patch, id, updatedAt: now() }))
+  await syncTransaction(() =>
+    db.customers.put(CustomerSchema.parse({ ...current, ...patch, id, updatedAt: now() })),
+  )
 }
 
 export type CustomerSummary = { orderCount: number; lastSoldAt: number | null; debt: number }
@@ -64,7 +72,7 @@ export async function deleteCustomer(id: number): Promise<void> {
   if (orderCount > 0) {
     throw new Error(`Khách hàng này đã có ${orderCount} đơn — không xoá được. Hãy sửa thông tin thay vì xoá.`)
   }
-  await db.transaction('rw', db.customers, db.customerPrices, async () => {
+  await syncTransaction(async () => {
     await deleteByCustomer(id)
     await db.customers.delete(id)
   })

@@ -3,9 +3,11 @@ import { cartCount, cartReducer, cartTotals, emptyCart, type Cart } from '../car
 import type { PriceBook } from '../wholesale-price'
 import { calcChange, suggestCashAmounts } from '../cash-suggestion'
 import type { Item } from '../schema'
+import { testGid } from '@/test-fixtures'
 
 const item = (over: Partial<Item> = {}): Item => ({
   id: 1,
+  gid: testGid(1),
   name: 'Phở bò',
   groupId: null,
   unit: 'tô',

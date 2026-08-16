@@ -13,12 +13,14 @@ import {
 import { createGroup, createItem, deactivateItem, deleteGroup, listActiveItems } from '../repositories/items'
 import { createOrder } from '../repositories/orders'
 import { getShop, saveShop } from '../repositories/settings'
+import { installTestDevice } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 describe('settings', () => {

@@ -11,6 +11,7 @@ import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
 import { createItem } from '@/db/repositories/items'
 import { getOrderLines } from '@/db/repositories/orders'
+import { installTestDevice } from '@/test-fixtures'
 
 /**
  * Đọc bảng giá chậm lại theo từng khách, để dựng được cảnh hai lượt đọc IndexedDB **về sai thứ tự gọi**.
@@ -38,6 +39,7 @@ beforeEach(async () => {
   chamTheoKhach.clear()
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 const seedItems = () =>
@@ -57,6 +59,17 @@ function renderSales() {
     </MemoryRouter>,
   )
 }
+
+describe('danh tính máy', () => {
+  it('máy chưa có chữ cái bị chặn khỏi màn bán', async () => {
+    await db.deviceState.delete('identity')
+    renderSales()
+
+    expect(await screen.findByText(/Đặt tên máy trước khi bán/)).toBeDefined()
+    expect(screen.getByRole('button', { name: 'ĐẶT TÊN MÁY' })).toBeDefined()
+    expect(screen.queryByRole('group', { name: 'Mặt hàng' })).toBeNull()
+  })
+})
 
 /**
  * Biến nháp app vừa ghi thành nháp **phiên trước** để lại, bằng cách bỏ dấu phiên đi — đúng thứ nằm trên

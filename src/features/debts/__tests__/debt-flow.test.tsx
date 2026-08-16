@@ -8,6 +8,7 @@ import { DebtListPage } from '../debt-list-page'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
+import { installTestDevice } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 const at = (day: number, month = 7) => new Date(2026, month, day, 10).getTime()
@@ -15,6 +16,7 @@ const at = (day: number, month = 7) => new Date(2026, month, day, 10).getTime()
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
 })
 

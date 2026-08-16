@@ -4,7 +4,8 @@ Bộ này lái **app thật trên Chrome thật**: bấm nút thật, tải file
 Nó không thay Vitest hay Playwright mà bổ sung một lớp đọc được cho người không đọc code —
 mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra file HTML xem được ngoài trình duyệt.
 Danh sách suite và số ca luôn sống trong `robot/tests/*.robot`; guide này chỉ giữ đường chạy và
-điểm vào để tìm coverage.
+điểm vào để tìm coverage. Riêng `hai-may.robot` có 11 ca chạy hai Browser Context cùng trỏ vào một
+Durable Object cục bộ thật.
 
 | Lớp | Chạy bằng | Trả lời câu hỏi |
 | --- | --- | --- |
@@ -32,20 +33,25 @@ cài Chrome. Trên Ubuntu CI, workflow dùng `./robot/install.sh --with-deps` đ
 npm run test:live                              # toàn bộ suite live
 npm run test:regression                        # chỉ các ca chốt chặn hồi quy — vòng nhanh lúc đang sửa
 ./robot/run.sh robot/tests/ban-hang.robot      # một màn
+./robot/run.sh robot/tests/hai-may.robot       # riêng diễn tập hai máy
 ./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
 ```
 
-`run.sh` tự dựng dev server ở cổng 5175. Cổng 5173 để dành cho người đang code, 5174 cho
-Playwright — ba thứ chạy song song không giẫm chân nhau.
+`run.sh` tự dựng Vite ở cổng 5175 và Worker/ShopDO ở cổng 8787. Cổng 5173 để dành cho người đang
+code, 5174 cho Playwright. Khi một worktree cần cổng riêng đã định trước, truyền `ROBOT_PORT`; app
+vẫn trỏ Worker local ở 8787. `ROBOT_VENV` cho phép dùng một môi trường Robot đã cài ở vị trí khác.
 
-Runner chỉ dùng lại listener có thư mục làm việc là đúng worktree vật lý hiện tại **và** trả về đúng
-thẻ title của app `my-biller — Bán hàng`. Listener lạ, cũ hoặc thuộc worktree khác làm runner dừng
-ngay (fail-closed) với thông báo quyền sở hữu rõ ràng; script không bao giờ tự dừng listener đó, chủ
-tiến trình phải xử lý. Nếu runner tự dựng Vite, lúc kết thúc nó chỉ dừng đúng PID Vite trực tiếp do
-lượt chạy đó tạo.
+Runner chỉ dùng lại listener có thư mục làm việc là đúng worktree vật lý hiện tại. Vite còn phải trả
+về đúng thẻ title `my-biller — Bán hàng`; Worker phải trả `/health`. Listener lạ, cũ hoặc thuộc
+worktree khác làm runner dừng ngay (fail-closed) và không tự giết tiến trình đó. Khi runner tự dựng,
+nó xác minh listener `workerd` là hậu duệ của đúng process `wrangler`, rồi `trap` dọn Vite, wrapper
+Wrangler và listener con kể cả khi suite lỗi hoặc bị ngắt.
 
 Kết quả nằm ở `robot/results/report.html` (tóm tắt) và `robot/results/log.html` (từng bước, kèm
-ảnh chụp lúc lỗi). Nếu dev server không lên, xem `robot/results/vite.log`.
+ảnh chụp lúc lỗi). Nếu hạ tầng không lên, xem `robot/results/vite.log` và
+`robot/results/wrangler.log`. Mã ghép được điền bằng `Fill Secret`; `Đọc Bảng deviceState` chỉ trả
+`hasToken`, không trả giá trị token hay deviceId. Browser library cũng tắt `playwright-log.txt`
+nội bộ vì file này ghi nguyên text đọc từ DOM, bao gồm mã ghép dùng một lần.
 
 ## Trên GitHub Actions
 
@@ -71,8 +77,9 @@ dev. Bộ mẫu là điểm xuất phát cố định của mọi ca:
 ## Cách bộ test tự cô lập
 
 Mỗi ca chạy trong một `New Context` riêng của Playwright — đó là một hồ sơ trình duyệt trắng,
-nên IndexedDB rỗng và không ca nào ăn dữ liệu của ca khác. Không cần dọn dẹp thủ công, và các
-ca chạy được theo bất kỳ thứ tự nào.
+nên IndexedDB rỗng và không ca nào ăn dữ liệu của ca khác. Suite `hai-may.robot` mở hai context
+trong cùng ca: A và B có hai IndexedDB riêng nhưng nhận token riêng của cùng quán. Một page thứ hai
+trong context A dùng để kiểm lease/epoch giữa hai tab chung hồ sơ.
 
 ## Cấu trúc
 
@@ -83,7 +90,8 @@ robot/
 ├── run.sh                    xác minh cổng, dựng Vite, chạy, dọn đúng PID
 ├── resources/
 │   ├── app.resource          vòng đời trình duyệt, phiên sạch, nạp mẫu, đọc IndexedDB
-│   └── sales.resource        thao tác màn Bán hàng, dùng lại ở nhiều suite
+│   ├── sales.resource        thao tác màn Bán hàng, dùng lại ở nhiều suite
+│   └── hai-may.resource      ghép A/B, chọn page, đối chiếu hai kho, fault injection có kiểm soát
 ├── tests/
 │   ├── ban-hang.robot        giỏ hàng, thu tiền, bán nợ, nháp giỏ, công tắc Lẻ/SỈ
 │   ├── don-hang.robot        danh sách đơn, ghi chú, huỷ đơn
@@ -93,12 +101,14 @@ robot/
 │   ├── cong-no.robot         thu nợ, chặn thu dư, phiếu thu ra đúng dòng
 │   ├── bao-cao.robot         lãi/lỗ, các kỳ, khoảng ngày tự chọn
 │   ├── phieu.robot           nội dung phiếu, chia trang, dựng ảnh PNG
-│   └── sao-luu.robot         sao lưu, chia sẻ, nhập lại, xoá sạch, cảnh báo bản sao trống
+│   ├── sao-luu.robot         sao lưu, chia sẻ, nhập lại, xoá sạch, cảnh báo bản sao trống
+│   └── hai-may.robot         11 ca · đồng bộ, rollback, thu hồi, resync, lease/epoch
 └── results/
     ├── output.xml            kết quả máy đọc
     ├── report.html           tóm tắt
     ├── log.html              từng bước và ảnh lỗi
-    └── vite.log              log dev server do runner dựng
+    ├── vite.log              log dev server do runner dựng
+    └── wrangler.log          log Worker local do runner dựng
 ```
 
 ## Viết thêm ca mới

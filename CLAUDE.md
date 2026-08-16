@@ -1,7 +1,9 @@
 # my-biller
 
-App tính tiền cho quán ăn nhỏ. PWA offline-first, không backend, dữ liệu nằm trong IndexedDB **trên máy
-người bán** — mất là mất thật, không có bản trên server để khôi phục. Mọi quy ước dưới đây sinh ra từ chỗ đó.
+App tính tiền cho quán ăn nhỏ. PWA offline-first: máy đã ghép dùng chung một sổ trên Cloudflare
+Durable Object, còn mỗi máy giữ bản sao IndexedDB và hàng đợi để vẫn ghi được khi mạng chập chờn.
+Máy chưa ghép chỉ có sổ cục bộ; file sao lưu độc lập vẫn là bắt buộc cho cả hai chế độ. Mọi quy ước
+dưới đây bảo vệ các bản sao và đường đồng bộ đó.
 
 ## Quy ước: mỗi thay đổi phải kèm ca kiểm thử live
 
@@ -19,7 +21,7 @@ Ba việc, theo thứ tự:
    ```bash
    npm run test        # Vitest
    npm run lint
-   npm run build       # gồm tsc --noEmit
+   npm run build       # gồm tsc -b cho app, shared và Worker
    npm run test:e2e    # Playwright
    npm run test:live   # Robot, app thật trên Chrome thật
    ```
@@ -48,8 +50,8 @@ nói rõ lỗi cũ là gì — không thì người sau xoá nhầm vì tưởng
 
 ## Đừng bao giờ
 
-- **Sửa `version(1)` trong `src/db/db.ts`.** Đổi schema là thêm `version(n+1).stores(...)`. Không có
-  backend migrate hộ; sửa version cũ là phá dữ liệu trên máy đang chạy.
+- **Sửa `version(1)` trong `src/db/db.ts`.** Đổi schema là thêm `version(n+1).stores(...)`. Worker
+  không thể migrate IndexedDB trên từng máy; sửa version cũ là phá dữ liệu trên máy đang chạy.
 - **Commit file trong `plans/` hoặc `journals/`.** Đó là giấy nháp, không phải sản phẩm.
 - **Stage kết xuất test** — `robot/results/`, `test-results/`, `coverage/`, ảnh chụp Playwright.
 

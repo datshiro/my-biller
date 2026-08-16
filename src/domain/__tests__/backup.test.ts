@@ -10,6 +10,7 @@ import {
   parseBackupFile,
 } from '../backup'
 import type { BackupData } from '../schema'
+import { testGid } from '@/test-fixtures'
 
 const emptyData: BackupData = {
   settings: [],
@@ -37,26 +38,26 @@ const file = (overrides: Record<string, unknown> = {}) =>
 type Row = Record<string, unknown>
 
 const customer = (over: Row = {}) => ({
-  id: 7, name: 'Chị Hoa', phone: '0911', address: '', note: '', createdAt: 0, updatedAt: 0, ...over,
+  id: 7, gid: testGid(7), name: 'Chị Hoa', phone: '0911', address: '', note: '', createdAt: 0, updatedAt: 0, ...over,
 })
 const order = (over: Row = {}) => ({
-  id: 1, code: 'HD001', customerId: null, customerName: 'Khách lẻ', subtotal: 100_000, discount: 0,
+  id: 1, gid: testGid(1), code: 'HD001', customerId: null, customerName: 'Khách lẻ', subtotal: 100_000, discount: 0,
   surcharge: 0, total: 100_000, paidAmount: 100_000, status: 'paid', soldAt: 0, note: '',
   createdAt: 0, updatedAt: 0, ...over,
 })
 const orderLine = (over: Row = {}) => ({
-  id: 1, orderId: 1, itemId: null, name: 'Phở', unit: 'tô', unitPrice: 100_000, costPrice: null,
+  id: 1, gid: testGid(1), orderId: 1, itemId: null, name: 'Phở', unit: 'tô', unitPrice: 100_000, costPrice: null,
   qty: 1, amount: 100_000, ...over,
 })
 const payment = (over: Row = {}) => ({
-  id: 1, orderId: 1, customerId: null, amount: 100_000, method: 'cash', paidAt: 0, note: '', ...over,
+  id: 1, gid: testGid(1), orderId: 1, allocatedOrderId: 1, customerId: null, amount: 100_000, method: 'cash', paidAt: 0, note: '', ...over,
 })
 const item = (over: Row = {}) => ({
-  id: 3, name: 'Phở', groupId: null, unit: 'tô', unitPrice: 50_000, costPrice: null, isActive: 1,
+  id: 3, gid: testGid(3), name: 'Phở', groupId: null, unit: 'tô', unitPrice: 50_000, costPrice: null, isActive: 1,
   note: '', createdAt: 0, updatedAt: 0, ...over,
 })
 const price = (over: Row = {}) => ({
-  id: 1, customerId: 7, itemId: 3, unitPrice: 45_000, createdAt: 0, updatedAt: 0, ...over,
+  id: 1, gid: testGid(1), customerId: 7, itemId: 3, unitPrice: 45_000, createdAt: 0, updatedAt: 0, ...over,
 })
 
 /** Một file nhỏ nhưng đủ liên kết: đơn ↔ dòng hàng ↔ phiếu thu ↔ khách. */
@@ -93,7 +94,7 @@ describe('parseBackupFile', () => {
   })
 
   it('file của bản mới hơn bảo người dùng cập nhật, không bảo file hỏng', () => {
-    expect(() => parseBackupFile(file({ version: 3 }))).toThrow(/v3/)
+    expect(() => parseBackupFile(file({ version: 5 }))).toThrow(/v5/)
   })
 
   it('thiếu bảng thì chỉ đúng chỗ hỏng', () => {
@@ -145,6 +146,31 @@ describe('parseBackupFile — liên kết giữa các bảng', () => {
     )
   })
 
+  it('file v4 thiếu allocatedOrderId bị chặn thay vì tự biến phiếu thu thành chưa phân bổ', () => {
+    const missingAllocation = payment() as Row
+    delete missingAllocation.allocatedOrderId
+    const data = JSON.parse(wholeFile({ payments: [missingAllocation] })).data
+
+    expect(() => parseBackupFile(file({ version: 4, data }))).toThrow(
+      /data\.payments\.0\.allocatedOrderId/,
+    )
+  })
+
+  it('file v3 thiếu allocatedOrderId được di trú theo đơn gốc', () => {
+    const missingAllocation = payment() as Row
+    delete missingAllocation.allocatedOrderId
+    const data = JSON.parse(wholeFile({ payments: [missingAllocation] })).data
+
+    expect(parseBackupFile(file({ version: 3, data })).data.payments[0]?.allocatedOrderId).toBe(1)
+  })
+
+  it('phiếu thu phân bổ vào đơn không có trong file bị chặn', () => {
+    const data = JSON.parse(wholeFile({ payments: [payment({ allocatedOrderId: 99 })] })).data
+    expect(() => parseBackupFile(file({ version: 4, data }))).toThrow(
+      /đang trừ vào đơn số 99 mà file không có đơn đó/,
+    )
+  })
+
   it('đơn ghi cho khách không có trong file bị chặn', () => {
     expect(() => parseBackupFile(wholeFile({ customers: [] }))).toThrow(/khách số 7 mà file không có khách đó/)
   })
@@ -165,6 +191,17 @@ describe('parseBackupFile — liên kết giữa các bảng', () => {
     // File nói đã thu đủ nhưng chỉ kèm 1 phiếu thu 40k — `recalcAll` sau khi nhập cũng sẽ tin phiếu thu.
     const data = { orders: [order({ paidAmount: 100_000, status: 'paid' })], payments: [payment({ amount: 40_000 })] }
     expect(() => parseBackupFile(wholeFile(data))).toThrow(/còn thiếu 60.000 đ/)
+  })
+
+  it('file v4 không lấy phiếu chưa phân bổ để che nợ của đơn không ghi khách', () => {
+    const data = JSON.parse(wholeFile({
+      orders: [order()],
+      payments: [payment({ allocatedOrderId: 0 })],
+    })).data
+
+    expect(() => parseBackupFile(file({ version: 4, data }))).toThrow(
+      /còn thiếu 100.000 đ nhưng không ghi khách nào/,
+    )
   })
 
   it('đơn huỷ chưa thu đồng nào vẫn nhận được — huỷ thì không phải là nợ', () => {
@@ -247,8 +284,12 @@ describe('dữ liệu nghiệp vụ trong bản sao', () => {
     const counts = countOperationalRecords({
       ...emptyData,
       settings: [{ key: 'app', value: { lastBackupAt: null, seededExpenseCategories: true } }],
-      itemGroups: [{ id: 1, name: 'Món nước', sortOrder: 0, createdAt: 0, updatedAt: 0 }],
-      expenseCategories: [{ id: 1, name: 'Nguyên liệu', createdAt: 0, updatedAt: 0 }],
+      itemGroups: [
+        { id: 1, gid: testGid(101), name: 'Món nước', sortOrder: 0, createdAt: 0, updatedAt: 0 },
+      ],
+      expenseCategories: [
+        { id: 1, gid: testGid(102), name: 'Nguyên liệu', createdAt: 0, updatedAt: 0 },
+      ],
       customerPrices: [price()] as BackupData['customerPrices'],
     })
 

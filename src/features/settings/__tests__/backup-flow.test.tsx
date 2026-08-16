@@ -5,10 +5,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPage } from '../settings-page'
+import { downloadRecoveryBackup, prepareBackup } from '../backup'
 import { collectBackup } from '@/db/backup'
 import { db } from '@/db/db'
 import { createItem } from '@/db/repositories/items'
 import { getAppState, saveAppState } from '@/db/repositories/settings'
+import { testGid } from '@/test-fixtures'
 
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
 const DAY = 24 * 60 * 60 * 1000
@@ -73,6 +75,20 @@ const pick = (contents: string) =>
     target: { files: [new File([contents], 'backup.json', { type: 'application/json' })] },
   })
 
+describe('sao lưu trong recovery chỉ đọc', () => {
+  it('tải đúng snapshot nhưng không ghi mốc hoặc tạo outbox', async () => {
+    await seedItem()
+    const prepared = await prepareBackup(NOW)
+    expect(JSON.parse(await prepared.file.text())).toMatchObject({ appVersion: '2.0.0' })
+
+    await downloadRecoveryBackup(prepared)
+
+    expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
+    expect((await getAppState()).lastBackupAt).toBeNull()
+    expect(await db.outbox.count()).toBe(0)
+  })
+})
+
 describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
   it('chỉ mở cảnh báo; huỷ không tải, không báo thành công và không ghi mốc', async () => {
     renderPage()
@@ -136,6 +152,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
 
   it('file không nhập lại được ưu tiên đường cứu: tải ngay, không cảnh báo rỗng, không stamp/share', async () => {
     await db.items.add({
+      gid: testGid(98),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',
@@ -305,6 +322,9 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
     expect(await screen.findByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeDefined()
 
+    await waitFor(() =>
+      expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 10 * 60 * 1000)).toBe(true),
+    )
     const expire = timeoutSpy.mock.calls.find(([, delay]) => delay === 10 * 60 * 1000)?.[0]
     expect(expire).toBeTypeOf('function')
     act(() => {
@@ -418,6 +438,7 @@ describe('bản sao an toàn không nhập lại được', () => {
   /** Ghi thẳng vào bảng, không qua schema: `collectBackup` xuất được, `parseBackupFile` từ chối. */
   const addOddItem = () =>
     db.items.add({
+      gid: testGid(99),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',

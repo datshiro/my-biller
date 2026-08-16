@@ -20,6 +20,7 @@ import {
 import { normalizeName } from '@/domain/order-draft/parse-order-text'
 import { aggregate, dailySeries, type DailyPoint, type ReportNumbers } from '@/domain/report'
 import { useDayTick } from '@/ui/use-day-tick'
+import { useSyncRevision } from '@/features/sync/use-sync-revision'
 
 /**
  * Kỳ mang luôn tham số của nó (`offset`, `from`/`to`) thay vì để rời bên ngoài — nhờ vậy không tồn
@@ -97,6 +98,7 @@ const MATERIAL = normalizeName('Nguyên liệu')
  */
 export function useReport(period: Period): Report | undefined {
   const day = useDayTick()
+  const syncRevision = useSyncRevision()
   return useLiveQuery(async () => {
     const now = Date.now()
     const { from, to, label, canNext } = rangeOf(period, now)
@@ -143,5 +145,5 @@ export function useReport(period: Period): Report | undefined {
       now,
       maybeDoubleCounted: numbers.cogs > 0 && materialExpense,
     }
-  }, [keyOf(period), day])
+  }, [keyOf(period), day, syncRevision])
 }

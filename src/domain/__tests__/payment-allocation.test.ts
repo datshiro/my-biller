@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { allocateDebtPayment, type OpenOrder } from '../payment-allocation'
 
 const orders: OpenOrder[] = [
-  { orderId: 3, remaining: 50_000, soldAt: 300 },
-  { orderId: 1, remaining: 120_000, soldAt: 100 },
-  { orderId: 2, remaining: 80_000, soldAt: 200 },
+  { orderId: 3, gid: 'c', remaining: 50_000, soldAt: 300 },
+  { orderId: 1, gid: 'a', remaining: 120_000, soldAt: 100 },
+  { orderId: 2, gid: 'b', remaining: 80_000, soldAt: 200 },
 ]
 
 describe('allocateDebtPayment', () => {
@@ -38,7 +38,7 @@ describe('allocateDebtPayment', () => {
   })
 
   it('bỏ qua đơn đã hết nợ', () => {
-    const withPaid = [...orders, { orderId: 9, remaining: 0, soldAt: 1 }]
+    const withPaid = [...orders, { orderId: 9, gid: 'z', remaining: 0, soldAt: 1 }]
     expect(allocateDebtPayment(withPaid, 10_000).allocations).toEqual([{ orderId: 1, amount: 10_000 }])
   })
 
@@ -51,14 +51,14 @@ describe('allocateDebtPayment', () => {
     expect(() => allocateDebtPayment(orders, 1.5)).toThrow()
   })
 
-  it('hai đơn cùng thời điểm thì phân bổ theo id để kết quả luôn ổn định', () => {
+  it('hai đơn cùng thời điểm thì phân bổ theo gid để mọi máy cho cùng kết quả', () => {
     const sameMoment: OpenOrder[] = [
-      { orderId: 8, remaining: 30_000, soldAt: 500 },
-      { orderId: 5, remaining: 30_000, soldAt: 500 },
+      { orderId: 8, gid: 'a', remaining: 30_000, soldAt: 500 },
+      { orderId: 5, gid: 'z', remaining: 30_000, soldAt: 500 },
     ]
     expect(allocateDebtPayment(sameMoment, 40_000).allocations).toEqual([
-      { orderId: 5, amount: 30_000 },
-      { orderId: 8, amount: 10_000 },
+      { orderId: 8, amount: 30_000 },
+      { orderId: 5, amount: 10_000 },
     ])
   })
 

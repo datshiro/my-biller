@@ -47,21 +47,35 @@ async function applyFix(fix: Fix): Promise<void> {
  */
 export async function recalcAll(): Promise<number> {
   return db.transaction('rw', db.orders, db.payments, async () => {
+    const orders = await db.orders.toArray()
+    const voidOrderIds = new Set(
+      orders.flatMap((order) =>
+        order.status === 'void' && order.id !== undefined ? [order.id] : [],
+      ),
+    )
+    const allocationRepairs = new Set<number>()
     const paidByOrder = new Map<number, number>()
-    await db.payments.each((payment) => {
-      paidByOrder.set(payment.orderId, (paidByOrder.get(payment.orderId) ?? 0) + payment.amount)
+    await db.payments.each(async (payment) => {
+      if (voidOrderIds.has(payment.allocatedOrderId)) {
+        const allocatedOrderId = payment.allocatedOrderId
+        allocationRepairs.add(allocatedOrderId)
+        if (payment.id !== undefined) await db.payments.update(payment.id, { allocatedOrderId: 0 })
+        return
+      }
+      if (payment.allocatedOrderId === 0) return
+      paidByOrder.set(
+        payment.allocatedOrderId,
+        (paidByOrder.get(payment.allocatedOrderId) ?? 0) + payment.amount,
+      )
     })
 
     let repairs = 0
-    for (const order of await db.orders.toArray()) {
+    for (const order of orders) {
       if (order.id === undefined) continue
-
-      const stray = order.status === 'void' && paidByOrder.has(order.id)
-      if (stray) await db.payments.where('orderId').equals(order.id).delete()
 
       const fix = repaired(order, paidByOrder.get(order.id) ?? 0)
       if (fix) await applyFix(fix)
-      if (fix || stray) repairs += 1
+      if (fix || allocationRepairs.has(order.id)) repairs += 1
     }
     return repairs
   })

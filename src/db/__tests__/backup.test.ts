@@ -11,6 +11,12 @@ import { cleanPriceRows, parseBackupFile } from '@/domain/backup'
 import { createOrder } from '../repositories/orders'
 import { addOrderPayment } from '../repositories/payments'
 import { saveShop } from '../repositories/settings'
+import {
+  beginDevicePairing,
+  getDeviceConnection,
+  savePairedDevice,
+} from '../repositories/device-state'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 const exportedAt = new Date(2026, 7, 7, 14, 0).getTime()
@@ -66,6 +72,7 @@ async function seedShop() {
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 describe('collectBackup', () => {
@@ -75,7 +82,7 @@ describe('collectBackup', () => {
     const file = await collectBackup(exportedAt)
 
     expect(file.app).toBe('my-biller')
-    expect(file.version).toBe(2)
+    expect(file.version).toBe(4)
     expect(file.exportedAt).toBe(new Date(exportedAt).toISOString())
     expect(Object.entries(file.data).filter(([, rows]) => rows.length === 0)).toEqual([])
   })
@@ -85,6 +92,7 @@ describe('collectBackup', () => {
     // Ghi thẳng vào bảng, không qua schema: giả cảnh bản build cũ hoặc người dùng sửa tay qua DevTools.
     // Sao lưu chết ở đây là khoá luôn đường nhập file, vì nhập file có xuất bản an toàn trước.
     await db.items.add({
+      gid: testGid(99),
       name: 'Hàng lạ',
       groupId: null,
       unit: '',
@@ -133,7 +141,7 @@ describe('xuất → xoá → nhập', () => {
     expect(await db.orders.get(orderId)).toMatchObject({ paidAmount: 40_000, status: 'partial' })
   })
 
-  it('đơn huỷ vẫn là huỷ sau khi nhập, và không còn treo đồng nào đã thu', async () => {
+  it('đơn huỷ vẫn là huỷ sau khi nhập, phiếu thu còn nguyên nhưng không phân bổ', async () => {
     const orderId = await seedShop()
     // Đặt thẳng `status` chứ không gọi `voidOrder`: giả đúng cảnh file sao lưu có đơn huỷ mà phiếu
     // thu vẫn còn — `recalcAll` không được để đơn "Đã huỷ" hiện "Đã thu 40.000 đ".
@@ -145,9 +153,9 @@ describe('xuất → xoá → nhập', () => {
     await recalcAll()
 
     expect(await db.orders.get(orderId)).toMatchObject({ status: 'void', paidAmount: 0 })
-    // Phiếu thu phải đi theo đơn: lịch sử thu tiền của khách và tổng "Đã thu" của kỳ đọc thẳng bảng
-    // `payments`, không đọc `paidAmount`.
-    expect(await db.payments.where('orderId').equals(orderId).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(orderId).toArray()).toMatchObject([
+      { amount: 40_000, allocatedOrderId: 0 },
+    ])
   })
 
   it('recalcAll không đóng dấu ngày nhập lên đơn cũ', async () => {
@@ -180,7 +188,7 @@ describe('replaceAllData', () => {
   it('dòng giá mồ côi trong file bị bỏ, phần còn lại vẫn nhập bình thường', async () => {
     await seedShop()
     const data = (await collectBackup(exportedAt)).data
-    const mồCôi = { id: 99, customerId: 404, itemId: 404, unitPrice: 1_000, createdAt: soldAt, updatedAt: soldAt }
+    const mồCôi = { gid: testGid(99), id: 99, customerId: 404, itemId: 404, unitPrice: 1_000, createdAt: soldAt, updatedAt: soldAt }
 
     await replaceAllData({ ...data, customerPrices: [...data.customerPrices, mồCôi] })
 
@@ -216,5 +224,39 @@ describe('replaceAllData', () => {
 
     await replaceAllData(parsed.data)
     expect(await db.customerPrices.count()).toBe(1)
+  })
+})
+
+describe('khóa ghi đè sổ khi ghép máy', () => {
+  it('kiểm lại trong transaction dù tab nhập file đã thấy trạng thái chưa kết nối trước đó', async () => {
+    await seedShop()
+    const before = await collectBackup(exportedAt)
+    const beforeCount = await countAllRecords()
+
+    // Kết quả này tượng trưng cho pre-check đã cũ của tab nhập file. Quyết định cuối cùng phải nằm
+    // trong transaction của `replaceAllData`, sau transaction ghép máy đang giữ cùng các bảng.
+    expect(await getDeviceConnection()).toBeUndefined()
+    const pairing = await beginDevicePairing()
+    await expect(wipeAllData()).rejects.toThrow(/đang ghép/)
+    await savePairedDevice({
+      pairingAttemptId: pairing.attemptId,
+      admissionExpiresAt: Date.now() + 60_000,
+      deviceId: '00000000-0000-4000-8000-000000000011',
+      label: 'Quầy trước',
+      letter: 'A',
+      shopId: '00000000-0000-4000-8000-000000000012',
+      token: 'token-thu-nghiem-du-dai-cho-ket-noi-1234567890',
+      syncUrl: 'https://sync.example.com',
+    })
+    const staged = await db.outbox.count()
+
+    const empty = structuredClone(before.data)
+    for (const key of Object.keys(empty) as (keyof typeof empty)[]) empty[key] = []
+    await expect(replaceAllData(empty)).rejects.toThrow(/đã ghép/)
+
+    expect(await countAllRecords()).toBe(beforeCount)
+    expect(await db.outbox.count()).toBe(staged)
+    expect(staged).toBe(beforeCount)
+    expect(await db.deviceState.get('pairing')).toMatchObject({ connectionSaved: true })
   })
 })

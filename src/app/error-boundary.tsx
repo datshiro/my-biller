@@ -6,9 +6,9 @@ import { Button } from '@/ui/button'
 type State = { error: Error | null; rescue: string | null; rescuing: boolean }
 
 /**
- * Chắn cuối. App không có backend nên khi cây React sập, đường duy nhất để cứu dữ liệu
- * (Thêm → Cài đặt → SAO LƯU RA FILE) cũng sập theo. Màn này gọi thẳng `exportBackup`,
- * không đi qua router hay state của app, nên vẫn tải được file kể cả lúc mọi màn đã trắng.
+ * Chắn cuối. Khi cây React sập, đường sao lưu thường dùng
+ * (Thêm → Cài đặt → SAO LƯU RA FILE) cũng sập theo. Màn này gọi thẳng `exportBackup`, không đi qua
+ * router hay state của app, nên vẫn tải được bản sao cục bộ kể cả lúc mọi màn đã trắng.
  *
  * Trừ một trường hợp: chính Dexie là chỗ hỏng. `exportBackup` đi qua `db.transaction`, nên lúc đó nút
  * cứu chắc chắn thất bại. Hứa một lối thoát bất khả thi tệ hơn là nói thẳng không có — người bán bấm,

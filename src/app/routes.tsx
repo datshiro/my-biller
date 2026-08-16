@@ -18,6 +18,8 @@ import { ExpenseCategoryPage } from '@/features/settings/expense-category-page'
 import { ItemGroupPage } from '@/features/settings/item-group-page'
 import { SettingsPage } from '@/features/settings/settings-page'
 import { ShopInfoPage } from '@/features/settings/shop-info-page'
+import { DeviceSetupPage } from '@/features/settings/device-setup-page'
+import { GhepMayPage } from '@/features/settings/ghep-may-page'
 
 export function AppRoutes() {
   return (
@@ -49,6 +51,8 @@ export function AppRoutes() {
         <Route path="/them/khach-hang/:id/sua" element={<CustomerFormPage />} />
         <Route path="/them/khach-hang/:id/bang-gia" element={<CustomerPricePage />} />
         <Route path="/them/cua-hang" element={<ShopInfoPage />} />
+        <Route path="/cai-dat-may" element={<DeviceSetupPage />} />
+        <Route path="/ghep-may" element={<GhepMayPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

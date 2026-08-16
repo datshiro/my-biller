@@ -1,5 +1,87 @@
 # Ghi chú phát hành
 
+## 2.0.0 — chưa phát hành (11/8/2026)
+
+> Mục này là phần chênh của release candidate 2.0.0 so với production đang chạy commit `978f766`
+> (bản 1.0.3). Production chưa bị thay đổi; mục này không phải bằng chứng đã deploy release.
+
+### ⚠️ Việc phải làm khi cập nhật
+
+1. **Sao lưu từng kho đang có dữ liệu trước khi cập nhật.** Trên iPhone, Safari và app mở từ biểu
+   tượng Màn hình chính có thể là hai kho khác nhau; phải sao lưu ở đúng nơi đang nhìn thấy sổ.
+2. **Đặt tên và một chữ cái A–Z riêng cho từng máy.** App sẽ chặn bán hàng cho tới khi máy có danh
+   tính; chữ cái được đưa vào mã phiếu để hai quầy không tạo mã trùng nhau.
+3. **Chọn đúng sổ nguồn trước khi ghép nhiều máy.** Máy đầu tiên đưa sổ cục bộ lên sổ chung. Nếu cả
+   máy đang ghép và sổ chung đều đã có dữ liệu, app dừng với yêu cầu đối soát; không tự gộp và không
+   ghi đè một bên. Xem ranh giới và quy trình tại [`dong-bo.md`](./dong-bo.md).
+4. **Máy đã ghép không nhập file hoặc xoá sổ từ Cài đặt.** Khi bản sao cục bộ có vấn đề, dùng
+   **Kéo lại từ đầu** để dựng lại từ sổ chung. File sao lưu vẫn phải được giữ như lớp phục hồi độc lập.
+5. **Không quay lại app 1.x (bao gồm 1.0.3) sau khi đã mở 2.0.0.** Schema v5 là nâng cấp một chiều. Nếu app chính
+   không mở được, operator dùng recovery artifact 2.0.0 trên đúng production origin để tải bản sao,
+   rồi sửa bằng một bản 2.x mới hơn; không deploy lại frontend 1.x.
+
+Nâng schema IndexedDB từ production hiện tại lên schema mới là tự động. Dữ liệu sổ cũ được cấp danh
+tính đồng bộ và phiếu thu cũ được bổ sung trạng thái phân bổ; không có bước sửa file bằng tay. Nếu
+app hiện khoản thu “chưa gắn vào đơn”, người bán cần vào lịch sử khách để gắn vào đơn còn nợ, xác
+nhận đã trả lại khách hoặc bỏ có ghi vết. Việc nâng schema không xoá dữ liệu, nhưng app 1.x không
+hiểu schema v5 và không phải đường rollback hợp lệ.
+
+### Người bán sẽ thấy
+
+- **Nhiều máy dùng chung một sổ.** Mỗi máy giữ bản sao IndexedDB và hàng đợi riêng, vẫn ghi được khi
+  mạng chập chờn rồi tự hội tụ khi có mạng. WebSocket báo thay đổi ngay; poll 30 giây chỉ là đường dự
+  phòng.
+- Màn **Thêm → Cài đặt → Máy bán hàng** cho phép đặt tên/chữ cái, nhập hoặc tạo mã ghép dùng một lần,
+  xem các máy đang hoạt động và thu hồi máy khác. M1 chưa có tài khoản hay vai trò; mọi máy đã ghép
+  có quyền ngang nhau.
+- Mã phiếu mới mang chữ cái máy, ví dụ `PBH-260811-A001`, để các quầy vẫn tạo mã khác nhau khi cùng
+  bán lúc mất mạng.
+- Banner đồng bộ nói rõ trạng thái chờ mạng, dữ liệu chưa đẩy, yêu cầu kéo lại hoặc máy đã bị thu hồi.
+- **Huỷ đơn đã thu tiền không còn xoá phiếu thu.** Với đơn có khách, khoản tiền được xử lý trong lịch
+  sử khách: gắn sang đơn còn nợ phù hợp, xác nhận đã trả lại hoặc bỏ có ghi vết. Với đơn khách lẻ,
+  hai thao tác hoàn tiền/bỏ có ghi vết nằm ngay trong chi tiết đơn đã huỷ. Trạng thái đã xử lý là
+  cuối cùng; một thiết bị cũ không thể phân bổ hoặc đổi quyết định đó trên sổ chung.
+- Thông báo “Đã khôi phục đơn đang lên dở” chỉ hiện khi nháp thật sự đến từ phiên trước, không hiện
+  chỉ vì người bán đi sang màn khác rồi quay lại.
+
+### Sao lưu an toàn hơn
+
+- Trước khi tải một bản sao không có đơn, mặt hàng, khách, khoản chi hoặc giá riêng còn dùng được,
+  app cảnh báo rõ và nhắc người dùng iPhone kiểm tra đúng kho Safari/Màn hình chính.
+- Sau khi tải thành công, thiết bị hỗ trợ Web Share có thể chia sẻ đúng file JSON vừa tạo. App vẫn
+  yêu cầu kiểm tra thư mục Tải về vì trình duyệt có thể đổi tên file khi bị trùng.
+- File mới dùng định dạng backup version 4. Máy chưa ghép vẫn nhập được file version 1–4; file không
+  chứa token, mã máy, hàng đợi hay trạng thái đồng bộ.
+- Dấu “lần cuối sao lưu” chỉ được cập nhật khi file có thể nhập lại; cảnh báo, chia sẻ và tải file
+  được chặn bấm lặp để không đóng dấu hoặc chia sẻ nhầm bản.
+- File backup version 4 không nhập ngược vào production 1.0.3 hoặc bất kỳ app 1.x nào. Giữ file đó để phục hồi bằng app 2.x;
+  không dùng việc đổi trường `version` bằng tay làm đường downgrade.
+
+### Phục hồi schema v5
+
+- Release có thêm `dist-recovery/`, một artifact riêng chỉ hiển thị số bản ghi và tải file sao lưu.
+  Nó không có bán hàng, nhập file, ghép máy, kéo lại từ đầu hay runner đồng bộ; tải recovery không
+  ghi `lastBackupAt` hoặc tạo outbox.
+- IndexedDB thuộc về origin. Preview URL hoặc localhost không thể đọc dữ liệu của production; khi có
+  sự cố thật, operator phải kích hoạt recovery trên đúng production origin, sau khi đóng mọi tab
+  Safari/PWA cũ. Trước khi đọc dữ liệu phải xác minh title/tab và banner đỏ của recovery sau khi
+  service worker recovery đã tự giành quyền và trang được tải lại. Đây là thao tác production riêng,
+  không tự xảy ra trong release candidate này.
+- Thoát recovery bằng cách roll-forward artifact app 2.x đã sửa và yêu cầu người dùng cập nhật service
+  worker/tải lại. Runbook đầy đủ ở [`deploy.md`](./deploy.md#phục-hồi-schema-v5-cùng-origin).
+
+### Vận hành và độ tin cậy
+
+- Thêm Cloudflare Worker và một Durable Object SQLite riêng cho mỗi quán. Staging dùng Worker và
+  namespace tách khỏi production; hướng dẫn deploy/rollback nằm tại [`deploy.md`](./deploy.md).
+- WebSocket upgrade được giữ nguyên qua Worker gateway; outbox, sự kiện online, lúc app hiện lại và
+  WebSocket vẫn kích hoạt đồng bộ ngay, còn lease tab được duy trì cục bộ mà không dùng quota
+  Cloudflare.
+- Bộ kiểm thử thêm đường hai máy thật, quyết định khoản tiền terminal, mất mạng/hội tụ, thu hồi,
+  rollback, kéo lại toàn bộ sổ, backup không lộ danh tính máy, recovery artifact và regression trực
+  tiếp trên staging. Cổng chạy được sở hữu bởi
+  [`robot/run.sh`](../robot/run.sh) và workflow [`.github/workflows/kiem-thu.yml`](../.github/workflows/kiem-thu.yml).
+
 ## 1.0.3 — 9/8/2026
 
 ### Đã thay đổi

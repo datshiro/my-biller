@@ -2,8 +2,13 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db'
 import { recalcAll } from '../recalc'
-import { addOrderPayment } from '../repositories/payments'
+import {
+  addOrderPayment,
+  listUnallocatedPayments,
+  resolveUnallocatedPayment,
+} from '../repositories/payments'
 import { createOrder, type OrderDraft } from '../repositories/orders'
+import { installTestDevice } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -22,9 +27,9 @@ const draft = (unitPrice: number, qty = 1, overrides: Partial<OrderDraft> = {}):
 
 /** Bất biến của toàn hệ thống: với mọi đơn, paidAmount phải bằng đúng tổng các phiếu thu của đơn đó. */
 async function assertPaidAmountMatchesPayments() {
-  const orders = await db.orders.toArray()
+    const orders = await db.orders.toArray()
   for (const order of orders) {
-    const payments = await db.payments.where('orderId').equals(order.id ?? -1).toArray()
+    const payments = await db.payments.where('allocatedOrderId').equals(order.id ?? -1).toArray()
     const sum = payments.reduce((total, payment) => total + payment.amount, 0)
     expect({ code: order.code, paidAmount: order.paidAmount }).toEqual({ code: order.code, paidAmount: sum })
   }
@@ -33,6 +38,7 @@ async function assertPaidAmountMatchesPayments() {
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 describe('addOrderPayment', () => {
@@ -75,6 +81,60 @@ describe('addOrderPayment', () => {
         addOrderPayment({ orderId: id, amount, method: 'cash', paidAt: soldAt, note: '' }),
       ).rejects.toThrow('Số tiền thu phải lớn hơn 0.')
     }
+  })
+})
+
+describe('xử lý khoản thu chưa gắn đơn', () => {
+  async function makeUnallocatedPayment() {
+    const { id } = await createOrder(
+      draft(100_000, 1, { payment: { amount: 40_000, method: 'cash', note: '' } }),
+    )
+    const payment = await db.payments.where('allocatedOrderId').equals(id).first()
+    await db.transaction('rw', db.orders, db.payments, async () => {
+      await db.payments.update(payment!.id!, { allocatedOrderId: 0 })
+      await db.orders.update(id, { paidAmount: 0, status: 'unpaid' })
+    })
+    return { orderId: id, paymentId: payment!.id! }
+  }
+
+  it('gắn lại đúng đơn và cập nhật tổng đã thu trong cùng transaction', async () => {
+    const { orderId, paymentId } = await makeUnallocatedPayment()
+
+    await resolveUnallocatedPayment(paymentId, { kind: 'allocate', orderId })
+
+    expect(await db.payments.get(paymentId)).toMatchObject({
+      allocatedOrderId: orderId,
+      resolutionNote: expect.stringContaining('PBH-'),
+    })
+    expect(await db.orders.get(orderId)).toMatchObject({ paidAmount: 40_000, status: 'partial' })
+    expect(await listUnallocatedPayments()).toHaveLength(0)
+    await assertPaidAmountMatchesPayments()
+  })
+
+  it.each(['refunded', 'discarded'] as const)(
+    'giữ phiếu thu và dấu vết khi đánh dấu %s',
+    async (kind) => {
+      const { paymentId } = await makeUnallocatedPayment()
+
+      await resolveUnallocatedPayment(paymentId, { kind, reason: 'Đối chiếu cuối ca' })
+
+      expect(await db.payments.get(paymentId)).toMatchObject({
+        allocatedOrderId: 0,
+        amount: 40_000,
+        unallocatedStatus: kind,
+        resolutionNote: 'Đối chiếu cuối ca',
+      })
+      expect(await listUnallocatedPayments()).toHaveLength(0)
+    },
+  )
+
+  it('không cho tiền rời hàng chờ mà thiếu lý do kiểm toán', async () => {
+    const { paymentId } = await makeUnallocatedPayment()
+
+    await expect(
+      resolveUnallocatedPayment(paymentId, { kind: 'refunded', reason: '   ' }),
+    ).rejects.toThrow(/Phải ghi lý do/)
+    expect(await listUnallocatedPayments()).toHaveLength(1)
   })
 })
 
@@ -132,14 +192,16 @@ describe('recalc', () => {
    * tiết đơn đọc `paidAmount` nên hiện đúng, còn lịch sử thu tiền của khách và tổng "Đã thu" của kỳ
    * thì đọc thẳng bảng `payments` nên vẫn cộng số tiền đó vào.
    */
-  it('đơn huỷ thì phiếu thu của nó cũng bị xoá, không chỉ đưa tổng về 0', async () => {
+  it('đơn huỷ giữ phiếu thu nhưng bỏ phân bổ, không chỉ đưa tổng về 0', async () => {
     const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 100_000, method: 'cash', note: '' } }))
     await db.orders.update(id, { status: 'void' })
 
     expect(await recalcAll()).toBe(1)
 
     expect(await db.orders.get(id)).toMatchObject({ status: 'void', paidAmount: 0 })
-    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(id).toArray()).toMatchObject([
+      { amount: 100_000, allocatedOrderId: 0 },
+    ])
     await assertPaidAmountMatchesPayments()
   })
 
@@ -147,12 +209,15 @@ describe('recalc', () => {
    * Ca này bắt đúng cái bẫy: `repaired` trả `null` khi dòng đơn đã đúng, nên nếu việc dọn phiếu thu
    * đi kèm với việc sửa dòng đơn thì đơn đã recalc một lần rồi sẽ không bao giờ được dọn nữa.
    */
-  it('đơn huỷ đã đúng tổng nhưng còn treo phiếu thu thì vẫn được dọn', async () => {
+  it('đơn huỷ đã đúng tổng nhưng còn phân bổ phiếu thu thì vẫn được gỡ', async () => {
     const { id } = await createOrder(draft(100_000, 1, { payment: { amount: 100_000, method: 'cash', note: '' } }))
+    expect((await db.payments.where('orderId').equals(id).first())?.allocatedOrderId).toBe(id)
     await db.orders.update(id, { status: 'void', paidAmount: 0 })
 
     expect(await recalcAll()).toBe(1)
-    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(id).toArray()).toMatchObject([
+      { allocatedOrderId: 0 },
+    ])
 
     // Dọn xong thì hết việc — chạy lại không được đếm khống.
     expect(await recalcAll()).toBe(0)

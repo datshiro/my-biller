@@ -10,6 +10,7 @@ import {
 } from '../repositories/orders'
 import { aggregateRevenue } from '@/domain/report'
 import { remainingOf } from '@/domain/order-status'
+import { installTestDevice } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -36,6 +37,7 @@ async function debtOf(customerId: number): Promise<number> {
 beforeEach(async () => {
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
+  await installTestDevice()
 })
 
 describe('voidOrder', () => {
@@ -64,13 +66,15 @@ describe('voidOrder', () => {
     expect(await debtOf(1)).toBe(70_000)
   })
 
-  it('xoá sạch phiếu thu của đơn và đưa paidAmount về 0', async () => {
+  it('giữ phiếu thu, bỏ phân bổ và đưa paidAmount về 0', async () => {
     const { id } = await createOrder(draft({ payment: { amount: 110_000, method: 'cash', note: '' } }))
 
     await voidOrder(id)
 
     expect(await db.orders.get(id)).toMatchObject({ status: 'void', paidAmount: 0 })
-    expect(await db.payments.where('orderId').equals(id).count()).toBe(0)
+    expect(await db.payments.where('orderId').equals(id).toArray()).toMatchObject([
+      { amount: 110_000, allocatedOrderId: 0 },
+    ])
   })
 
   it('giữ lại đơn và dòng hàng — số phiếu đã đưa khách không được dùng lại cho đơn khác', async () => {
