@@ -1,12 +1,26 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router'
-import { applyBackup, exportBackup, readBackupFile } from './backup'
+import {
+  applyBackup,
+  canSharePreparedBackup,
+  downloadPreparedBackup,
+  exportBackup,
+  prepareBackup,
+  readBackupFile,
+  sharePreparedBackup,
+  type PreparedBackup,
+} from './backup'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
 import { useAppState } from './use-settings'
-import { countRecords, describeCounts, describeDroppedPrices } from '@/domain/backup'
+import {
+  countRecords,
+  describeCounts,
+  describeDroppedPrices,
+  isOperationallyEmpty,
+} from '@/domain/backup'
 import type { BackupFile } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { StatusChip } from '@/ui/chip'
@@ -15,6 +29,9 @@ import { ListRow } from '@/ui/list-row'
 import { ScreenHeader } from '@/ui/screen-header'
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không xong. Thử lại.')
+const SHARE_TARGET_LIFETIME_MS = 10 * 60 * 1000
+const SHARE_FAILURE_MESSAGE =
+  'Không chia sẻ được file sao lưu. Hãy kiểm tra thư mục Tải về; bạn có thể thử lại hoặc gửi file từ đó.'
 
 /**
  * Nhập file đi qua hai cửa. Cửa `safety` tồn tại vì bản xuất tự động trước khi ghi đè có thể thất
@@ -42,31 +59,131 @@ export function SettingsPage() {
   const state = useAppState()
   const { status, pinning, pin } = useStorageStatus()
   const fileInput = useRef<HTMLInputElement>(null)
+  const exportButton = useRef<HTMLButtonElement>(null)
+  const exportLock = useRef(false)
+  const emptyBackupLock = useRef(false)
+  const pendingEmptyBackupRef = useRef<PreparedBackup | null>(null)
+  const shareLock = useRef(false)
+  const shareTargetRef = useRef<PreparedBackup | null>(null)
 
   const [busy, setBusy] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<ImportStep | null>(null)
+  const [pendingEmptyBackup, setPendingEmptyBackup] = useState<PreparedBackup | null>(null)
+  const [shareTarget, setShareTarget] = useState<PreparedBackup | null>(null)
+  const modalOpen = pendingEmptyBackup !== null || step !== null
+
+  const clearShareTarget = useCallback((expected: PreparedBackup | null = null) => {
+    if (expected !== null && shareTargetRef.current !== expected) return
+
+    shareTargetRef.current = null
+    setShareTarget((rendered) => (expected === null || rendered === expected ? null : rendered))
+  }, [])
+
+  useEffect(() => {
+    const onPageHide = () => clearShareTarget()
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [clearShareTarget])
+
+  useEffect(() => {
+    if (shareTarget === null) return
+    const timeout = window.setTimeout(() => clearShareTarget(shareTarget), SHARE_TARGET_LIFETIME_MS)
+    return () => window.clearTimeout(timeout)
+  }, [clearShareTarget, shareTarget])
+
+  const finishManualDownload = async (prepared: PreparedBackup) => {
+    const { filename } = await downloadPreparedBackup(prepared)
+    setNotice(
+      `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}". Hãy kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`,
+    )
+    if (canSharePreparedBackup(prepared)) {
+      shareTargetRef.current = prepared
+      setShareTarget(prepared)
+    }
+  }
 
   const runExport = async () => {
+    if (
+      exportLock.current ||
+      emptyBackupLock.current ||
+      pendingEmptyBackupRef.current !== null ||
+      step !== null
+    ) return
+    exportLock.current = true
+    clearShareTarget()
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
-      const { filename, importable, problem } = await exportBackup(Date.now())
-      if (importable) setNotice(`Đã tải ${filename} về máy.`)
-      // Nói thẳng là file này không dùng để phục hồi được. Im lặng ở đây thì người bán yên tâm với
-      // một file rỗng nghĩa, và chỉ biết vào đúng lúc mất dữ liệu.
-      else setError(`Đã tải ${filename} về máy, nhưng file này KHÔNG nhập lại được: ${problem} Sổ vẫn tính là chưa sao lưu.`)
+      const prepared = await prepareBackup(Date.now())
+      if (!prepared.importable) {
+        const { filename, problem } = await downloadPreparedBackup(prepared)
+        // Nói thẳng là file này không dùng để phục hồi được. Im lặng ở đây thì người bán yên tâm với
+        // một file rỗng nghĩa, và chỉ biết vào đúng lúc mất dữ liệu.
+        setError(
+          `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}", nhưng file này KHÔNG nhập lại được: ${problem} Sổ vẫn tính là chưa sao lưu.`,
+        )
+      } else if (isOperationallyEmpty(prepared.counts)) {
+        pendingEmptyBackupRef.current = prepared
+        setPendingEmptyBackup(prepared)
+      } else {
+        await finishManualDownload(prepared)
+      }
     } catch (caught) {
       setError(message(caught))
     } finally {
+      exportLock.current = false
       setBusy(false)
+    }
+  }
+
+  const cancelEmptyBackup = (prepared: PreparedBackup) => {
+    if (emptyBackupLock.current || pendingEmptyBackupRef.current !== prepared) return
+    pendingEmptyBackupRef.current = null
+    setPendingEmptyBackup((current) => (current === prepared ? null : current))
+  }
+
+  const confirmEmptyBackup = async (prepared: PreparedBackup) => {
+    if (emptyBackupLock.current || pendingEmptyBackupRef.current !== prepared) return
+    emptyBackupLock.current = true
+    setBusy(true)
+    setError(null)
+    try {
+      await finishManualDownload(prepared)
+    } catch (caught) {
+      setError(message(caught))
+    } finally {
+      emptyBackupLock.current = false
+      pendingEmptyBackupRef.current = null
+      setBusy(false)
+      setPendingEmptyBackup((current) => (current === prepared ? null : current))
+    }
+  }
+
+  const runShare = async (target: PreparedBackup) => {
+    if (shareLock.current || shareTargetRef.current !== target) return
+    shareLock.current = true
+    // Gọi ngay trong click, trước mọi await, để iOS không thu hồi quyền mở native share sheet.
+    const outcomePromise = sharePreparedBackup(target)
+    setSharing(true)
+    setError(null)
+    try {
+      const outcome = await outcomePromise
+      if (outcome === 'shared') clearShareTarget(target)
+      else if (outcome === 'failed' && shareTargetRef.current === target) setError(SHARE_FAILURE_MESSAGE)
+    } finally {
+      shareLock.current = false
+      setSharing(false)
     }
   }
 
   // Đọc và kiểm file xong mới hỏi; tới đây DB vẫn chưa bị đụng tới.
   const pickFile = async (file: File) => {
+    if (pendingEmptyBackupRef.current !== null || step !== null) return
+    clearShareTarget()
     setError(null)
     setNotice(null)
     try {
@@ -110,18 +227,28 @@ export function SettingsPage() {
         : `Lần cuối: ${format(state.lastBackupAt, "HH:mm 'ngày' d/M/yyyy")}`
 
   return (
-    <div className="flex min-h-full flex-col">
+    <>
+      <div
+        className="flex min-h-full flex-col"
+        inert={modalOpen}
+        aria-hidden={modalOpen || undefined}
+      >
       <ScreenHeader title="Cài đặt" back="back" />
       <BackupBanner />
 
       <Section title="SAO LƯU">
-        <Button size="cta" disabled={busy} onClick={() => void runExport()}>
+        <Button
+          ref={exportButton}
+          size="cta"
+          disabled={busy || modalOpen}
+          onClick={() => void runExport()}
+        >
           {busy ? 'Đang xử lý…' : 'SAO LƯU RA FILE'}
         </Button>
         <p className="mt-2 text-[13px] text-muted">{lastBackup}</p>
         <p className="mt-2 text-[13px] text-muted">
-          File nằm trong thư mục Tải về. Gửi nó qua Zalo cho chính mình hoặc lưu lên Google Drive —
-          để trên máy thì mất máy là mất luôn.
+          Sau khi sao lưu, hãy kiểm tra thư mục Tải về. Thiết bị có thể đổi tên file nếu bị trùng.
+          Gửi nó qua Zalo cho chính mình hoặc lưu lên Google Drive — để trên máy thì mất máy là mất luôn.
         </p>
 
         {notice ? <p className="mt-3 text-[13px] font-semibold text-brand">{notice}</p> : null}
@@ -131,8 +258,25 @@ export function SettingsPage() {
           </p>
         ) : null}
 
+        {shareTarget ? (
+          <div className="mt-3">
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={sharing}
+              onClick={() => void runShare(shareTarget)}
+            >
+              {sharing ? 'Đang mở chia sẻ…' : 'CHIA SẺ FILE VỪA SAO LƯU'}
+            </Button>
+            <p className="mt-2 text-[13px] text-muted">
+              File này chứa toàn bộ sổ và thông tin khách hàng. Chỉ gửi cho chính bạn hoặc một nơi
+              bạn tin cậy.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-4">
-          <Button variant="secondary" disabled={busy} onClick={() => fileInput.current?.click()}>
+          <Button variant="secondary" disabled={busy || modalOpen} onClick={() => fileInput.current?.click()}>
             Nhập từ file sao lưu
           </Button>
           <input
@@ -199,6 +343,19 @@ export function SettingsPage() {
       </div>
 
       <DangerZone />
+      </div>
+
+      {pendingEmptyBackup ? (
+        <ConfirmDialog
+          title="Bản sao này chưa có dữ liệu bán hàng"
+          message="Bản sao này chưa có đơn, mặt hàng, khách hàng, khoản chi hoặc giá riêng còn dùng được, nhưng vẫn có thể chứa thông tin cửa hàng, nhóm mặt hàng, loại chi phí và các cài đặt. Nếu dùng iPhone, hãy đóng Safari rồi mở app từ biểu tượng trên Màn hình chính nơi bạn vẫn thấy sổ, sau đó sao lưu lại."
+          confirmLabel={busy ? 'Đang tải…' : 'Vẫn tải bản sao này'}
+          onConfirm={() => void confirmEmptyBackup(pendingEmptyBackup)}
+          onCancel={() => cancelEmptyBackup(pendingEmptyBackup)}
+          returnFocusRef={exportButton}
+          pending={busy}
+        />
+      ) : null}
 
       {step?.phase === 'confirm' ? (
         <ConfirmDialog
@@ -215,8 +372,8 @@ export function SettingsPage() {
           title="Đã thấy file trong máy chưa?"
           message={
             step.problem === null
-              ? `Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không rồi mới bấm tiếp — sau bước này dữ liệu đang có trên máy không lấy lại được.`
-              : `Vừa tải "${step.filename}" về thư mục Tải về. Hãy mở ra xem có thật không — nhưng file này có chỗ hỏng, còn một bước nữa phải đọc.`
+              ? `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file trước khi bấm tiếp; thiết bị có thể đổi tên nếu bị trùng. Sau bước này dữ liệu đang có trên máy không lấy lại được.`
+              : `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file; thiết bị có thể đổi tên nếu bị trùng. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
           }
           confirmLabel={step.problem === null ? 'Đã thấy — ghi đè' : 'Đã thấy — đọc tiếp'}
           onConfirm={() =>
@@ -230,13 +387,13 @@ export function SettingsPage() {
 
       {step?.phase === 'accept' ? (
         <ConfirmDialog
-          title="File an toàn vừa tải về KHÔNG nhập lại được"
-          message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có, "${step.filename}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
+          title="Bản sao an toàn KHÔNG nhập lại được"
+          message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có; bản sao có tên đề xuất "${step.filename}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
           confirmLabel="Vẫn ghi đè — mất cũng được"
           onConfirm={() => void runImport(step.file)}
           onCancel={() => setStep(null)}
         />
       ) : null}
-    </div>
+    </>
   )
 }

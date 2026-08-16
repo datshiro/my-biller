@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test, type Download, type Page } from '@playwright/test'
 
 /**
- * Bốn kịch bản mà unit test không chứng minh được: IndexedDB thật (fake-indexeddb chỉ nằm trong bộ
+ * Các kịch bản mà unit test không chứng minh được: IndexedDB thật (fake-indexeddb chỉ nằm trong bộ
  * nhớ, reload là mất), tải file thật, và chọn file thật từ ổ đĩa.
  */
 
@@ -64,6 +64,25 @@ async function snapshot(page: Page): Promise<Snapshot> {
       tables,
     }
   }, STORES)
+}
+
+async function lastBackupAt(page: Page): Promise<number | null> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const open = indexedDB.open('my-biller')
+      open.onsuccess = () => resolve(open.result)
+      open.onerror = () => reject(open.error)
+    })
+    const row = await new Promise<{ value?: { lastBackupAt?: number | null } } | undefined>(
+      (resolve, reject) => {
+        const request = db.transaction('settings', 'readonly').objectStore('settings').get('app')
+        request.onsuccess = () => resolve(request.result as { value?: { lastBackupAt?: number | null } } | undefined)
+        request.onerror = () => reject(request.error)
+      },
+    )
+    db.close()
+    return row?.value?.lastBackupAt ?? null
+  })
 }
 
 async function seed(page: Page) {
@@ -147,6 +166,84 @@ test('tạo đơn rồi tải lại trang: dữ liệu vẫn còn', async ({ pag
   expect(await snapshot(page)).toEqual(before)
 })
 
+test('kho chỉ có metadata và loại chi mặc định phải cảnh báo trước khi tải', async ({ page }) => {
+  await page.goto('/chi-phi')
+  await expect(page.getByText('Nguyên liệu', { exact: true })).toBeVisible()
+  await page.goto('/them/cai-dat')
+
+  const downloads: Download[] = []
+  page.on('download', (download) => downloads.push(download))
+  await page.getByRole('button', { name: 'SAO LƯU RA FILE' }).click()
+
+  await expect(page.getByRole('alertdialog', { name: 'Bản sao này chưa có dữ liệu bán hàng' })).toBeVisible()
+  expect(downloads).toHaveLength(0)
+  expect(await lastBackupAt(page)).toBeNull()
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Vẫn tải bản sao này' }).click(),
+  ])
+  const file = JSON.parse(await readDownload(download)) as {
+    data: Record<'orders' | 'items' | 'customers' | 'expenses' | 'customerPrices', unknown[]> & {
+      expenseCategories: unknown[]
+    }
+  }
+
+  expect(file.data.orders).toEqual([])
+  expect(file.data.items).toEqual([])
+  expect(file.data.customers).toEqual([])
+  expect(file.data.expenses).toEqual([])
+  expect(file.data.customerPrices).toEqual([])
+  expect(file.data.expenseCategories.length).toBeGreaterThan(0)
+  expect(await lastBackupAt(page)).not.toBeNull()
+})
+
+test('chia sẻ dùng đúng File vừa tải và không tải hay đóng dấu lần hai', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (data: ShareData) => data.files?.length === 1 && data.files[0]?.type === 'application/json',
+    })
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => {
+        const file = data.files?.[0]
+        if (!file) throw new Error('Thiếu file chia sẻ trong ca kiểm thử.')
+        ;(
+          window as typeof window & {
+            __sharedBackup?: { name: string; type: string; text: string }
+          }
+        ).__sharedBackup = { name: file.name, type: file.type, text: await file.text() }
+      },
+    })
+  })
+  await seed(page)
+  await page.goto('/them/cai-dat')
+
+  await expect(page.getByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toHaveCount(0)
+  const downloads: Download[] = []
+  page.on('download', (download) => downloads.push(download))
+  const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
+  const stampedAt = await lastBackupAt(page)
+
+  await page.getByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __sharedBackup?: { name: string; type: string; text: string }
+            }
+          ).__sharedBackup,
+      ),
+    )
+    .toEqual({ name: backup.filename, type: 'application/json', text: backup.text })
+
+  expect(downloads).toHaveLength(1)
+  expect(await lastBackupAt(page)).toBe(stampedAt)
+})
+
 test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng bảng khớp lại', async ({ page }) => {
   await seed(page)
   await setPrice(page, 'Anh Hùng', 'Phở bò đặc biệt', '45000')
@@ -159,7 +256,7 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
   await page.goto('/them/cai-dat')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
   expect(backup.filename).toMatch(/^my-biller-backup-\d{6}-\d{4}\.json$/)
-  await expect(page.getByText(/Đã tải my-biller-backup/)).toBeVisible()
+  await expect(page.getByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeVisible()
 
   // Xoá sạch: tải file an toàn trước, rồi phải tự xác nhận đã thấy file mới xoá được.
   await page.getByRole('button', { name: 'Xoá toàn bộ dữ liệu' }).click()

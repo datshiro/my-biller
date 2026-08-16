@@ -33,11 +33,74 @@ Sao lưu ra file thì file thật nằm trong máy và có đủ dữ liệu
     Length Should Be    ${bản_sao}[data][customers]    1
     Length Should Be    ${bản_sao}[data][expenses]    1
 
+Bản sao chưa có dữ liệu bán hàng phải được cảnh báo trước khi tải
+    [Documentation]    Trước đây Safari rỗng vẫn tải ngay và ghi mốc, khiến người bán tưởng đã giữ
+    ...    được sổ trong PWA. Cửa này phải chặn cú tải và mốc cho tới khi họ chủ động xác nhận.
+    [Tags]    regression
+    [Setup]    Mở Phiên Sạch
+    Mở Màn    /them/cai-dat
+    Theo Dõi Yêu Cầu Tải
+
+    Click    ${NÚT_SAO_LƯU}
+    Chờ Hộp Xác Nhận    Bản sao này chưa có dữ liệu bán hàng
+    Wait Until Keyword Succeeds    30x    100ms    Focus Phải Ở Nút    Huỷ
+    Keyboard Key    press    Tab
+    Focus Phải Ở Nút    Vẫn tải bản sao này
+    Keyboard Key    press    Tab
+    Focus Phải Ở Nút    Huỷ
+    Keyboard Key    press    Escape
+    Wait For Elements State    ${HỘP_XÁC_NHẬN}    detached
+    Wait Until Keyword Succeeds    30x    100ms    Focus Phải Ở Nút    SAO LƯU RA FILE
+    ${số_tải}=    Số Yêu Cầu Tải
+    Should Be Equal As Integers    ${số_tải}    0    App đã phát download trước khi người bán xác nhận.
+
+    Click    ${NÚT_SAO_LƯU}
+    Chờ Hộp Xác Nhận    Bản sao này chưa có dữ liệu bán hàng
+    ${settings}=    Đọc Bảng    settings
+    ${mốc}=    Evaluate
+    ...    next((row['value']['lastBackupAt'] for row in $settings if row['key'] == 'app'), None)
+    Should Be Equal    ${mốc}    ${None}    Cảnh báo chưa được xác nhận mà app đã ghi mốc sao lưu.
+
+    ${hứa}=    Promise To Wait For Download
+    Xác Nhận Trong Hộp    Vẫn tải bản sao này
+    ${tải}=    Wait For    ${hứa}
+    Wait For Elements State    ${HỘP_XÁC_NHẬN}    detached
+    Wait Until Keyword Succeeds    30x    100ms    Focus Phải Ở Nút    SAO LƯU RA FILE
+    ${nội_dung}=    Get File    ${tải}[saveAs]
+    ${bản_sao}=    Evaluate    json.loads($nội_dung)    json
+    Length Should Be    ${bản_sao}[data][orders]    0
+    Length Should Be    ${bản_sao}[data][items]    0
+    Length Should Be    ${bản_sao}[data][customers]    0
+    Length Should Be    ${bản_sao}[data][expenses]    0
+    Length Should Be    ${bản_sao}[data][customerPrices]    0
+    ${số_tải}=    Số Yêu Cầu Tải
+    Should Be Equal As Integers    ${số_tải}    1    Xác nhận một lần phải phát đúng một download.
+
+Sao lưu xong thì chia sẻ đúng file JSON vừa tải
+    [Documentation]    Robot giữ phần user-reachable contract: CTA chỉ hiện sau download và chuyển
+    ...    đúng tên đề xuất, MIME và bytes. Native share sheet thật được kiểm riêng trên iPhone.
+    Mở Màn    /them/cai-dat
+    Giả Lập Chia Sẻ File
+    Không Được Thấy Chữ    CHIA SẺ FILE VỪA SAO LƯU
+
+    ${hứa}=    Promise To Wait For Download
+    Click    ${NÚT_SAO_LƯU}
+    ${tải}=    Wait For    ${hứa}
+    Chờ Thấy Chữ    CHIA SẺ FILE VỪA SAO LƯU
+    Click    css=button:has-text("CHIA SẺ FILE VỪA SAO LƯU")
+    ${đã_chia_sẻ}=    Wait Until Keyword Succeeds    30x    100ms    Đọc Bản Sao Đã Chia Sẻ
+    ${nội_dung}=    Get File    ${tải}[saveAs]
+
+    Should Be Equal    ${đã_chia_sẻ}[name]    ${tải}[suggestedFilename]
+    Should Be Equal    ${đã_chia_sẻ}[type]    application/json
+    Should Be Equal    ${đã_chia_sẻ}[text]    ${nội_dung}
+    Không Được Thấy Chữ    CHIA SẺ FILE VỪA SAO LƯU
+
 Sao lưu xong thì màn cài đặt ghi lại mốc lần cuối
     Mở Màn    /them/cai-dat
     Chờ Thấy Chữ    Chưa sao lưu lần nào
     Sao Lưu Ra File
-    Chờ Thấy Chữ    Đã tải
+    Chờ Thấy Chữ    Đã gửi yêu cầu tải bản sao
     Chờ Thấy Chữ    Lần cuối:
 
 Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
@@ -164,6 +227,53 @@ Nhập lại được file an toàn tải về ngay trước lúc xoá
 
 
 *** Keywords ***
+Theo Dõi Yêu Cầu Tải
+    Evaluate JavaScript    ${None}
+    ...    () => {
+    ...        window.__backupDownloadClicks = 0
+    ...        const originalClick = HTMLAnchorElement.prototype.click
+    ...        HTMLAnchorElement.prototype.click = function() {
+    ...            if (this.download) window.__backupDownloadClicks += 1
+    ...            return originalClick.call(this)
+    ...        }
+    ...    }
+
+Số Yêu Cầu Tải
+    ${số_tải}=    Evaluate JavaScript    ${None}    () => window.__backupDownloadClicks ?? 0
+    RETURN    ${số_tải}
+
+Giả Lập Chia Sẻ File
+    Evaluate JavaScript    ${None}
+    ...    () => {
+    ...        window.__sharedBackup = null
+    ...        Object.defineProperty(navigator, 'canShare', {
+    ...            configurable: true,
+    ...            value: (data) => data.files?.length === 1 && data.files[0]?.type === 'application/json',
+    ...        })
+    ...        Object.defineProperty(navigator, 'share', {
+    ...            configurable: true,
+    ...            value: async (data) => {
+    ...                const file = data.files?.[0]
+    ...                if (!file) throw new Error('Thiếu file chia sẻ trong ca Robot.')
+    ...                window.__sharedBackup = {
+    ...                    name: file.name,
+    ...                    type: file.type,
+    ...                    text: await file.text(),
+    ...                }
+    ...            },
+    ...        })
+    ...    }
+
+Đọc Bản Sao Đã Chia Sẻ
+    ${đã_chia_sẻ}=    Evaluate JavaScript    ${None}    () => window.__sharedBackup
+    Should Not Be Equal    ${đã_chia_sẻ}    ${None}    Native share stub chưa nhận được file.
+    RETURN    ${đã_chia_sẻ}
+
+Focus Phải Ở Nút
+    [Arguments]    ${nhãn}
+    ${focus}=    Evaluate JavaScript    ${None}    () => document.activeElement?.textContent?.trim() ?? ''
+    Should Be Equal    ${focus}    ${nhãn}
+
 Sao Lưu Ra File
     [Documentation]    Trả về đường dẫn thật của file vừa rơi xuống máy. Không tự đặt tên file: mỗi
     ...    test có context riêng nên Playwright cất vào một chỗ riêng, khỏi lo hai test giẫm tên nhau.

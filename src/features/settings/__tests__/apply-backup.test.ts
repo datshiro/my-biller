@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyBackup, exportBackup } from '../backup'
+import {
+  applyBackup,
+  downloadPreparedBackup,
+  exportBackup,
+  prepareBackup,
+} from '../backup'
 import { collectBackup } from '@/db/backup'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
 import { addOrderPayment } from '@/db/repositories/payments'
-import { getAppState } from '@/db/repositories/settings'
+import { getAppState, saveAppState, saveLastBackupAt } from '@/db/repositories/settings'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 const NOW = new Date(2026, 7, 7, 14, 0).getTime()
@@ -108,6 +113,50 @@ describe('exportBackup', () => {
       problem: null,
     })
     expect((await getAppState()).lastBackupAt).toBe(NOW)
+  })
+
+  it('prepare chỉ giữ đúng một File, chưa tải và chưa đóng dấu cho tới lúc phát download', async () => {
+    await sellOnCredit(110_000, 110_000)
+
+    const prepared = await prepareBackup(NOW)
+
+    expect(prepared.file.name).toBe('my-biller-backup-260807-1400.json')
+    expect(prepared.file.type).toBe('application/json')
+    expect(prepared.file).toHaveProperty('size')
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+    expect((await getAppState()).lastBackupAt).toBeNull()
+
+    await downloadPreparedBackup(prepared)
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(prepared.file)
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
+    expect((await getAppState()).lastBackupAt).toBe(NOW)
+  })
+
+  it('hai prepared snapshot hoàn tất ngược thứ tự không làm mốc sao lưu lùi', async () => {
+    await sellOnCredit(110_000, 110_000)
+    const earlier = await prepareBackup(NOW)
+    const later = await prepareBackup(NOW + 60_000)
+
+    await downloadPreparedBackup(later)
+    await downloadPreparedBackup(earlier)
+
+    expect((await getAppState()).lastBackupAt).toBe(NOW + 60_000)
+  })
+
+  it('ghi app state song song không làm lùi mốc sao lưu mới hơn', async () => {
+    await saveAppState({ lastBackupAt: NOW, seededExpenseCategories: false })
+
+    await Promise.all([
+      saveAppState({ seededExpenseCategories: true }),
+      saveLastBackupAt(NOW + 60_000),
+    ])
+
+    expect(await getAppState()).toMatchObject({
+      lastBackupAt: NOW + 60_000,
+      seededExpenseCategories: true,
+    })
   })
 
   it('vẫn ra file với bản ghi lạ — không khoá đường xuất dữ liệu', async () => {

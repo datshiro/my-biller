@@ -80,9 +80,17 @@ ghi chú phát hành: [`docs/ghi-chu-phat-hanh.md`](docs/ghi-chu-phat-hanh.md).
 Không có backend nghĩa là **file sao lưu là bản sao duy nhất**. Màn *Thêm → Cài đặt*:
 
 - **Sao lưu ra file** → tải `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được).
+  Nếu bản sao không có đơn, mặt hàng, khách, khoản chi hay giá riêng còn dùng được, app sẽ cảnh báo
+  trước khi tải; file vẫn có thể chứa thông tin cửa hàng, nhóm/loại và cấu hình.
 - **Nhập từ file** → kiểm định dạng trước, sai thì dừng và **không đụng DB**; đúng thì hỏi xác nhận,
   tự tải một file của dữ liệu hiện tại về máy, rồi mới ghi đè trong một transaction và chạy
   `recalcAll()`.
+- Safari và app đã thêm vào Màn hình chính là hai kho dữ liệu tách biệt. Luôn sao lưu ở đúng nơi đang
+  nhìn thấy sổ; nếu Safari báo bản sao chưa có dữ liệu bán hàng, hãy mở biểu tượng app trên Màn hình
+  chính rồi kiểm tra lại.
+- Sau khi tải bản sao thủ công hợp lệ, thiết bị hỗ trợ chia sẻ file sẽ hiện nút chia sẻ chính file JSON
+  vừa tải. Máy không hỗ trợ vẫn dùng file trong Tải về để gửi qua Zalo hoặc lưu Drive. File chứa toàn
+  bộ sổ và thông tin khách, chỉ gửi tới nơi tin cậy.
 - Quá 7 ngày chưa sao lưu thì có banner nhắc ở màn Bán và màn Cài đặt.
 - **Ghim bộ nhớ** (`navigator.storage.persist()`) giảm khả năng hệ điều hành xoá dữ liệu, nhưng không
   thay được việc sao lưu.
