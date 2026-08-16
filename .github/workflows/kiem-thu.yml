@@ -59,7 +59,7 @@ jobs:
 
       - name: Bundle Worker production đúng commit
         run: |
-          npx wrangler deploy --config worker/wrangler.toml --env="" --dry-run --outdir worker-bundle
+          npx wrangler deploy --config worker/wrangler.toml --env="" --dry-run --outdir "$PWD/worker-bundle"
           test -s worker-bundle/index.js
 
       - name: Đóng gói artifact phát hành đúng commit
