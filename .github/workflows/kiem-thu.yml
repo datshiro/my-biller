@@ -47,9 +47,6 @@ jobs:
       - name: Build normal
         run: npm run build
 
-      - name: Bundle Worker production đúng commit
-        run: npx wrangler deploy --config worker/wrangler.toml --env="" --dry-run --outdir worker-bundle
-
       # e2e chạy trên Chrome thật (`channel: 'chrome'`), không phải chromium đóng gói kèm.
       - name: Cài Chrome cho Playwright
         run: npx playwright install --with-deps chrome
@@ -60,9 +57,16 @@ jobs:
       - name: Playwright recovery artifact
         run: npm run test:e2e:recovery:built
 
+      - name: Bundle Worker production đúng commit
+        run: |
+          npx wrangler deploy --config worker/wrangler.toml --env="" --dry-run --outdir worker-bundle
+          test -s worker-bundle/index.js
+
       - name: Đóng gói artifact phát hành đúng commit
         if: github.event_name == 'push'
         run: |
+          set -euo pipefail
+          test -s worker-bundle/index.js
           mkdir release-artifact
           cp -R dist dist-recovery worker-bundle release-artifact/
           cp package.json release-artifact/
@@ -72,6 +76,7 @@ jobs:
           find dist dist-recovery worker-bundle worker package.json -type f -print0 \
             | LC_ALL=C sort -z \
             | xargs -0 shasum -a 256 > SHA256SUMS
+          grep -Eq '  worker-bundle/index\.js$' SHA256SUMS
           sha256sum -c SHA256SUMS
 
       - name: Lưu artifact phát hành bất biến
