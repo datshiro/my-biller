@@ -136,7 +136,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     const exportButton = screen.getByRole('button', { name: 'SAO LƯU RA FILE' })
     expect((exportButton as HTMLButtonElement).disabled).toBe(false)
-    expect(document.activeElement).toBe(exportButton)
+    await waitFor(() => expect(document.activeElement).toBe(exportButton))
   })
 
   it('chỉ cần một record nghiệp vụ là giữ luồng tải một chạm', async () => {
