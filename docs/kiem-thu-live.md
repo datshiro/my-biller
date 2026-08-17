@@ -57,7 +57,7 @@ nội bộ vì file này ghi nguyên text đọc từ DOM, bao gồm mã ghép d
 
 Workflow [`kiem-thu.yml`](../.github/workflows/kiem-thu.yml) chạy hai job độc lập trên mọi pull request
 và mọi push vào `main`. Gate code hiện có vẫn nằm riêng trong `Code quality and Playwright`; job
-`Robot live` chạy toàn bộ `npm run test:live` không lọc suite/tag và có timeout 15 phút.
+`Robot live` chạy toàn bộ `npm run test:live` không lọc suite/tag và có timeout 20 phút.
 
 Khi cùng một pull request hoặc ref có lượt mới, lượt cũ đang chạy bị huỷ. Nếu `Robot live` thất bại,
 workflow tải `robot/results/` lên artifact `robot-live-results` và giữ 7 ngày. Branch protection của
