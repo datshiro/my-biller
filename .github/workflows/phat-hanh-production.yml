@@ -257,8 +257,7 @@ jobs:
             npx wrangler pages deployment list --project-name an-quynh --environment production \
               --json > pages-deployed.json
             if jq -e --arg sha "$RELEASE_SHA" --arg short_sha "${RELEASE_SHA:0:7}" \
-              '.[0].Environment == "Production" and .[0].Branch == "main" and \
-                (.[0].Source == $sha or .[0].Source == $short_sha)' pages-deployed.json; then
+              '.[0].Environment == "Production" and .[0].Branch == "main" and (.[0].Source == $sha or .[0].Source == $short_sha)' pages-deployed.json; then
               break
             fi
             if [ "$attempt" -eq 12 ]; then exit 1; fi

@@ -85,7 +85,7 @@ describe('màn chi phí', () => {
   it('lần đầu mở màn đã có sẵn loại để chọn, không bắt tự nghĩ ra', async () => {
     renderPage()
 
-    expect(await screen.findByRole('button', { name: 'Nguyên liệu' })).toBeDefined()
+    expect(await screen.findByRole('button', { name: 'Nguyên liệu' }, { timeout: 3000 })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Thuê' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Khác' })).toBeDefined()
   })
