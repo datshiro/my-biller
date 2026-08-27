@@ -1,5 +1,17 @@
 # Ghi chú phát hành
 
+## 2.0.1 — CI/smoke (23/8/2026)
+
+> Thay đổi so với 2.0.0 chỉ nằm ở đường CI/vận hành, không đụng frontend hay
+> schema; người bán không thấy khác biệt so với 2.0.0.
+
+### Thay đổi vận hành
+
+- Thêm script `npm run worker:smoke:state` để operator dò xem quán smoke đã
+  provisioned chưa trước khi chạy smoke Worker production chính.
+- Không có ca Robot vì thay đổi nằm ở helper CLI, không chạm giao diện; cũng
+  không có ca Vitest vì script chỉ gọi `fetch` Worker production live.
+
 ## 2.0.0 — chưa phát hành (11/8/2026)
 
 > Mục này là phần chênh của release candidate 2.0.0 so với production đang chạy commit `978f766`

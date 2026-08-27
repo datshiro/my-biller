@@ -1,7 +1,7 @@
 {
   "name": "my-biller",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,7 @@
     "worker:dev": "wrangler dev --config worker/wrangler.toml",
     "worker:deploy:staging": "wrangler deploy --config worker/wrangler.toml --env staging",
     "worker:smoke:bootstrap": "node worker/scripts/smoke-bootstrap.mjs",
+    "worker:smoke:state": "node worker/scripts/check-production-smoke-state.mjs",
     "worker:smoke:production": "node worker/scripts/smoke-production.mjs",
     "pages:smoke": "node scripts/verify-pages-deployment.mjs"
   },
