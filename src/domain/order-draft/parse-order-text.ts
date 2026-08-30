@@ -59,7 +59,9 @@ export function parseOrderText(text: string, items: readonly ItemCandidate[]): O
 
     const withQty = LEADING_QTY.exec(cleaned)
     const qty = withQty ? parseQtyInput(withQty[1] ?? '') : 1
-    if (qty === null) continue
+    // `0` lẫn `null` đều không được thêm dòng: `parseQtyInput` giờ đọc được `0` (nghĩa "bỏ món"), mà
+    // ở đây chưa có món nào để bỏ.
+    if (!qty) continue
 
     const item = matchItem(normalizeName(withQty ? (withQty[2] ?? '') : cleaned), items)
     if (!item) continue

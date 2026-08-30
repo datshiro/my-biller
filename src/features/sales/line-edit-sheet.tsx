@@ -52,7 +52,10 @@ export function LineEditSheet({
           value={qtyText}
           inputMode="decimal"
           onChange={(event) => setQtyText(event.target.value)}
-          error={qty === null ? 'Số lượng phải lớn hơn 0.' : undefined}
+          // `qty === null` giờ chỉ còn đúng một nghĩa: KHÔNG ĐỌC ĐƯỢC. `0` là số đọc được và có
+          // nghĩa "bỏ món" — gõ 0 rồi XONG đi qua `updateLine`, cùng ngữ nghĩa với ô inline trong
+          // giỏ. Câu cũ ("phải lớn hơn 0") chưa bao giờ đúng cho "abc" hay "1.000".
+          error={qty === null ? 'Số lượng không đọc được. Gõ số, ví dụ 2 hoặc 0,5.' : undefined}
           hint={line.unit ? `Đơn vị: ${line.unit}` : undefined}
         />
 

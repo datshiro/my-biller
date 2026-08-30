@@ -111,3 +111,16 @@ Bán Nợ Cho Khách
     Click    ${NÚT_CHỌN_KHÁCH_NỢ}
     Chọn Khách Trong Sheet    ${tên_khách}
     Chốt Đơn
+
+Gõ Số Lượng
+    [Documentation]    Ô số lượng inline trong giỏ. Ô này KHÔNG có <label> (hàng dưới của dòng giỏ
+    ...    không đủ chỗ ở 320px — xem comment cart-lines.tsx), nên `Điền Ô` bám <label> lái không tới.
+    ...    `Type Text` gõ TỪNG PHÍM để đi đúng đường commit-theo-phím của app; `Fill Text` chỉ bắn một
+    ...    sự kiện `input` nên không đo được đường đó — mà chính đường đó là chỗ "1.000" hoá thành 1.
+    [Arguments]    ${tên_món}    ${số}
+    Type Text    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    ${số}    clear=True
+
+Đọc Số Lượng
+    [Arguments]    ${tên_món}
+    ${giá_trị}=    Get Property    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    value
+    RETURN    ${giá_trị}

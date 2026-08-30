@@ -113,3 +113,18 @@ test('phiếu bán hàng và chi tiết đơn không tràn ngang ở 320px', asy
   await expect(page.getByRole('heading', { name: 'PHIẾU BÁN HÀNG', exact: true })).toBeVisible()
   expect(await overflowing(page)).toEqual([])
 })
+
+test('hàng trong giỏ không tràn ngang ở 320px', async ({ page }) => {
+  // Route `/` ở bảng trên được đo với giỏ RỖNG — `CartLines` chỉ render khi `count > 0`, nên hàng
+  // giỏ (hai nút ±, ô số lượng gõ được, ô thành tiền) chưa từng đi qua cổng 320px lần nào.
+  await page.goto('/')
+  await page.getByRole('button', { name: /Phở bò đặc biệt/ }).first().click()
+  await expect(page.getByRole('textbox', { name: 'Số lượng Phở bò đặc biệt' })).toBeVisible()
+  expect(await overflowing(page)).toEqual([])
+
+  // Số tiền dài nhất mà hàng giỏ phải chứa được: 999.999 ly × 55.000 vượt xa mọi đơn thật, nhưng ô
+  // thành tiền chỉ còn ~112px sau khi trừ hai nút và ô số lượng, nên đo bằng số dài mới có nghĩa.
+  await page.getByRole('textbox', { name: 'Số lượng Phở bò đặc biệt' }).fill('999')
+  await expect(page.getByText('54.945.000').first()).toBeVisible()
+  expect(await overflowing(page)).toEqual([])
+})

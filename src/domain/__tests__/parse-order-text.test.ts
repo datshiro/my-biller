@@ -70,4 +70,17 @@ describe('parseOrderText', () => {
   it('tách được cả xuống dòng và dấu cộng', () => {
     expect(parseOrderText('2 tra da\n1 bia 333 + 1 pho bo', items)).toHaveLength(3)
   })
+
+  it('gõ "0 pho" ở ô tìm món thì không thêm dòng nào', () => {
+    // Trước bản này `parseQtyInput('0')` trả `null` nên nhánh `qty === null` chặn hộ. Giờ `0` là số
+    // đọc được, chỗ này phải tự chặn: để lọt là một dòng 0 ly nằm trong giỏ, và `calcLineAmount` ném
+    // khi chốt đơn — ném trong thân render, tức màn trắng giữa lúc bán.
+    expect(parseOrderText('0 pho bo', items)).toEqual([])
+  })
+
+  it('"1.000 pho" không âm thầm thành 1 tô', () => {
+    // Chủ quán gõ kiểu tiền tệ: định nói một nghìn tô. Từ chối, không đoán.
+    expect(parseOrderText('1.000 pho bo', items)).toEqual([])
+  })
 })
+

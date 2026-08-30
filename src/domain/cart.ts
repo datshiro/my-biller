@@ -45,6 +45,12 @@ export type CartAction =
       line: Omit<CartLine, 'key' | 'note' | 'priceSource' | 'retailPrice'> & { note?: string }
       book: PriceBook
     }
+  /**
+   * Đặt lại nguyên trạng một dòng vừa bị gỡ (nút Hoàn lại). Cố ý KHÔNG đi qua `addLine`: `addLine`
+   * tính lại `unitPrice` theo chế độ giá hiện hành và ép `priceSource: 'catalog'`, nên dòng
+   * giá-gõ-tay sẽ bị bảng giá sỉ đè mất giá riêng. Hoàn lại mà đổi tiền thì không phải hoàn lại.
+   */
+  | { type: 'restoreLine'; line: CartLine }
   /** Đổi giá **cả giỏ** một lượt. Payload cố ý không mang danh mục — xem `retailPrice`. */
   | { type: 'applyPriceMode'; mode: PriceMode; book: PriceBook }
   | { type: 'setQty'; key: string; qty: number }
@@ -139,8 +145,14 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       }
     }
 
+    case 'restoreLine':
+      return { ...cart, lines: upsert(cart.lines, action.line) }
+
     case 'addLine': {
       const { line, book } = action
+      // Bất biến "không dòng giỏ nào có qty <= 0" phải toàn phần, không phụ thuộc call site nhớ chặn.
+      // `setQty` và `updateLine` đã gác; `addLine` đi thẳng vào `upsert` nên là lỗ duy nhất còn lại.
+      if (line.qty <= 0) return cart
       const retailPrice = line.unitPrice
       const unitPrice = resolveUnitPrice({ itemId: line.itemId, retailPrice }, cart.priceMode, book)
       // Món ngoài danh mục không có giá riêng nào để tra, và cũng không có giá lẻ để quay về.

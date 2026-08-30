@@ -296,4 +296,45 @@ describe('khôi phục nháp', () => {
     expect(gio.lines).toHaveLength(1)
     expect(gio.lines[0]?.qty).toBe(2)
   })
+
+  it('addLine từ chối qty <= 0 ngay ở reducer, không chờ call site nhớ chặn', () => {
+    // `setQty` (:179) và `updateLine` (:197) đã có guard này; `addLine` thì không, nó đi thẳng vào
+    // `upsert`. Một dòng qty 0 lọt vào giỏ làm `calcLineAmount` ném, mà nó chạy trong thân render
+    // của SalesPage ⇒ ErrorBoundary nuốt cả màn. Đặt bất biến ở reducer để nó toàn phần.
+    const gio = run([
+      {
+        type: 'addLine',
+        line: { itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: 30_000, qty: 0 },
+        book: RONG,
+      },
+    ])
+
+    expect(gio.lines).toEqual([])
+  })
+})
+
+describe('hoàn lại dòng vừa gỡ', () => {
+  const SI = (giá: number): PriceBook => new Map([[1, giá]])
+
+  it('restoreLine trả dòng về NGUYÊN TRẠNG, không tính lại giá', () => {
+    // Đường Hoàn lại của banner "gõ 0 lỡ tay". Không dùng `addLine` được: nó tính lại `unitPrice`
+    // qua `resolveUnitPrice` và ép `priceSource: 'catalog'`, nên dòng giá-gõ-tay đang bật SỈ sẽ bị
+    // giá trong bảng đè mất giá riêng. Hoàn lại mà đổi tiền thì không phải hoàn lại.
+    const đangSỈ = run([
+      { type: 'addItem', item: item(), book: SI(45_000) },
+      { type: 'applyPriceMode', mode: 'wholesale', book: SI(45_000) },
+    ])
+    const gõTay = run(
+      [{ type: 'setUnitPrice', key: đangSỈ.lines[0]?.key ?? '', unitPrice: 30_000 }],
+      đangSỈ,
+    )
+    const dòng = gõTay.lines[0]
+    expect(dòng?.priceSource).toBe('manual')
+
+    const đãBỏ = run([{ type: 'setQty', key: dòng?.key ?? '', qty: 0 }], gõTay)
+    expect(đãBỏ.lines).toEqual([])
+
+    const hoànLại = run([{ type: 'restoreLine', line: dòng! }], đãBỏ)
+    expect(hoànLại.lines).toEqual([dòng])
+  })
 })

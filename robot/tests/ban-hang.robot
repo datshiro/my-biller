@@ -434,3 +434,143 @@ Gõ tên món chưa có thì vẫn thêm được món ngay tại chỗ, kèm t�
     ${món}=    Đọc Bảng    items
     ${bánh_mì}=    Evaluate    [d for d in $món if d['name'] == 'bánh mì'][0]
     Should Be Equal As Integers    ${bánh_mì}[unitPrice]    20000
+
+Gõ thẳng số lượng vào giỏ rồi bấm ngay THU TIỀN thì sổ ghi đúng số vừa gõ
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    50
+    Chờ Thấy Chữ    2.750.000
+    # Cố ý KHÔNG chạm ra ngoài ô trước: đây đúng là cửa sổ blur-vs-click. Đi thẳng từ ô đang focus
+    # sang THU TIỀN, vì đó là thao tác thật của người bán đang vội.
+    Mở Sheet Thu Tiền
+    Chờ Thấy Chữ    2.750.000 đ
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    2750000
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    50
+    ...    Màn hiện 50 ly mà sổ ghi số khác — đúng kiểu hỏng tệ nhất của app này.
+    Should Be Equal As Integers    ${của_đơn}[0][amount]    2750000
+
+Xoá trắng ô số lượng thì dòng còn nguyên, rời ô là ô hiện lại số đang có
+    Mở Màn    /
+    Chọn Món    Trà đá    2
+    Gõ Số Lượng    Trà đá    ${EMPTY}
+    Chờ Thấy Chữ    Trà đá
+    Keyboard Key    press    Tab
+
+    ${số}=    Đọc Số Lượng    Trà đá
+    Should Be Equal    ${số}    2    Xoá trắng ô để gõ lại mà mất luôn số cũ trong giỏ.
+    Chờ Thấy Chữ    6.000 đ
+
+Gõ 0 rồi rời ô thì món đó biến khỏi đơn, món còn lại vào sổ nguyên vẹn
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá    3
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Wait For Elements State    css=button[aria-label="Sửa Phở bò đặc biệt"]    detached
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    9000
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Length Should Be    ${của_đơn}    1    Món gõ 0 vẫn còn trong sổ.
+    Should Be Equal    ${của_đơn}[0][name]    Trà đá
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    3
+
+Gõ 0 lỡ tay rồi bấm Hoàn lại thì món về nguyên vẹn cả số lượng lẫn giá
+    [Documentation]    `0` là phím ĐẦU của "0,5". Người bán gõ dở rồi bị khách gọi, chạm thẳng
+    ...    THU TIỀN — `onBlur` chạy trước và món biến mất. Nếu đó là dòng duy nhất thì footer
+    ...    THU TIỀN cũng bị tháo theo (`count > 0` gác nó), giỏ trắng giữa lúc bán. Giữ quyết định
+    ...    "0 là bỏ món" nhưng bắt buộc có đường về.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Bấm Nút    Hoàn lại
+    Wait For Elements State    css=button[aria-label="Sửa Phở bò đặc biệt"]    visible
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal    ${của_đơn}[0][name]    Phở bò đặc biệt
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    1
+    Should Be Equal As Integers    ${của_đơn}[0][unitPrice]    55000
+
+Gõ 1.000 vào ô số lượng trong giỏ thì không âm thầm thành 1 hay 2,5
+    [Documentation]    Bẫy tiền tố DƯƠNG, khác bẫy tiền tố "0". Gõ từng phím, "1.000" đi qua "1.0"
+    ...    rồi "1.00" — cả hai ĐỌC ĐƯỢC là 1 nên đã commit vào giỏ trước khi tới ký tự cuối. Tới lúc
+    ...    rời ô thì giỏ đã mang số sai rồi; vẽ lại từ giỏ chỉ đóng dấu cái sai đó. Chủ quán quen gõ
+    ...    kiểu tiền tệ, định đặt một nghìn ly mà sổ ghi 1 ly thì không một lỗi nào hiện ra.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Trà đá    3
+    Gõ Số Lượng    Trà đá    1.000
+    Keyboard Key    press    Tab
+
+    Chờ Thấy Chữ    không đọc được
+    ${số}=    Đọc Số Lượng    Trà đá
+    Should Be Equal    ${số}    3    Số lượng phải về đúng giá trị lúc vào ô, không giữ lại số commit dở.
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    3
+    ...    Sổ ghi số commit dở của "1.000" thay vì số lượng thật.
+
+Bấm cộng sau khi đã gõ tay thì ô và sổ cùng nhích lên một
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    50
+    Click    css=li:has(button[aria-label="Sửa Phở bò đặc biệt"]) >> css=button[aria-label="Thêm một"]
+
+    ${số}=    Đọc Số Lượng    Phở bò đặc biệt
+    Should Be Equal    ${số}    51    Ô nhập không vẽ lại theo giỏ — phím gõ tiếp sẽ commit từ nền sai.
+    Chờ Thấy Chữ    2.805.000
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    51
+
+Gõ 1.000 vào sheet sửa dòng thì báo lỗi chứ không âm thầm thành 1
+    [Documentation]    `parseQtyInput` coi cả `.` lẫn `,` là dấu THẬP PHÂN, nên "1.000" ra đúng số 1.
+    ...    Lỗi này đã sống trong bản đang chạy ở hai chỗ — sheet sửa dòng và ô tìm món. Ca này khoá
+    ...    đường sheet.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Trà đá
+    Click    css=button[aria-label="Sửa Trà đá"]
+    Điền Ô    Số lượng    1.000
+    Chờ Thấy Chữ    Số lượng không đọc được
+    Nút Phải Bị Khoá    XONG
+
+    Điền Ô    Số lượng    1000
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    1000
