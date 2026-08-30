@@ -125,6 +125,9 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     case 'addItem': {
       const { item, qty = 1, book } = action
       if (item.id === undefined) throw new Error('Mặt hàng chưa lưu thì chưa thêm vào giỏ được.')
+      // Khoan dung chứ không ném, khác dòng trên: `qty <= 0` là bất biến chung của giỏ, và mọi đường
+      // chèn khác (`setQty`, `addLine`, `restoreLine`) đều xử bằng `return cart`. Ném ở đây là ném
+      // giữa thân render. Món chưa lưu thì khác — đó là lỗi lập trình không có nghĩa nghiệp vụ nào.
       if (qty <= 0) return cart
 
       const retailPrice = item.unitPrice

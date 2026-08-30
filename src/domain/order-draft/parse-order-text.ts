@@ -43,7 +43,12 @@ function matchItem(query: string, items: readonly ItemCandidate[]): ItemCandidat
   return [...partial].sort((a, b) => a.name.length - b.name.length || a.id - b.id)[0] ?? null
 }
 
-/** Kết quả đọc đầy đủ: phần đọc được, và phần nguyên văn KHÔNG đọc được để trả lại cho người bán. */
+/**
+ * Kết quả đọc đầy đủ: phần đọc được, và phần KHÔNG đọc được để trả lại cho người bán.
+ *
+ * `rejected` là cụm ĐÃ CHUẨN HOÁ chứ không phải nguyên văn: phẩy thập phân đã thành chấm ("0,5 kg"
+ * → "0.5 kg") vì phép đổi đó chạy trước khi tách cụm. Nạp lại vào hàm này vẫn ra đúng kết quả.
+ */
 export type OrderTextResult = { lines: OrderDraftLine[]; rejected: string[] }
 
 /**
@@ -63,6 +68,9 @@ export function parseOrderText(text: string, items: readonly ItemCandidate[]): O
  * Người bán gõ "1.000 pho bo + 2 tra da" là đang định đặt một nghìn tô. Bỏ cụm đó đi rồi xoá trắng ô
  * tìm món là mất dòng không dấu vết nào — tệ hơn cả mất dòng ở giỏ, vì ở giỏ ít ra còn nhìn thấy.
  * Trả cụm về để chỗ gọi đặt lại vào ô.
+ *
+ * Cụm bị bỏ vì số lượng không đọc được và cụm không khớp mặt hàng nào đều vào `rejected` — với người
+ * bán thì cả hai là một chuyện: "máy không hiểu chỗ này".
  */
 export function readOrderText(text: string, items: readonly ItemCandidate[]): OrderTextResult {
   const lines: OrderDraftLine[] = []

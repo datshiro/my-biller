@@ -793,6 +793,10 @@ describe('ô số lượng trong giỏ', () => {
 
     // Ô rỗng là "chưa gõ xong", không phải "bỏ món" — chỉ số `0` gõ rõ ràng mới bỏ món.
     expect((await oSoLuong('Phở bò')).value).toBe('2')
+    // Và không được dựng banner cảnh báo: gỡ điều kiện `text.trim() !== ''` thì ô vẫn hiện `2` (vì
+    // nhánh "không đọc được" cũng khôi phục `qtyAtFocus`), nên nếu chỉ đo giá trị ô thì ca này xanh
+    // cả khi người bán bị dí một cảnh báo sai cho thao tác bình thường.
+    expect(screen.queryByText(/không đọc được/)).toBeNull()
   })
 
   it('bấm nút cộng khi đang gõ dở thì ô nhảy theo giỏ, không kẹt giá trị cũ', async () => {

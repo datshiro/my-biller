@@ -198,17 +198,22 @@ export function SalesPage() {
         : [{ id: item.id, name: item.name, unit: item.unit, unitPrice: item.unitPrice, costPrice: item.costPrice }],
     )
     const { lines, rejected } = readOrderText(query, candidates)
+
+    // Báo TRƯỚC khi thoát sớm: không đọc được cụm nào là hỏng nặng hơn đọc được một nửa, im lặng ở
+    // nhánh nặng hơn là ngược đời. Chỉ ĐẶT notice của mình, không `setNotice(null)` để dọn —
+    // banner đang đứng có thể là cảnh báo giỏ mang giá lẻ trong khi công tắc là SỈ (`applyMode`),
+    // và nuốt nó đi là để đơn chốt ở giá sai không dấu vết.
+    if (rejected.length > 0) {
+      setNotice({
+        text: `Chưa đọc được ${rejected.length === 1 ? 'phần' : `${rejected.length} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.`,
+      })
+    }
     if (lines.length === 0) return
 
     for (const line of lines) dispatch({ type: 'addLine', line, book })
     // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
     // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
     setQuery(rejected.join(', '))
-    setNotice(
-      rejected.length === 0
-        ? null
-        : { text: `Chưa đọc được ${rejected.length === 1 ? 'phần' : `${rejected.length} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.` },
-    )
   }
 
   // Nhánh lỗi của `run` không đụng tới giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
@@ -260,7 +265,10 @@ export function SalesPage() {
     )
   }
 
-  const undo = notice?.undo
+  // `restoreLine` cố ý không làm gì khi dòng đã quay lại giỏ (nếu không thì `upsert` cộng dồn qty).
+  // Nút vẫn hiện trong trạng thái đó là nút hứa suông, và hứa suông ở đây đi theo hướng IM: bỏ 3 tô,
+  // chạm lại 1 lần, bấm Hoàn lại tưởng lấy được 3 — sổ ghi 1, không con số nào nhảy để người bán thấy.
+  const undo = notice?.undo && !cart.lines.some((line) => line.key === notice.undo?.key) ? notice.undo : undefined
 
   /**
    * Gõ `0` là bỏ món (chốt của chủ quán), nhưng `0` cũng là phím ĐẦU của "0,5" — nên phải luôn có
@@ -403,7 +411,14 @@ export function SalesPage() {
             <h2 className="label-xs px-4 pb-2 pt-4 text-muted">TRONG ĐƠN</h2>
             <CartLines
               lines={cart.lines}
-              onBump={(key, delta) => dispatch({ type: 'bumpQty', key, delta })}
+              onBump={(key, delta) => {
+                // `bumpQty` xuống 0 đi thẳng vào `removeLine` TRONG reducer, không qua handler dựng
+                // banner. `money.ts` đã viết `0` "cùng ngữ nghĩa với nút − bấm ở qty 1" — cùng ngữ
+                // nghĩa thì phải cùng lối về, nhất là khi nút − là ô 44px nằm sát ô số lượng ở 320px.
+                const target = cart.lines.find((line) => line.key === key)
+                if (delta < 0 && target?.qty === 1) setQtyWithUndo(key, 0)
+                else dispatch({ type: 'bumpQty', key, delta })
+              }}
               onEdit={setEditing}
               onSetQty={setQtyWithUndo}
               onUnreadableQty={(name, restored) =>
@@ -519,6 +534,9 @@ export function SalesPage() {
             setEditing(null)
           }}
           onRemove={() => {
+            // CỐ Ý đứng ngoài luật "bỏ món thì phải có lối về": nhãn nút đã tự nói ra ý định, và phải
+            // mở sheet mới bấm được. Lối về sinh ra cho bề mặt LỠ TAY (gõ `0` — phím đầu của `0,5` —
+            // và chạm nhầm nút −), không phải cho một nút tên là "Bỏ món này khỏi đơn".
             dispatch({ type: 'removeLine', key: editing.key })
             setEditing(null)
           }}

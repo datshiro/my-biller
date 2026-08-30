@@ -54,8 +54,12 @@ export function receiptSignature(data: ReceiptData | null | undefined): string |
   // Luật máy móc kiểm được: thứ gì IN trên phiếu thì phải nằm trong chữ ký. Thiếu ba trường nợ thì
   // thu bớt nợ ở màn Công nợ xong, nút CHIA SẺ vẫn gửi ảnh PNG mang con số cũ.
   //
-  // Chiều ngược lại cũng phải giữ: `debtAsOf` là đồng hồ sống, nhét nó vào chữ ký khi khối nợ KHÔNG
-  // được vẽ thì mọi thay đổi ở bảng orders/payments qua mốc phút lại chụp lại một tờ phiếu y nguyên.
-  const debtAsOf = showsDebtBlock(order, data.totalDue) ? data.debtAsOf : null
+  // Chiều ngược lại cũng phải giữ: `debtAsOf` là đồng hồ sống, nhét nó vào chữ ký khi mốc đó KHÔNG
+  // được in thì mọi thay đổi ở bảng orders/payments qua mốc phút lại chụp lại một tờ phiếu y nguyên.
+  //
+  // Phải khớp CẢ HAI tầng cổng của bản vẽ, không chỉ tầng ngoài: dòng "Nợ cũ (đến HH:mm)" còn cần
+  // `priorDebt > 0`. Khoảng hở `showsDebtBlock && priorDebt === 0` không phải giả thuyết — đó đúng là
+  // ca khách có tiền trả trước chưa phân bổ, ca mà `showsDebtBlock` sinh ra để phục vụ.
+  const debtAsOf = showsDebtBlock(order, data.totalDue) && data.priorDebt > 0 ? data.debtAsOf : null
   return [order.id, order.updatedAt, order.status, lines.length, payments.length, shop.name, shop.address, shop.phone, shop.footerNote, data.priorDebt, data.totalDue, debtAsOf].join('|')
 }

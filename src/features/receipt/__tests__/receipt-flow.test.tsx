@@ -396,8 +396,22 @@ describe('receiptSignature', () => {
     expect(receiptSignature(trảĐủ)).toBe(receiptSignature(data({ debtAsOf: soldAt + 60_000 })))
   })
 
-  it('nhưng VẪN vào chữ ký khi khối nợ được vẽ', () => {
-    const đangNợ = { totalDue: 100_000 }
+  it('khách có tiền trả trước chưa phân bổ: vẽ khối nợ nhưng KHÔNG in mốc, nên mốc không vào chữ ký', () => {
+    // `priorDebt = max(0, totalDue − owingOf(order))` bằng 0 khi khách trả trước nhiều hơn nợ. Khối nợ
+    // vẫn vẽ (`TỔNG PHẢI TRẢ` khác `Còn nợ`) nhưng dòng "Nợ cũ (đến HH:mm)" thì không — nên mốc đó
+    // không được phép làm phiếu chụp lại. Cổng chữ ký chỉ khớp tầng ngoài là lọt đúng ca này.
+    const cóCredit = {
+      order: { ...data().order, paidAmount: 0, status: 'unpaid' as const, total: 30_000, subtotal: 30_000 },
+      priorDebt: 0,
+      totalDue: 5_000,
+    }
+    expect(receiptSignature(data(cóCredit))).toBe(receiptSignature(data({ ...cóCredit, debtAsOf: soldAt + 60_000 })))
+  })
+
+  it('nhưng VẪN vào chữ ký khi mốc đó được in ra', () => {
+    // `priorDebt` phải > 0 cùng lúc: đây mới là trạng thái `receiptDebt` dựng ra được
+    // (prior = max(0, totalDue − owingOf), mà đơn của `data()` đã trả đủ nên owingOf = 0).
+    const đangNợ = { priorDebt: 100_000, totalDue: 100_000 }
     expect(receiptSignature(data(đangNợ))).not.toBe(receiptSignature(data({ ...đangNợ, debtAsOf: soldAt + 60_000 })))
   })
 })

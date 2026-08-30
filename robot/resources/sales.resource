@@ -120,6 +120,12 @@ Gõ Số Lượng
     [Arguments]    ${tên_món}    ${số}
     Type Text    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    ${số}    clear=True
 
+Bớt Một
+    [Documentation]    `aria-label="Bớt một"` giống nhau ở MỌI dòng giỏ, nên phải neo theo ô số lượng
+    ...    của đúng dòng đó — bốc thẳng theo nhãn là strict-mode violation ngay khi giỏ có hai món.
+    [Arguments]    ${tên_món}
+    Click    ${{ 'css=li:has(input[aria-label="Số lượng %s"]) button[aria-label="Bớt một"]' % $tên_món }}
+
 Đọc Số Lượng
     [Arguments]    ${tên_món}
     ${giá_trị}=    Get Property    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    value

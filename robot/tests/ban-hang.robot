@@ -681,3 +681,63 @@ Cụm không đọc được ở ô tìm món ở lại trong ô, không biến 
     ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
     Length Should Be    ${của_đơn}    1
     Should Be Equal    ${của_đơn}[0][name]    Trà đá
+
+Thêm món qua ô tìm món không được nuốt cảnh báo đang đứng
+    [Documentation]    Banner đang đứng có thể là cảnh báo giỏ mang giá LẺ trong khi công tắc là SỈ.
+    ...    Nuốt nó đi là để đơn chốt ở giá sai không dấu vết. Ô tìm món chỉ được ĐẶT cảnh báo của
+    ...    chính nó, không được dọn của người khác.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Gõ Vào Ô Tìm Món    2 tra da
+    Keyboard Key    press    Enter
+    Chờ Thấy Chữ    Trà đá
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+Hoàn lại biến mất khi món đã tự quay lại giỏ, không hứa suông
+    [Documentation]    `restoreLine` cố ý không làm gì khi dòng đã quay lại giỏ, vì `upsert` cộng dồn
+    ...    qty. Nhưng nút vẫn hiện thì nó hứa suông theo hướng IM: bỏ 3 tô, chạm lại 1 lần, bấm Hoàn
+    ...    lại tưởng lấy được 3 — sổ ghi 1, không con số nào nhảy để người bán kịp thấy.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    3
+    Keyboard Key    press    Tab
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Chọn Món    Phở bò
+    Không Được Thấy Chữ    Hoàn lại
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+Bấm − ở số lượng 1 cũng bỏ món VÀ cũng có đường hoàn lại
+    [Documentation]    `bumpQty` xuống 0 đi thẳng vào `removeLine` trong reducer, không qua handler
+    ...    dựng banner. Nút − là ô 44px nằm sát ô số lượng ở màn 320px — đường chạm nhầm dễ nhất cả
+    ...    màn — và nếu đó là dòng duy nhất thì footer THU TIỀN cũng bị tháo theo.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá
+    Bớt Một    Phở bò đặc biệt
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Bấm Nút    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    2    Hoàn lại sau khi bấm − không đưa dòng trở lại giỏ.
+
+Gõ cả ô toàn thứ không đọc được thì phải báo, không im lặng tuyệt đối
+    [Documentation]    Nhánh hỏng NẶNG hơn (không đọc được cụm nào) trước đây im hơn nhánh hỏng nhẹ
+    ...    (đọc được một nửa) — bấm Enter không gì xảy ra, người bán bấm lại, vẫn không gì.
+    Mở Màn    /
+    Gõ Vào Ô Tìm Món    1.000 pho bo
+    Keyboard Key    press    Enter
+    Chờ Thấy Chữ    Chưa đọc được
