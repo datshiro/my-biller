@@ -8,6 +8,7 @@ import {
   prepareBackup,
 } from '../backup'
 import { collectBackup } from '@/db/backup'
+import { parseBackupFile } from '@/domain/backup'
 import { db } from '@/db/db'
 import { createCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
@@ -65,6 +66,35 @@ describe('applyBackup', () => {
     await applyBackup(tampered)
 
     expect(await db.orders.get(orderId)).toMatchObject({ paidAmount: 40_000, status: 'partial' })
+  })
+
+  it('file sao lưu CŨ chưa có ghi chú món vẫn nhập lại được', async () => {
+    // Chiều đo được của RT-4, đi đúng cửa người bán đi: chọn file → `parseBackupFile` → `applyBackup`.
+    // Chiều ngược lại — file MỚI nhập vào bản CŨ — không đo được trong repo vì mã bản cũ không tồn
+    // tại trong CI; chiều đó xử bằng quy tắc vận hành ghi trong PR, không bằng test giả vờ.
+    await sellOnCredit(110_000, 110_000)
+    const file = await collectBackup(NOW)
+
+    // Dựng đúng hình dạng file của bản trước: gỡ hẳn khoá `note` khỏi từng dòng hàng.
+    const cũ = {
+      ...file,
+      data: {
+        ...file.data,
+        orderLines: file.data.orderLines.map((line) => {
+          const cũHơn: Partial<typeof line> = { ...line }
+          delete cũHơn.note
+          return cũHơn
+        }),
+      },
+    }
+    expect(cũ.data.orderLines.every((line) => !('note' in line))).toBe(true)
+
+    const đọcLại = parseBackupFile(JSON.stringify(cũ))
+    await applyBackup(đọcLại.data)
+
+    const lines = await db.orderLines.toArray()
+    expect(lines).toHaveLength(1)
+    expect(lines[0]?.note).toBe('')
   })
 
   it('thay sạch dữ liệu cũ chứ không trộn vào', async () => {

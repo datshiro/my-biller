@@ -360,6 +360,32 @@ Tab dẫn đầu bị treo thì epoch mới fence tab cũ
     Epoch Máy Phải Từ    ${MÁY_A_PAGE}    2
     Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
 
+Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
+    [Documentation]    Cửa tử của trường mới: zod strip khoá lạ TRONG IM LẶNG, và Worker dùng chính
+    ...    `OrderLineSchema` để nhận event rồi THAY payload bằng bản đã parse. Worker chạy bản cũ sẽ
+    ...    cắt mất `note` trước khi ghi vào sổ chung — máy A giữ ghi chú cục bộ, máy B không bao giờ
+    ...    thấy, và không một lỗi nào hiện ra. Ca này phải nằm ở suite hai máy: máy chưa ghép đặt
+    ...    `enabled = false` nên không sinh sự kiện sync nào, ca có xanh cũng chẳng chứng minh gì.
+    Chọn Máy A
+    Click    ${NAV_BAN}
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Ghi chú    ít đường
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Hai Bảng Phải Hội Tụ    orderLines
+
+    # Lọc theo GHI CHÚ chứ không theo tên món: bộ mẫu đã có sẵn một dòng "Cà phê sữa" (seed.ts) nên
+    # bốc phần tử [0] theo tên là bốc nhầm dòng seed, và ca sẽ xanh mà không đo gì. `orderId` cũng
+    # không so được giữa hai máy — applier localize refs nên id là số cục bộ của từng máy.
+    ${dòng_b}=    Đọc Bảng    orderLines    ${MÁY_B_PAGE}
+    ${có_ghi_chú}=    Evaluate    [d for d in $dòng_b if d.get('note') == 'ít đường']
+    Length Should Be    ${có_ghi_chú}    1
+    ...    Ghi chú bị cắt trên đường qua sổ chung — máy B không thấy thứ máy A đã ghi.
+    Should Be Equal    ${có_ghi_chú}[0][name]    Cà phê sữa
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders

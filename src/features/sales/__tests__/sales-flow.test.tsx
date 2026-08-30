@@ -305,6 +305,31 @@ describe('bán hàng', () => {
   })
 
   /**
+   * `OrderLineDraft.note` cố ý optional để không phải sửa ~25 file test, nên TypeScript KHÔNG ép call
+   * site nhớ truyền. Chốt chặn phải là ca hành vi như ca này: gõ ghi chú ở sheet rồi đọc lại sổ.
+   */
+  it('ghi chú gõ trong sheet sửa dòng theo đơn xuống sổ; dòng bỏ trống là chuỗi rỗng', async () => {
+    await seedItems()
+    renderSales()
+
+    await pick('Phở bò')
+    await pick('Trà đá')
+    await userEvent.click(await screen.findByRole('button', { name: 'Sửa Phở bò' }))
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+    await openPayment()
+    await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+
+    const [order] = await db.orders.toArray()
+    const lines = await getOrderLines(order?.id ?? -1)
+    expect(lines.find((line) => line.name === 'Phở bò')?.note).toBe('ít hành')
+    expect(lines.find((line) => line.name === 'Trà đá')?.note).toBe('')
+  })
+
+  /**
    * Nháp sống sót qua một lượt bán là mầm của đơn trùng: lần mở màn Bán hàng sau đó, đúng những món
    * vừa bán lại nằm sẵn trong giỏ kèm banner "đã khôi phục", và người bán rất dễ bấm bán lần nữa.
    */

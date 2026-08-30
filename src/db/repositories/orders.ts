@@ -18,7 +18,14 @@ import {
   type Payment,
 } from '@/domain/schema'
 
-export type OrderLineDraft = Omit<OrderLine, 'id' | 'gid' | 'orderId' | 'amount'>
+export type OrderLineDraft = Omit<OrderLine, 'id' | 'gid' | 'orderId' | 'amount' | 'note'> & {
+  /**
+   * Ghi chú từng món ("ít đường, mang về"). Cố ý OPTIONAL ở bản nháp: để bắt buộc thì ~25 file phải
+   * thêm `note: ''` một cách cơ học, mà diff cơ học là chỗ lỗi trốn. Đổi lại, TypeScript không ép
+   * call site nhớ truyền — nên chốt chặn là ca hành vi trong `orders.test.ts`, không phải kiểu.
+   */
+  note?: string
+}
 
 export type OrderDraft = {
   customerId: number | null
@@ -61,8 +68,18 @@ export async function hasOrdersBefore(when: number): Promise<boolean> {
   return older !== undefined
 }
 
-export function getOrderLines(orderId: number): Promise<OrderLine[]> {
-  return db.orderLines.where('orderId').equals(orderId).toArray()
+export async function getOrderLines(orderId: number): Promise<OrderLine[]> {
+  const lines = await db.orderLines.where('orderId').equals(orderId).toArray()
+  return lines.map(withNote)
+}
+
+/**
+ * Dòng ghi trước khi `note` có mặt không mang trường này, mà `getOrderLines` trả thẳng row Dexie
+ * không qua zod ⇒ kiểu nói `string` trong khi giá trị là `undefined`. Vá tại cửa đọc để kiểu không
+ * nói dối. Không có đường di trú nào lấy lại được ghi chú chưa từng được ghi.
+ */
+function withNote(line: OrderLine): OrderLine {
+  return { ...line, note: line.note ?? '' }
 }
 
 export function getOrderPayments(orderId: number): Promise<Payment[]> {
@@ -107,13 +124,17 @@ const WIDE_QUERY = 1_500
 /** Dòng hàng của nhiều đơn trong một truy vấn. Báo cáo không được đọc `orderLines` từng đơn một. */
 export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {
   if (orderIds.length === 0) return []
+  // Vá `note` ở CẢ HAI nhánh và cả hàm này, không chỉ `getOrderLines`: cùng một lời nói dối kiểu,
+  // và lập luận "hàm này chỉ phục vụ Báo cáo nên không đọc `note`" là lập luận theo call site — thứ
+  // sẽ sai ngay lần đầu có người đọc dòng hàng qua đường này để in tem.
   if (orderIds.length < WIDE_QUERY) {
-    return db.orderLines.where('orderId').anyOf([...orderIds]).toArray()
+    const lines = await db.orderLines.where('orderId').anyOf([...orderIds]).toArray()
+    return lines.map(withNote)
   }
 
   const wanted = new Set(orderIds)
   const lines = await db.orderLines.toArray()
-  return lines.filter((line) => wanted.has(line.orderId))
+  return lines.filter((line) => wanted.has(line.orderId)).map(withNote)
 }
 
 /** Phiếu thu theo `paidAt` — dòng tiền của kỳ, khác doanh thu khi có bán nợ hoặc thu nợ cũ. */

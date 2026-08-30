@@ -26,8 +26,8 @@ const order = (overrides: Partial<Order> = {}): Order => ({
 })
 
 const lines: OrderLine[] = [
-  { id: 1, gid: testGid(1), orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000 },
-  { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000 },
+  { id: 1, gid: testGid(1), orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000, note: 'ít hành' },
+  { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000, note: '' },
 ]
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BackupFileSchema, ItemSchema, OrderSchema, PaymentSchema } from '../schema'
+import { BackupFileSchema, ItemSchema, OrderLineSchema, OrderSchema, PaymentSchema } from '../schema'
 import { testGid } from '@/test-fixtures'
 
 const emptyBackup = {
@@ -110,5 +110,29 @@ describe('ràng buộc tiền tệ trong schema', () => {
 
   it('bỏ qua trường lạ thay vì ghi rác xuống DB', () => {
     expect(OrderSchema.parse({ ...order, hackedField: 'x' })).not.toHaveProperty('hackedField')
+  })
+})
+
+describe('OrderLineSchema.note', () => {
+  const dòngCũ = {
+    gid: testGid(5),
+    orderId: 1,
+    itemId: null,
+    name: 'Phở bò',
+    unit: 'tô',
+    unitPrice: 40_000,
+    costPrice: null,
+    qty: 1,
+    amount: 40_000,
+  }
+
+  it('dòng ghi trước khi có ghi chú đọc ra chuỗi rỗng, không phải undefined', () => {
+    // Đây là hàng rào của mọi máy đang chạy bản cũ: file sao lưu cũ và event từ máy chưa cập nhật
+    // đều thiếu `note`. Thiếu `.default('')` thì `parse` ném, và cả hai đường nhập đó chết cứng.
+    expect(OrderLineSchema.parse(dòngCũ).note).toBe('')
+  })
+
+  it('giữ nguyên ghi chú đã có', () => {
+    expect(OrderLineSchema.parse({ ...dòngCũ, note: 'ít hành' }).note).toBe('ít hành')
   })
 })

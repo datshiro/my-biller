@@ -217,6 +217,7 @@ export function SalesPage() {
           unitPrice: line.unitPrice,
           costPrice: line.costPrice,
           qty: line.qty,
+          note: line.note,
         })),
         discount: cart.discount,
         surcharge: cart.surcharge,

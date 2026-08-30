@@ -237,6 +237,7 @@ describe('listOrderLinesOfOrders', () => {
         costPrice: null,
         qty: 1,
         amount: 1_000,
+        note: '',
       })),
     )
 
@@ -254,3 +255,59 @@ describe('listOrderLinesOfOrders', () => {
     expect([...new Set(lines.map((line) => line.orderId))].sort((a, b) => a - b)).toEqual(wanted)
   })
 })
+
+describe('ghi chú từng món', () => {
+  it('chốt đơn có ghi chú dòng thì sổ giữ lại ghi chú đó', async () => {
+    // Chốt chặn của phase này PHẢI là ca hành vi, không phải kiểu: `note` để optional trong
+    // `OrderLineDraft` (tránh sửa ~25 file test), nên TypeScript KHÔNG ép call site nhớ truyền nó.
+    // Quên một dòng map ở sales-page là ghi chú lại biến mất im lặng như trước.
+    const { id } = await createOrder(
+      draft({
+        lines: [
+          { itemId: null, name: 'Cà phê sữa', unit: 'ly', unitPrice: 20_000, costPrice: 8_000, qty: 1, note: 'ít đường' },
+          { itemId: null, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: 500, qty: 2 },
+        ],
+      }),
+    )
+
+    const lines = await getOrderLines(id)
+    expect(lines.map((line) => line.note)).toEqual(['ít đường', ''])
+  })
+
+  it('dòng ghi trước khi có trường này đọc ra chuỗi rỗng, không phải undefined', async () => {
+    // `getOrderLines` trả thẳng row Dexie, không qua zod. Đơn cũ không mang `note` nên kiểu sẽ nói
+    // dối là `string`. Phase 4 (tem) chỉ cần đọc một lần qua đó là in chữ "undefined" lên tem khách.
+    await db.orderLines.add({
+      gid: testGid(901),
+      orderId: 4242,
+      itemId: null,
+      name: 'Phở bò',
+      unit: 'tô',
+      unitPrice: 55_000,
+      costPrice: null,
+      qty: 1,
+      amount: 55_000,
+    } as never)
+
+    const [line] = await getOrderLines(4242)
+    expect(line?.note).toBe('')
+  })
+
+  it('listOrderLinesOfOrders vá cùng một cửa đọc, không để lời nói dối ở hàm kia', async () => {
+    await db.orderLines.add({
+      gid: testGid(902),
+      orderId: 4243,
+      itemId: null,
+      name: 'Trà đá',
+      unit: 'ly',
+      unitPrice: 3_000,
+      costPrice: null,
+      qty: 1,
+      amount: 3_000,
+    } as never)
+
+    const [line] = await listOrderLinesOfOrders([4243])
+    expect(line?.note).toBe('')
+  })
+})
+

@@ -591,3 +591,24 @@ Gõ 0 rồi đổi khách sang giá SỈ thì nút Hoàn lại biến mất, kh�
     Không Được Thấy Chữ    Hoàn lại
     Không Được Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
 
+
+Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi rỗng chứ không phải thiếu trường
+    [Documentation]    Trước đây `note` chỉ sống trong giỏ rồi rơi mất lúc chốt: màn hình hiện đúng,
+    ...    sổ ghi thiếu. Ca này khoá đường UI → IndexedDB. Dòng thứ hai cố ý KHÔNG có ghi chú để
+    ...    khoá luôn phần chuẩn hoá: đọc ra phải là '' để chỗ dùng không phải tự đoán undefined.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Ghi chú    ít hành, mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${phở}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Phở bò đặc biệt'][0]
+    Should Be Equal    ${phở}[note]    ít hành, mang về
+    ...    Ghi chú gõ ở giỏ không xuống tới sổ — người bếp không thấy thứ người bán đã ghi.
+    ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Trà đá'][0]
+    Should Be Equal    ${trà}[note]    ${EMPTY}    Dòng không ghi chú phải là '' chứ không thiếu trường.
