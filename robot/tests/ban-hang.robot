@@ -715,6 +715,15 @@ Hoàn lại biến mất khi món đã tự quay lại giỏ, không hứa suôn
     Không Được Thấy Chữ    Hoàn lại
     Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
 
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    1
+    ...    Nút biến mất là chưa đủ: sổ phải ghi 1 tô, không phải 3 hay 4.
+
 Bấm − ở số lượng 1 cũng bỏ món VÀ cũng có đường hoàn lại
     [Documentation]    `bumpQty` xuống 0 đi thẳng vào `removeLine` trong reducer, không qua handler
     ...    dựng banner. Nút − là ô 44px nằm sát ô số lượng ở màn 320px — đường chạm nhầm dễ nhất cả
@@ -733,10 +742,15 @@ Bấm − ở số lượng 1 cũng bỏ món VÀ cũng có đường hoàn lạ
     ${dòng}=    Đọc Bảng    orderLines
     ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
     Length Should Be    ${của_đơn}    2    Hoàn lại sau khi bấm − không đưa dòng trở lại giỏ.
+    ${theo_tên}=    Evaluate    {d['name']: d['qty'] for d in $của_đơn}
+    Should Be Equal As Numbers    ${theo_tên}[Phở bò đặc biệt]    1
+    ...    Đếm dòng thôi thì hoàn lại SAI số lượng vẫn xanh.
+    Should Be Equal As Numbers    ${theo_tên}[Trà đá]    1
 
 Gõ cả ô toàn thứ không đọc được thì phải báo, không im lặng tuyệt đối
     [Documentation]    Nhánh hỏng NẶNG hơn (không đọc được cụm nào) trước đây im hơn nhánh hỏng nhẹ
     ...    (đọc được một nửa) — bấm Enter không gì xảy ra, người bán bấm lại, vẫn không gì.
+    [Tags]    regression
     Mở Màn    /
     Gõ Vào Ô Tìm Món    1.000 pho bo
     Keyboard Key    press    Enter
