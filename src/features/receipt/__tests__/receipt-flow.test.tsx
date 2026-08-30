@@ -8,13 +8,23 @@ import { ReceiptPage } from '../receipt-page'
 import { db } from '@/db/db'
 import { createItem, updateItem } from '@/db/repositories/items'
 import { createOrder } from '@/db/repositories/orders'
+import { collectDebt, listCustomerPayments } from '@/db/repositories/payments'
 import { saveShop } from '@/db/repositories/settings'
+import { renderReceiptPng } from '../share-receipt'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 14, 32).getTime()
 
 // html-to-image cần canvas thật; jsdom không có. Ảnh không phải thứ màn này chịu trách nhiệm tạo ra —
 // nó chỉ phải xử lý ĐÚNG kết quả trả về, nên chặn ở ranh giới đó và đo ảnh thật trên trình duyệt.
+// Đếm số lần `useReceipt` thật sự chạy lại truy vấn. Ca "chống chụp thừa" mà không có bằng chứng
+// này thì xanh giả: nó không phân biệt được "chữ ký ổn định nên không chụp lại" với "liveQuery
+// chẳng buồn chạy lại nên chẳng có gì để chụp".
+vi.mock('@/db/repositories/payments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/db/repositories/payments')>()
+  return { ...actual, listCustomerPayments: vi.fn(actual.listCustomerPayments) }
+})
+
 vi.mock('../share-receipt', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../share-receipt')>()
   return {
@@ -261,5 +271,100 @@ describe('phiếu dài chia thành nhiều tấm ảnh', () => {
 
     await waitFor(() => expect(share).toHaveBeenCalledOnce())
     expect(share.mock.calls[0]?.[0].files?.map((file) => file.name)).toEqual(['PBH-260807-A001.png'])
+  })
+})
+
+describe('nợ luỹ kế trên phiếu', () => {
+  /** Khách có sẵn một đơn nợ cũ 100.000, rồi bán nợ thêm 55.000 — đúng cảnh của chủ quán. */
+  async function seedKhachNoCu() {
+    const customerId = await db.customers.add({
+      gid: testGid(202),
+      name: 'Anh Hùng',
+      phone: '',
+      address: '',
+      note: '',
+      createdAt: soldAt,
+      updatedAt: soldAt,
+    })
+    await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Cơm tấm', unit: 'đĩa', unitPrice: 150_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: soldAt - 86_400_000,
+      note: '',
+      payment: { amount: 50_000, method: 'cash', note: '' },
+    })
+    const { id } = await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt,
+      note: '',
+      payment: null,
+    })
+    return { id, customerId }
+  }
+
+  it('khách còn nợ đơn cũ → phiếu gộp thành một bill có Nợ cũ và TỔNG PHẢI TRẢ', async () => {
+    const { id } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    expect(await screen.findByText(/^Nợ cũ \(đến /)).toBeDefined()
+    const nợCũ = screen.getByText(/^Nợ cũ \(đến /).parentElement as HTMLElement
+    expect(within(nợCũ).getByText('100.000 đ')).toBeDefined()
+
+    const tổng = screen.getByText('TỔNG PHẢI TRẢ').parentElement as HTMLElement
+    expect(within(tổng).getByText('155.000 đ')).toBeDefined()
+  })
+
+  it('thu bớt nợ cũ → phiếu đang mở chụp lại ảnh, không cầm số cũ', async () => {
+    // Bẫy CHỤP THIẾU. Thêm ba trường nợ vào phiếu mà quên thêm vào `receiptSignature` thì màn hiện
+    // số mới trong khi nút CHIA SẺ vẫn gửi ảnh PNG mang số cũ — khách nhận qua Zalo một tờ sai.
+    const { id, customerId } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    await screen.findByText('155.000 đ')
+    const lầnĐầu = vi.mocked(renderReceiptPng).mock.calls.length
+
+    await collectDebt({ customerId, amount: 40_000, method: 'cash', note: '', paidAt: soldAt })
+
+    await waitFor(() => expect(screen.getByText('115.000 đ')).toBeDefined())
+    await waitFor(() => expect(vi.mocked(renderReceiptPng).mock.calls.length).toBeGreaterThan(lầnĐầu))
+  })
+
+  it('truy vấn chạy lại mà nợ không đổi trong cùng một phút → không chụp lại thừa', async () => {
+    // Bẫy CHỤP THỪA, đối nghịch với ca trên. Bán thêm cho CHÍNH khách này một đơn đã trả đủ: bảng
+    // `orders` đổi nên `listOrdersByCustomer` chạy lại thật, nhưng đơn trả đủ không nợ gì nên tổng
+    // nợ y nguyên. Để `debtAsOf` nguyên mili-giây thì chữ ký vẫn đổi và phiếu chụp lại ảnh vô ích;
+    // máy yếu treo ở "Đang chuẩn bị ảnh…".
+    const { id, customerId } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    await screen.findByText('155.000 đ')
+    await waitFor(() => expect(vi.mocked(renderReceiptPng).mock.calls.length).toBeGreaterThan(0))
+    const chụpTrước = vi.mocked(renderReceiptPng).mock.calls.length
+    const truyVấnTrước = vi.mocked(listCustomerPayments).mock.calls.length
+
+    await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt,
+      note: '',
+      payment: { amount: 3_000, method: 'cash', note: '' },
+    })
+
+    // Trước hết phải chứng minh liveQuery ĐÃ chạy lại — không thì phần dưới không đo gì cả.
+    await waitFor(() =>
+      expect(vi.mocked(listCustomerPayments).mock.calls.length).toBeGreaterThan(truyVấnTrước),
+    )
+    expect(screen.getByText('155.000 đ')).toBeDefined()
+    expect(vi.mocked(renderReceiptPng).mock.calls.length).toBe(chụpTrước)
   })
 })

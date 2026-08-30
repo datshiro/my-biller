@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import { RECEIPT_WIDTH } from './share-receipt'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
-import { remainingOf } from '@/domain/order-status'
+import { owingOf } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 const METHOD: Record<Payment['method'], string> = {
@@ -27,6 +27,9 @@ export function ReceiptView({
   order,
   lines,
   payments,
+  priorDebt,
+  totalDue,
+  debtAsOf,
   page = 1,
   pageCount = 1,
   innerRef,
@@ -36,12 +39,18 @@ export function ReceiptView({
   /** Chỉ những dòng của trang này. Việc chia trang do `paginateLines` lo. */
   lines: readonly OrderLine[]
   payments: readonly Payment[]
+  priorDebt: number
+  totalDue: number
+  debtAsOf: number | null
   page?: number
   pageCount?: number
   innerRef?: React.Ref<HTMLDivElement>
 }) {
   const hasShopHeader = Boolean(shop.name || shop.address || shop.phone)
-  const remaining = remainingOf(order.total, order.paidAmount)
+  // `owingOf` chứ không `remainingOf`: `voidOrder` đặt `paidAmount = 0` (orders.ts:279) nên đơn huỷ
+  // nào cũng có `remainingOf = total > 0`, mà đơn huỷ thì không nợ ai. Nút XEM PHIẾU hiện cho cả đơn
+  // huỷ nên đây là đường người dùng thật, không phải ca giả định.
+  const remaining = owingOf(order)
   const adjusted = order.discount > 0 || order.surcharge > 0
   // Khối tiền chỉ in ở trang cuối. Đầu phiếu thì lặp lại trên mọi trang, vì mỗi trang là một tấm ảnh
   // rời — khách xem tấm thứ ba mà không biết phiếu nào, của quán nào thì vô nghĩa.
@@ -114,6 +123,22 @@ export function ReceiptView({
             ))}
             {remaining > 0 ? <Row label="Còn nợ" value={formatVnd(remaining)} strong /> : null}
           </div>
+
+          {/* Khối gạch đứt RIÊNG, không nhồi vào khối tiền ở trên: trên là tiền của đơn này, dưới là
+              tiền khách nợ tất cả. Cổng là `totalDue !== remaining` chứ không phải `priorDebt > 0` —
+              khách có tiền trả trước chưa phân bổ (thu rồi đơn bị huỷ) thì `priorDebt` bằng 0 mà
+              phiếu VẪN đang đòi thừa: "Còn nợ 55.000" trong khi màn Công nợ hiện 25.000. */}
+          {/* Đơn huỷ không vẽ khối này: nợ của khách vẫn thật, nhưng một hoá đơn ĐÃ HUỶ không phải
+              tờ giấy đòi tiền — in "TỔNG PHẢI TRẢ" lên đó là mời người bán cầm đi thu. Nợ tổng có
+              chỗ của nó ở màn Công nợ. */}
+          {order.customerId !== null && order.status !== 'void' && totalDue !== remaining ? (
+            <div className="mt-2 border-t border-dashed border-line pt-2">
+              {priorDebt > 0 && debtAsOf !== null ? (
+                <Row label={`Nợ cũ (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(priorDebt)} />
+              ) : null}
+              <Row label="TỔNG PHẢI TRẢ" value={formatVnd(totalDue)} strong />
+            </div>
+          ) : null}
 
           {order.note ? (
             <p className="mt-3 border-t border-dashed border-line pt-2 text-[12px] text-muted">

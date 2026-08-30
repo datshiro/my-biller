@@ -30,6 +30,12 @@ const lines: OrderLine[] = [
   { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000 },
 ]
 
+/**
+ * Ba trường nợ luỹ kế, mặc định là "khách lẻ, không có nợ nào khác". `totalDue` phải bằng đúng số
+ * còn nợ của chính đơn thì cổng `totalDue !== remaining` mới đóng — đó là ca của mọi phiếu cũ.
+ */
+const khongNo = (remaining = 0) => ({ priorDebt: 0, totalDue: remaining, debtAsOf: null })
+
 const payment = (overrides: Partial<Payment> = {}): Payment => ({
   id: 1,
   gid: testGid(1),
@@ -45,7 +51,7 @@ const payment = (overrides: Partial<Payment> = {}): Payment => ({
 
 describe('receiptToText', () => {
   it('có đủ số phiếu, ngày giờ, từng dòng hàng và tổng tiền', () => {
-    const text = receiptToText({ shop: DEFAULT_SHOP, order: order(), lines, payments: [payment()] })
+    const text = receiptToText({ shop: DEFAULT_SHOP, order: order(), lines, payments: [payment()], ...khongNo() })
 
     expect(text).toContain('Số: PBH-260807-001')
     expect(text).toContain('07/08/2026 14:32')
@@ -56,7 +62,7 @@ describe('receiptToText', () => {
   })
 
   it('chưa đặt tên quán → không có dòng trống ở đầu', () => {
-    const text = receiptToText({ shop: DEFAULT_SHOP, order: order(), lines, payments: [] })
+    const text = receiptToText({ shop: DEFAULT_SHOP, order: order(), lines, payments: [], ...khongNo() })
 
     expect(text.startsWith('PHIẾU BÁN HÀNG')).toBe(true)
   })
@@ -67,6 +73,7 @@ describe('receiptToText', () => {
       order: order(),
       lines,
       payments: [],
+      ...khongNo(),
     })
 
     expect(text.startsWith('Quán Cô Ba\n12 Nguyễn Trãi\n0909 123 456')).toBe(true)
@@ -78,6 +85,7 @@ describe('receiptToText', () => {
       order: order({ paidAmount: 40_000, status: 'partial', customerName: 'Chị Hoa' }),
       lines,
       payments: [payment({ amount: 40_000 })],
+      ...khongNo(73_000),
     })
 
     expect(text).toContain('CÒN NỢ: 73.000 đ')
@@ -89,6 +97,7 @@ describe('receiptToText', () => {
       order: order({ discount: 13_000, surcharge: 5_000, total: 105_000, paidAmount: 105_000 }),
       lines,
       payments: [payment({ amount: 105_000 })],
+      ...khongNo(),
     })
 
     expect(text).toContain('Hàng: 113.000 đ')
@@ -96,4 +105,98 @@ describe('receiptToText', () => {
     expect(text).toContain('Phụ thu: 5.000 đ')
     expect(text).toContain('TỔNG CỘNG: 105.000 đ')
   })
+
+  it('khách còn nợ đơn cũ thì có cả NỢ CŨ lẫn TỔNG PHẢI TRẢ, cùng cổng với bản vẽ', () => {
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 0, status: 'unpaid', customerId: 1, customerName: 'Anh Hùng', total: 55_000, subtotal: 55_000 }),
+      lines,
+      payments: [],
+      priorDebt: 100_000,
+      totalDue: 155_000,
+      debtAsOf: new Date(2026, 7, 7, 14, 32).getTime(),
+    })
+
+    expect(text).toContain('CÒN NỢ: 55.000 đ')
+    expect(text).toContain('NỢ CŨ (đến 14:32 07/08): 100.000 đ')
+    expect(text).toContain('TỔNG PHẢI TRẢ: 155.000 đ')
+  })
+
+  it('khách có tiền trả trước nhiều hơn nợ: vẫn in TỔNG PHẢI TRẢ, và KHÔNG in dòng nợ cũ', () => {
+    // Ca RT-1. Cổng `priorDebt > 0` sẽ giấu con số đúng lúc phiếu đang đòi thừa tiền: phiếu ghi
+    // "Còn nợ 55.000" trong khi khách chỉ thật sự nợ 25.000.
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 0, status: 'unpaid', customerId: 1, customerName: 'Anh Hùng', total: 55_000, subtotal: 55_000 }),
+      lines,
+      payments: [],
+      priorDebt: 0,
+      totalDue: 25_000,
+      debtAsOf: new Date(2026, 7, 7, 14, 32).getTime(),
+    })
+
+    expect(text).toContain('TỔNG PHẢI TRẢ: 25.000 đ')
+    expect(text).not.toContain('NỢ CŨ')
+  })
+
+  it('không bao giờ in mốc giờ rỗng lên phiếu đưa khách', () => {
+    // RT-14. `debtAsOf` từng là sentinel `0`, mà `0` là mốc HỢP LỆ với `format` — nó in
+    // "07:00 01/01" lên tờ giấy đưa tận tay khách ngay khi cổng hiển thị đổi theo RT-1.
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 0, status: 'unpaid', customerId: 1, customerName: 'Anh Hùng', total: 55_000, subtotal: 55_000 }),
+      lines,
+      payments: [],
+      priorDebt: 0,
+      totalDue: 25_000,
+      debtAsOf: null,
+    })
+
+    expect(text).not.toContain('01/01')
+  })
+
+  it('phiếu khách lẻ trả đủ không có dòng nợ nào', () => {
+    const text = receiptToText({ shop: DEFAULT_SHOP, order: order(), lines, payments: [payment()], ...khongNo() })
+
+    expect(text).not.toContain('NỢ CŨ')
+    expect(text).not.toContain('TỔNG PHẢI TRẢ')
+  })
+
+  it('phiếu đơn ĐÃ HUỶ không in dòng nợ nào, dù sổ còn ghi paidAmount 0', () => {
+    // RT-8, và chính cổng `totalDue !== remaining` đã gỡ chốt an toàn của nó: `voidOrder` đặt
+    // `paidAmount = 0` (orders.ts:279) nên đơn huỷ nào cũng có `remainingOf = total > 0`, trong khi
+    // `owingOf` của nó bằng 0. Cổng mở toang và in "Còn nợ 55.000" cạnh "TỔNG PHẢI TRẢ 0 đ" — ba con
+    // số chửi nhau trên tờ giấy đưa khách. Nút XEM PHIẾU hiện cho cả đơn huỷ nên đây là đường thật.
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 0, status: 'void', customerId: 1, customerName: 'Anh Hùng', total: 55_000, subtotal: 55_000 }),
+      lines,
+      payments: [],
+      // Khách này còn nợ THẬT 100.000 từ đơn khác — nợ không biến mất vì một đơn bị huỷ.
+      priorDebt: 100_000,
+      totalDue: 100_000,
+      debtAsOf: new Date(2026, 7, 7, 14, 32).getTime(),
+    })
+
+    expect(text).not.toContain('CÒN NỢ')
+    expect(text).not.toContain('NỢ CŨ')
+    expect(text).not.toContain('TỔNG PHẢI TRẢ')
+  })
+
+  it('phiếu khách lẻ không bao giờ có khối nợ, kể cả khi sổ có dữ liệu hỏng', () => {
+    // Nợ là tiền của một NGƯỜI cụ thể — `groupDebts` loại hẳn đơn không gắn khách. Khách lẻ mà còn
+    // nợ là lỗi dữ liệu, và phiếu không được biến lỗi đó thành một con số đòi tiền.
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 0, status: 'unpaid', customerId: null, total: 55_000, subtotal: 55_000 }),
+      lines,
+      payments: [],
+      priorDebt: 0,
+      totalDue: 0,
+      debtAsOf: null,
+    })
+
+    expect(text).not.toContain('TỔNG PHẢI TRẢ')
+  })
 })
+

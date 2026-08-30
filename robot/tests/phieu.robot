@@ -145,6 +145,77 @@ Mở phiếu của đơn không tồn tại thì báo rõ và có lối về
     Chờ Thấy Chữ    Đơn hàng
 
 
+Phiếu của khách còn nợ đơn cũ thì gộp thành một bill có nợ cũ và tổng phải trả
+    Bán Nợ Cho Khách    Phở bò    Anh Hùng
+
+    Chờ Thấy Chữ    Còn nợ
+    Chờ Thấy Chữ    Nợ cũ
+    Chờ Thấy Chữ    100.000 đ
+    Chờ Thấy Chữ    TỔNG PHẢI TRẢ
+    Chờ Thấy Chữ    155.000 đ
+
+    # Bộ mẫu cho Anh Hùng nợ sẵn 100.000 (đơn 2: total 150.000, thu 50.000 — src/db/seed.ts).
+    # Đối chiếu thẳng sổ: con số trên phiếu phải bằng tổng nợ THẬT của khách, không đếm đôi đơn
+    # đang in. Giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất của app này.
+    ${khách}=    Đọc Bảng    customers
+    ${hùng}=    Evaluate    [c for c in $khách if c['name'] == 'Anh Hùng'][0]
+    ${đơn}=    Đọc Bảng    orders
+    # `${hùng}[id]` chứ không `$hùng['id']`: bên trong generator expression, Robot chỉ thấy globals
+    # nên biến `$…` của scope ngoài khuất mất. `$đơn` thì được — iterable ngoài cùng vẫn tính ở scope này.
+    ${nợ}=    Evaluate
+    ...    sum(max(0, o['total'] - o['paidAmount']) for o in $đơn if o['customerId'] == ${hùng}[id] and o['status'] != 'void')
+    Should Be Equal As Integers    ${nợ}    155000
+    ...    Phiếu ghi tổng phải trả khác tổng nợ trong sổ — người bán sẽ đòi sai số tiền.
+
+Phiếu khách lẻ không có dòng nợ cũ
+    Bán Nhanh    Phở bò
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Chờ Thấy Chữ    Khách lẻ
+    Không Được Thấy Chữ    Nợ cũ
+    Không Được Thấy Chữ    TỔNG PHẢI TRẢ
+
+Đơn nợ đầu tiên của một khách thì phiếu chỉ có Còn nợ, không có dòng nợ cũ rỗng
+    [Documentation]    Không dùng Anh Hùng được: bộ mẫu đã cho anh ấy nợ sẵn 100.000.
+    Thêm Nhanh Khách    Chị Mai
+    Bán Nợ Cho Khách    Trà đá    Chị Mai
+
+    Chờ Thấy Chữ    Chị Mai
+    Chờ Thấy Chữ    Còn nợ
+    Chờ Thấy Chữ    3.000 đ
+    Không Được Thấy Chữ    Nợ cũ
+    # Nợ của đơn này ĐÃ là toàn bộ nợ của khách, nên khối gộp không có gì để nói thêm.
+    Không Được Thấy Chữ    TỔNG PHẢI TRẢ
+
+    ${khách}=    Đọc Bảng    customers
+    ${mai}=    Evaluate    [c for c in $khách if c['name'] == 'Chị Mai'][0]
+    ${đơn}=    Đọc Bảng    orders
+    ${nợ}=    Evaluate
+    ...    sum(max(0, o['total'] - o['paidAmount']) for o in $đơn if o['customerId'] == ${mai}[id])
+    Should Be Equal As Integers    ${nợ}    3000
+
+
+Phiếu của đơn đã huỷ không đòi tiền, dù sổ vẫn ghi paidAmount 0
+    [Documentation]    `voidOrder` đặt `paidAmount = 0` nên đơn huỷ nào cũng có `total - paidAmount`
+    ...    dương, trong khi đơn huỷ thì không nợ ai. Nút XEM PHIẾU hiện cho cả đơn huỷ và phiếu không
+    ...    có dấu "đã huỷ" nào, nên đây là tờ giấy khách thật sự cầm. Trước khi có khối nợ luỹ kế,
+    ...    phiếu này in "Còn nợ"; giờ cổng gộp nợ còn làm nó in thêm "TỔNG PHẢI TRẢ 0 đ" bên cạnh.
+    [Tags]    regression
+    Bán Nợ Cho Khách    Phở bò    Anh Hùng
+    ${đơn}=    Đơn Mới Nhất
+    Mở Màn    /don/${đơn}[id]
+    Chờ Thấy Chữ    MẶT HÀNG
+    Bấm Nút    Huỷ đơn
+    Chờ Hộp Xác Nhận    Huỷ đơn này?
+    Xác Nhận Trong Hộp    Huỷ đơn
+    Chờ Thấy Chữ    Đơn này đã huỷ
+
+    Bấm Nút    🧾 XEM PHIẾU
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Không Được Thấy Chữ    Còn nợ
+    Không Được Thấy Chữ    Nợ cũ
+    Không Được Thấy Chữ    TỔNG PHẢI TRẢ
+
+
 *** Keywords ***
 Thêm Nhanh Mặt Hàng
     [Arguments]    ${tên}    ${giá}
@@ -165,3 +236,10 @@ Xoá Thông Tin Quán
     Điền Ô    Số điện thoại    ${EMPTY}
     Bấm Nút    LƯU THÔNG TIN
     Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+
+Thêm Nhanh Khách
+    [Arguments]    ${tên}
+    Mở Màn    /them/khach-hang/moi
+    Điền Ô    Tên khách hàng *    ${tên}
+    Bấm Nút    LƯU KHÁCH HÀNG
+    Chờ Thấy Chữ    ${tên}
