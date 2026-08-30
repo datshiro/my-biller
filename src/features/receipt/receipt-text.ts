@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
-import { owingOf } from '@/domain/debt'
+import { owingOf, showsDebtBlock } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 const METHOD: Record<Payment['method'], string> = {
@@ -57,9 +57,7 @@ export function receiptToText({
   // Xem chú thích cùng chỗ ở `receipt-view.tsx` — hai bản phải dùng chung một định nghĩa "còn nợ".
   const remaining = owingOf(order)
   if (remaining > 0) money.push(`CÒN NỢ: ${formatVnd(remaining)}`)
-  // Cùng cổng với bản vẽ (`receipt-view.tsx`). Hai bản lệch nhau là khách cầm hai con số khác nhau.
-  // Cùng cổng với bản vẽ, gồm cả nhánh đơn huỷ.
-  if (order.customerId !== null && order.status !== 'void' && totalDue !== remaining) {
+  if (showsDebtBlock(order, totalDue)) {
     if (priorDebt > 0 && debtAsOf !== null) {
       money.push(`NỢ CŨ (đến ${format(debtAsOf, 'HH:mm dd/MM')}): ${formatVnd(priorDebt)}`)
     }

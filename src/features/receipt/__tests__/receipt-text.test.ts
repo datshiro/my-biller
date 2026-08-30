@@ -106,6 +106,26 @@ describe('receiptToText', () => {
     expect(text).toContain('TỔNG CỘNG: 105.000 đ')
   })
 
+  it('khách đang nợ mà đơn này trả đủ: in NỢ CŨ và TỔNG PHẢI TRẢ TRÙNG SỐ, có chủ ý', () => {
+    // Anh Hùng nợ 100.000 từ đơn cũ, hôm nay mua 30.000 trả tiền mặt đủ. `owingOf` của đơn này là 0
+    // nên cổng mở, và hai dòng mang đúng một con số. Đây KHÔNG phải lỗi: tờ phiếu đang nói "đơn này
+    // xong rồi, nhưng anh còn nợ chỗ khác 100.000". Ràng lại vì trước đó không ca nào chạm nhánh này
+    // — mọi ca đều là đơn nợ hoặc khách lẻ — nên đổi hành vi mà không ai biết là chuyện dễ xảy ra.
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ paidAmount: 30_000, status: 'paid', customerId: 1, customerName: 'Anh Hùng', total: 30_000, subtotal: 30_000 }),
+      lines,
+      payments: [payment({ amount: 30_000 })],
+      priorDebt: 100_000,
+      totalDue: 100_000,
+      debtAsOf: new Date(2026, 7, 7, 14, 32).getTime(),
+    })
+
+    expect(text).not.toContain('CÒN NỢ')
+    expect(text).toContain('NỢ CŨ (đến 14:32 07/08): 100.000 đ')
+    expect(text).toContain('TỔNG PHẢI TRẢ: 100.000 đ')
+  })
+
   it('khách còn nợ đơn cũ thì có cả NỢ CŨ lẫn TỔNG PHẢI TRẢ, cùng cổng với bản vẽ', () => {
     const text = receiptToText({
       shop: DEFAULT_SHOP,

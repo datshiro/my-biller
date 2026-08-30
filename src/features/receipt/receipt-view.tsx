@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import { RECEIPT_WIDTH } from './share-receipt'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
-import { owingOf } from '@/domain/debt'
+import { owingOf, showsDebtBlock } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 const METHOD: Record<Payment['method'], string> = {
@@ -125,13 +125,9 @@ export function ReceiptView({
           </div>
 
           {/* Khối gạch đứt RIÊNG, không nhồi vào khối tiền ở trên: trên là tiền của đơn này, dưới là
-              tiền khách nợ tất cả. Cổng là `totalDue !== remaining` chứ không phải `priorDebt > 0` —
-              khách có tiền trả trước chưa phân bổ (thu rồi đơn bị huỷ) thì `priorDebt` bằng 0 mà
-              phiếu VẪN đang đòi thừa: "Còn nợ 55.000" trong khi màn Công nợ hiện 25.000. */}
-          {/* Đơn huỷ không vẽ khối này: nợ của khách vẫn thật, nhưng một hoá đơn ĐÃ HUỶ không phải
-              tờ giấy đòi tiền — in "TỔNG PHẢI TRẢ" lên đó là mời người bán cầm đi thu. Nợ tổng có
-              chỗ của nó ở màn Công nợ. */}
-          {order.customerId !== null && order.status !== 'void' && totalDue !== remaining ? (
+              tiền khách nợ tất cả. Điều kiện vẽ nằm trong `showsDebtBlock` để bản chữ và chữ ký ảnh
+              dùng đúng một định nghĩa — lý do chọn cổng đó ghi ngay tại hàm. */}
+          {showsDebtBlock(order, totalDue) ? (
             <div className="mt-2 border-t border-dashed border-line pt-2">
               {priorDebt > 0 && debtAsOf !== null ? (
                 <Row label={`Nợ cũ (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(priorDebt)} />

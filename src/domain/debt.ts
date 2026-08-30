@@ -23,6 +23,21 @@ export function owingOf(order: DebtOrder): number {
 }
 
 /**
+ * Phiếu có vẽ khối "Nợ cũ / TỔNG PHẢI TRẢ" hay không.
+ *
+ * Một chỗ duy nhất cho ba nơi hỏi cùng câu này — bản vẽ, bản chữ, và chữ ký ảnh. Ba bản chép tay
+ * thì bản chữ và bản vẽ trôi khỏi nhau là khách cầm hai con số, còn chữ ký trôi là phiếu chụp lại
+ * ảnh cũ hoặc chụp thừa.
+ *
+ * Cổng là `totalDue !== owingOf(order)` chứ không phải `priorDebt > 0`: khách có tiền trả trước chưa
+ * phân bổ thì `priorDebt` bằng 0 mà phiếu VẪN đang đòi thừa. Đơn huỷ không vẽ — nợ của khách vẫn
+ * thật, nhưng một hoá đơn đã huỷ không phải tờ giấy đòi tiền.
+ */
+export function showsDebtBlock(order: DebtOrder, totalDue: number): boolean {
+  return order.customerId !== null && order.status !== 'void' && totalDue !== owingOf(order)
+}
+
+/**
  * Gộp nợ theo khách, nợ lâu nhất lên đầu.
  *
  * Đơn không gắn khách bị **loại hẳn**: nợ là tiền của một người cụ thể, đơn khách lẻ mà chưa trả đủ

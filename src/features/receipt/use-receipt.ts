@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { getOrder, getOrderLines, getOrderPayments, listOrdersByCustomer } from '@/db/repositories/orders'
 import { listCustomerPayments, unallocatedByCustomer } from '@/db/repositories/payments'
 import { getShop } from '@/db/repositories/settings'
-import { receiptDebt } from '@/domain/debt'
+import { receiptDebt, showsDebtBlock } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 export type ReceiptData = {
@@ -53,5 +53,9 @@ export function receiptSignature(data: ReceiptData | null | undefined): string |
   const { order, lines, payments, shop } = data
   // Luật máy móc kiểm được: thứ gì IN trên phiếu thì phải nằm trong chữ ký. Thiếu ba trường nợ thì
   // thu bớt nợ ở màn Công nợ xong, nút CHIA SẺ vẫn gửi ảnh PNG mang con số cũ.
-  return [order.id, order.updatedAt, order.status, lines.length, payments.length, shop.name, shop.address, shop.phone, shop.footerNote, data.priorDebt, data.totalDue, data.debtAsOf].join('|')
+  //
+  // Chiều ngược lại cũng phải giữ: `debtAsOf` là đồng hồ sống, nhét nó vào chữ ký khi khối nợ KHÔNG
+  // được vẽ thì mọi thay đổi ở bảng orders/payments qua mốc phút lại chụp lại một tờ phiếu y nguyên.
+  const debtAsOf = showsDebtBlock(order, data.totalDue) ? data.debtAsOf : null
+  return [order.id, order.updatedAt, order.status, lines.length, payments.length, shop.name, shop.address, shop.phone, shop.footerNote, data.priorDebt, data.totalDue, debtAsOf].join('|')
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cartCount, cartReducer, cartTotals, emptyCart, type Cart } from '../cart'
+import { cartCount, cartReducer, cartTotals, emptyCart, type Cart, type CartLine } from '../cart'
 import type { PriceBook } from '../wholesale-price'
 import { calcChange, suggestCashAmounts } from '../cash-suggestion'
 import type { Item } from '../schema'
@@ -361,3 +361,26 @@ describe('hoàn lại dòng vừa gỡ', () => {
   })
 })
 
+describe('bất biến qty > 0 trên MỌI đường chèn', () => {
+  it('hoàn lại một dòng đã quay lại giỏ là không làm gì, không cộng dồn số lượng', () => {
+    // Người bán bỏ 3 tô bằng cách gõ 0 (cố ý), chạm lại món 3 lần, rồi bấm "Hoàn lại" theo quán tính
+    // vì đó từng là nút duy nhất trên banner. `upsert` cộng dồn qty ⇒ đơn ghi 6 tô, tiền gấp đôi.
+    const có3 = run([{ type: 'addItem', item: item(), qty: 3, book: RONG }])
+    const dòng = có3.lines[0]
+    expect(dòng?.qty).toBe(3)
+
+    const đãBỏ = run([{ type: 'setQty', key: dòng?.key ?? '', qty: 0 }], có3)
+    const chạmLại = run([{ type: 'addItem', item: item(), qty: 3, book: RONG }], đãBỏ)
+    expect(chạmLại.lines[0]?.qty).toBe(3)
+
+    const sauHoànLại = run([{ type: 'restoreLine', line: dòng as CartLine }], chạmLại)
+    expect(sauHoànLại.lines[0]?.qty).toBe(3)
+    expect(sauHoànLại.lines).toHaveLength(1)
+  })
+
+  it('addItem qty <= 0 không chèn dòng nào', () => {
+    // Bất biến phải toàn phần chứ không dựa vào call site sản xuất hôm nay tình cờ không truyền qty.
+    expect(run([{ type: 'addItem', item: item(), qty: 0, book: RONG }]).lines).toEqual([])
+    expect(run([{ type: 'addItem', item: item(), qty: -1, book: RONG }]).lines).toEqual([])
+  })
+})

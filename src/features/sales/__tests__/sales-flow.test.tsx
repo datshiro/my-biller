@@ -755,3 +755,58 @@ describe('công tắc Lẻ/SỈ', () => {
     vi.restoreAllMocks()
   })
 })
+
+/**
+ * Máy trạng thái của ô số lượng (`text` / `lastEmitted` / `qtyAtFocus` × 4 handler) là phần code rắc
+ * rối nhất của phase này. Trước đó chỉ Robot canh nó — vòng ~11 phút, cần Chrome thật. Ba ca jsdom
+ * dưới đây cho vòng sửa nhanh 15 giây một cổng thật.
+ */
+describe('ô số lượng trong giỏ', () => {
+  const oSoLuong = async (name: string) =>
+    (await screen.findByRole('textbox', { name: `Số lượng ${name}` })) as HTMLInputElement
+
+  it('gõ dở "1.000" rồi rời ô thì giữ nguyên số lúc vào ô, không đoán thành 1', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '1.000')
+    await userEvent.tab()
+
+    // `1.000` không phân xử được giữa "một nghìn" và "một" ⇒ `parseQtyInput` trả `null` ⇒ phải trả về
+    // số lúc focus chứ không được đoán. Đoán thành 1 là bán thiếu 999 tô mà không ai thấy.
+    expect((await oSoLuong('Phở bò')).value).toBe('1')
+    expect(await screen.findByText(/không đọc được/)).toBeTruthy()
+  })
+
+  it('xoá trắng ô rồi rời đi thì dòng còn nguyên và ô hiện lại số cũ', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await bam('Thêm một')
+
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.tab()
+
+    // Ô rỗng là "chưa gõ xong", không phải "bỏ món" — chỉ số `0` gõ rõ ràng mới bỏ món.
+    expect((await oSoLuong('Phở bò')).value).toBe('2')
+  })
+
+  it('bấm nút cộng khi đang gõ dở thì ô nhảy theo giỏ, không kẹt giá trị cũ', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '50')
+    await bam('Thêm một')
+
+    // Ô là controlled-text nên phải tự đồng bộ ngược khi giỏ đổi từ chỗ khác; kẹt ở "50" là màn hiện
+    // một số mà sổ ghi số khác.
+    expect((await oSoLuong('Phở bò')).value).toBe('51')
+  })
+})

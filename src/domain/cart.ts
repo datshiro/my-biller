@@ -125,6 +125,7 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     case 'addItem': {
       const { item, qty = 1, book } = action
       if (item.id === undefined) throw new Error('Mặt hàng chưa lưu thì chưa thêm vào giỏ được.')
+      if (qty <= 0) return cart
 
       const retailPrice = item.unitPrice
       const unitPrice = resolveUnitPrice({ itemId: item.id, retailPrice }, cart.priceMode, book)
@@ -149,12 +150,16 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       // Cùng bất biến với `addLine`/`setQty`/`updateLine`: không đường chèn nào được phép để lọt
       // qty <= 0. Mở một action mới mà không gác là mở lại đúng cái lỗ vừa bịt.
       if (action.line.qty <= 0) return cart
+      // Dòng đã quay lại giỏ rồi thì hoàn lại là KHÔNG LÀM GÌ, không phải cộng thêm. `upsert` cộng
+      // dồn qty, nên bỏ nhánh này là biến nút Hoàn lại thành nút nhân đôi số lượng: bỏ 3 tô, chạm
+      // lại món 3 lần, rồi bấm Hoàn lại theo quán tính ⇒ đơn ghi 6 tô.
+      if (cart.lines.some((line) => line.key === action.line.key)) return cart
       return { ...cart, lines: upsert(cart.lines, action.line) }
 
     case 'addLine': {
       const { line, book } = action
       // Bất biến "không dòng giỏ nào có qty <= 0" phải toàn phần, không phụ thuộc call site nhớ chặn.
-      // `setQty` và `updateLine` đã gác; `addLine` đi thẳng vào `upsert` nên là lỗ duy nhất còn lại.
+      // Mọi đường chèn đều gác: `setQty`, `updateLine`, `addItem`, `restoreLine` và chỗ này.
       if (line.qty <= 0) return cart
       const retailPrice = line.unitPrice
       const unitPrice = resolveUnitPrice({ itemId: line.itemId, retailPrice }, cart.priceMode, book)

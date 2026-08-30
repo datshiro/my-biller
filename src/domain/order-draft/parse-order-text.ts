@@ -43,13 +43,30 @@ function matchItem(query: string, items: readonly ItemCandidate[]): ItemCandidat
   return [...partial].sort((a, b) => a.name.length - b.name.length || a.id - b.id)[0] ?? null
 }
 
+/** Kết quả đọc đầy đủ: phần đọc được, và phần nguyên văn KHÔNG đọc được để trả lại cho người bán. */
+export type OrderTextResult = { lines: OrderDraftLine[]; rejected: string[] }
+
 /**
  * Chỗ cắm cho nhập bằng giọng nói ở phase sau — GIỮ NGUYÊN chữ ký hàm này.
  * Bản 1 chỉ khớp tên + số lượng đứng đầu: "2 pho bo, 1 tra da" → 2 dòng.
  * Cụm không khớp mặt hàng nào bị bỏ qua; không khớp gì cả thì trả mảng rỗng.
+ *
+ * Cần biết cụm nào bị bỏ thì gọi `readOrderText`; hàm này giữ nguyên hình dạng cũ cho chỗ cắm đó.
  */
 export function parseOrderText(text: string, items: readonly ItemCandidate[]): OrderDraftLine[] {
+  return readOrderText(text, items).lines
+}
+
+/**
+ * Như `parseOrderText` nhưng giữ lại nguyên văn cụm không đọc được.
+ *
+ * Người bán gõ "1.000 pho bo + 2 tra da" là đang định đặt một nghìn tô. Bỏ cụm đó đi rồi xoá trắng ô
+ * tìm món là mất dòng không dấu vết nào — tệ hơn cả mất dòng ở giỏ, vì ở giỏ ít ra còn nhìn thấy.
+ * Trả cụm về để chỗ gọi đặt lại vào ô.
+ */
+export function readOrderText(text: string, items: readonly ItemCandidate[]): OrderTextResult {
   const lines: OrderDraftLine[] = []
+  const rejected: string[] = []
 
   // Dấu phẩy vừa là dấu tách món vừa là dấu thập phân của số lượng ("0,5 kg đường").
   // Đổi phẩy nằm giữa hai chữ số thành dấu chấm trước, rồi mới tách món.
@@ -61,10 +78,16 @@ export function parseOrderText(text: string, items: readonly ItemCandidate[]): O
     const qty = withQty ? parseQtyInput(withQty[1] ?? '') : 1
     // `0` lẫn `null` đều không được thêm dòng: `parseQtyInput` giờ đọc được `0` (nghĩa "bỏ món"), mà
     // ở đây chưa có món nào để bỏ.
-    if (!qty) continue
+    if (!qty) {
+      rejected.push(cleaned)
+      continue
+    }
 
     const item = matchItem(normalizeName(withQty ? (withQty[2] ?? '') : cleaned), items)
-    if (!item) continue
+    if (!item) {
+      rejected.push(cleaned)
+      continue
+    }
 
     lines.push({
       itemId: item.id,
@@ -76,5 +99,5 @@ export function parseOrderText(text: string, items: readonly ItemCandidate[]): O
     })
   }
 
-  return lines
+  return { lines, rejected }
 }

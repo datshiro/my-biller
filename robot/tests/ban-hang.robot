@@ -612,3 +612,72 @@ Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi 
     ...    Ghi chú gõ ở giỏ không xuống tới sổ — người bếp không thấy thứ người bán đã ghi.
     ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Trà đá'][0]
     Should Be Equal    ${trà}[note]    ${EMPTY}    Dòng không ghi chú phải là '' chứ không thiếu trường.
+
+Bấm Đã hiểu để dọn banner bỏ món, không phải bấm Hoàn lại
+    [Documentation]    Bỏ món bằng cách gõ 0 thường là CỐ Ý, và banner sống tới hết đơn. Trước đây nút
+    ...    duy nhất trên banner là "Hoàn lại", nên người bán muốn dọn banner phải bấm đúng cái nút
+    ...    chèn dòng — mà `upsert` cộng dồn qty: bỏ 3 tô, chạm lại món 3 lần, bấm Hoàn lại theo quán
+    ...    tính ⇒ sổ ghi 6 tô. Phải luôn có một lối thoát không đụng vào tiền.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    3
+    Keyboard Key    press    Tab
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Chọn Món    Phở bò
+    Chọn Món    Phở bò
+    Chọn Món    Phở bò
+    Bấm Nút    Đã hiểu
+    Không Được Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    3
+    ...    Số lượng bị cộng dồn — banner bỏ món đã đẩy người bán vào nút chèn dòng.
+
+Gõ 0 trong sheet sửa dòng cũng bỏ món VÀ cũng có đường hoàn lại
+    [Documentation]    Hai đường cùng nói "0 là bỏ món" mà chỉ một đường dựng được banner hoàn lại thì
+    ...    quy tắc đó có ngoại lệ không ai ghi ở đâu — gỡ nhầm từ sheet là mất dòng không lối về.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Số lượng    0
+    Bấm Nút    XONG
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Bấm Nút    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1    Hoàn lại từ sheet không đưa dòng trở lại giỏ.
+
+Cụm không đọc được ở ô tìm món ở lại trong ô, không biến mất theo cụm đã thêm
+    [Documentation]    Người bán gõ "1.000 pho bo + 2 tra da" là định đặt một nghìn tô. Trước đây trà đá
+    ...    được thêm, ô tìm món bị xoá trắng, và cụm phở biến mất không dấu vết — tệ hơn mất dòng ở
+    ...    giỏ, vì ở giỏ ít ra còn nhìn thấy.
+    [Tags]    regression
+    Mở Màn    /
+    Gõ Vào Ô Tìm Món    1.000 pho bo + 2 tra da
+    Keyboard Key    press    Enter
+    Chờ Thấy Chữ    Chưa đọc được
+
+    ${còn_lại}=    Get Property    css=input[type=search]    value
+    Should Be Equal    ${còn_lại}    1.000 pho bo
+    ...    Cụm chưa đọc được đã bị xoá khỏi ô — người bán không còn gì để đối chiếu.
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal    ${của_đơn}[0][name]    Trà đá

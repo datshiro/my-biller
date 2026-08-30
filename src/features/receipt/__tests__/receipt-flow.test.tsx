@@ -11,6 +11,8 @@ import { createOrder } from '@/db/repositories/orders'
 import { collectDebt, listCustomerPayments } from '@/db/repositories/payments'
 import { saveShop } from '@/db/repositories/settings'
 import { renderReceiptPng } from '../share-receipt'
+import { receiptSignature, type ReceiptData } from '../use-receipt'
+import { DEFAULT_SHOP } from '@/domain/schema'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 14, 32).getTime()
@@ -366,5 +368,36 @@ describe('nợ luỹ kế trên phiếu', () => {
     )
     expect(screen.getByText('155.000 đ')).toBeDefined()
     expect(vi.mocked(renderReceiptPng).mock.calls.length).toBe(chụpTrước)
+  })
+})
+
+describe('receiptSignature', () => {
+  const data = (over: Partial<ReceiptData> = {}): ReceiptData => ({
+    shop: DEFAULT_SHOP,
+    order: {
+      id: 1, gid: testGid(1), code: 'A1', originalCode: 'A1', customerId: 1, customerName: 'Anh Hùng', subtotal: 30_000,
+      discount: 0, surcharge: 0, total: 30_000, paidAmount: 30_000, status: 'paid', soldAt,
+      note: '', createdAt: soldAt, updatedAt: soldAt,
+    },
+    lines: [],
+    payments: [],
+    priorDebt: 0,
+    totalDue: 0,
+    debtAsOf: soldAt,
+    ...over,
+  })
+
+  it('mốc đọc nợ KHÔNG vào chữ ký khi phiếu không vẽ khối nợ', () => {
+    // Chiều ngược của luật "thứ gì in trên phiếu thì phải nằm trong chữ ký": thứ KHÔNG in thì đừng
+    // nằm trong chữ ký. `debtAsOf` là đồng hồ sống, nên để nó vào vô điều kiện thì mỗi lần bảng
+    // orders/payments đổi ở bất kỳ đâu qua mốc phút là phiếu chụp lại một tờ y nguyên — nút CHIA SẺ
+    // nháy về "Đang chuẩn bị ảnh…" giữa lúc người bán đưa máy cho khách.
+    const trảĐủ = data()
+    expect(receiptSignature(trảĐủ)).toBe(receiptSignature(data({ debtAsOf: soldAt + 60_000 })))
+  })
+
+  it('nhưng VẪN vào chữ ký khi khối nợ được vẽ', () => {
+    const đangNợ = { totalDue: 100_000 }
+    expect(receiptSignature(data(đangNợ))).not.toBe(receiptSignature(data({ ...đangNợ, debtAsOf: soldAt + 60_000 })))
   })
 })
