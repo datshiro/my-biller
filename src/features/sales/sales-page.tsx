@@ -102,6 +102,10 @@ export function SalesPage() {
    */
   const applyMode = async (mode: PriceMode, customerId: number | null) => {
     const req = (requestId.current += 1)
+    // Nút Hoàn lại giữ ảnh chụp của dòng lúc bị gỡ, kèm giá theo bảng giá của khách CŨ. Đổi khách
+    // hay bật/tắt SỈ xong mới bấm Hoàn lại là chèn giá cũ vào giỏ của khách mới, và không gì tính
+    // lại nó cho tới lần toggle sau. Bỏ đường hoàn tác đi khi nền giá đã đổi.
+    setNotice(null)
     setShownMode(mode)
     setRepricing(true)
     try {

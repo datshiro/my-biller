@@ -574,3 +574,20 @@ Gõ 1.000 vào sheet sửa dòng thì báo lỗi chứ không âm thầm thành 
     ${dòng}=    Đọc Bảng    orderLines
     ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
     Should Be Equal As Numbers    ${của_đơn}[0][qty]    1000
+
+Gõ 0 rồi đổi khách sang giá SỈ thì nút Hoàn lại biến mất, không chèn giá cũ vào giỏ mới
+    [Documentation]    Nút Hoàn lại giữ ảnh chụp của dòng lúc bị gỡ, kèm giá theo bảng giá của khách
+    ...    CŨ. Bấm Hoàn lại sau khi đã đổi nền giá là chèn một dòng giá cũ vào giỏ của khách mới, và
+    ...    không gì tính lại nó cho tới lần bật/tắt SỈ sau.
+    Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá
+    Gõ Số Lượng    Phở bò đặc biệt    0
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+
+    Bật Giá Sỉ Cho Khách    Anh Hùng
+    Không Được Thấy Chữ    Hoàn lại
+    Không Được Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+

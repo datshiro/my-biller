@@ -146,6 +146,9 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     }
 
     case 'restoreLine':
+      // Cùng bất biến với `addLine`/`setQty`/`updateLine`: không đường chèn nào được phép để lọt
+      // qty <= 0. Mở một action mới mà không gác là mở lại đúng cái lỗ vừa bịt.
+      if (action.line.qty <= 0) return cart
       return { ...cart, lines: upsert(cart.lines, action.line) }
 
     case 'addLine': {

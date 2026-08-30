@@ -337,4 +337,27 @@ describe('hoàn lại dòng vừa gỡ', () => {
     const hoànLại = run([{ type: 'restoreLine', line: dòng! }], đãBỏ)
     expect(hoànLại.lines).toEqual([dòng])
   })
+
+  it('restoreLine cũng gác qty <= 0, không mở lại lỗ vừa bịt ở addLine', () => {
+    const gio = run([
+      {
+        type: 'restoreLine',
+        line: {
+          key: 'x',
+          itemId: 1,
+          name: 'Phở bò',
+          unit: 'tô',
+          unitPrice: 55_000,
+          retailPrice: 55_000,
+          costPrice: 30_000,
+          priceSource: 'catalog',
+          qty: 0,
+          note: '',
+        },
+      },
+    ])
+
+    expect(gio.lines).toEqual([])
+  })
 })
+
