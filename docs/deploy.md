@@ -130,8 +130,24 @@ và chạy từ xa chỉ tốn thời gian.
 **Lượt này đỏ một ca không tự động nghĩa là hồi quy.** Ngưỡng chờ trong `hai-may.robot` được hiệu
 chuẩn cho Worker ở `127.0.0.1`: mặc định 15s cho một chữ hiện ra (`app.resource`, `Set Browser
 Timeout`), 10–40s cho các vòng dò sổ, và 3s cho SLA "đơn chốt ở quầy này phải hiện ở quầy kia"
-(`hai-may.robot`, `30x 100ms` kèm `Should Be True ${độ_trễ} <= 3.0`). Trên staging mỗi vòng đồng bộ
-phải đi qua biên Cloudflare tới Durable Object, nên các ngưỡng đó mỏng đi nhiều.
+(`hai-may.robot`, `30x 100ms` kèm `Should Be True ${độ_trễ} <= 3.0`).
+
+Đo ngày 31/08/2026, ba lượt mỗi bên, kịch bản hai máy mất mạng rồi nối lại — mốc chậm nhất trong bốn
+điều kiện hội tụ (hai outbox rỗng, hai sổ đủ 4 đơn), tính từ lúc bật mạng:
+
+| Môi trường | Lượt 1 | Lượt 2 | Lượt 3 |
+| --- | --- | --- | --- |
+| Local (Worker `127.0.0.1`) | 14,80s | 14,81s | 14,79s |
+| Staging (Pages preview + Worker staging) | 16,37s | 15,35s | 15,62s |
+
+Biên Cloudflare chỉ tốn thêm khoảng 0,6–1,6s trên đường này, và ngưỡng 40s vẫn còn dư 2,4 lần. **Nên
+các lượt đỏ trên staging không giải thích được bằng độ trễ remote ở mức thường** — nguyên nhân của
+chúng vẫn chưa xác định.
+
+Chỗ duy nhất trong mã có thể sinh ra một cái đuôi dài là `src/db/sync/runner.ts:25`: nhịp thăm dò dự
+phòng là 2s khi chạy local nhưng 30s khi chạy remote. Máy nào lỡ bản tin broadcast đúng lúc mở lại
+socket sau khi nối mạng thì phải đợi trọn nhịp đó. Ba lượt đo trên không lượt nào rơi vào nhánh này,
+nên đây là giả thuyết có địa chỉ, chưa phải kết luận.
 
 Quan sát ngày 31/08/2026, bốn lượt chạy trên staging: hai lượt xanh sạch, hai lượt đỏ — mỗi lượt một
 ca khác nhau, không ca nào lặp lại. Chạy riêng từng ca đỏ đó thì xanh 3–4/4. **Vì vậy lượt staging là
@@ -139,8 +155,8 @@ thăm dò, không phải cổng phát hành**; cổng vẫn là `npm run test:li
 một ca đỏ ở đây là lỗi thật, chạy riêng ca đó vài lượt; đỏ lặp lại mới đáng điều tra.
 
 Đừng nới ngưỡng cho xanh. Ngưỡng 3s là lời hứa với người bán, nới nó là bỏ đi đúng thứ nó đang canh.
-Muốn staging thành cổng thật thì cho ngưỡng phân biệt local với remote (`ROBOT_REMOTE=1` đã có sẵn),
-và con số remote phải đo ra chứ không đoán.
+Số đo trên cũng nói rằng ngưỡng hội tụ chưa cần rẽ theo môi trường: local và staging chênh nhau chưa
+tới 2s, nên thêm nhánh remote lúc này là thêm chỗ chỉnh mà không mua được gì.
 
 Rollback Worker staging bằng version tốt gần nhất; Pages preview giữ URL bất biến của từng deployment,
 nên checkout commit tốt, build lại bằng `build:staging` rồi deploy lại cùng nhánh để đưa alias về bản đó:
