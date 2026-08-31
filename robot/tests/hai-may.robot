@@ -410,9 +410,16 @@ Bấm Nút Thu Hai Máy
     Should Be Equal    ${found}[0][status]    ${trạng_thái}
 
 Phiếu Của Đơn Phải Chưa Phân Bổ
+    [Documentation]    Chờ ĐỦ HAI bảng, không chỉ `payments`. Nhãn "Khoản thu chờ xử lý" trên màn chi
+    ...    tiết đơn cần cả `order.status == 'void'` (`order-detail-page.tsx:58` → `voidedRetailOrder`),
+    ...    nên chờ mỗi `allocatedOrderId == 0` là chờ hụt: máy nhận xong `payments` mà `orders` chưa về
+    ...    thì keyword này đã xanh, trang render "Đã trả", và bước `Chờ Thấy Chữ` sau đó đếm ngược 15
+    ...    giây trong lúc `orders` còn đang trên đường. Đúng cách ca "Thiết bị cũ không ghi đè khoản
+    ...    thu đã hoàn" đỏ trên CI và trên staging — chỉ đỏ khi chạy cả bộ, chạy riêng thì không.
     [Arguments]    ${order_gid}    ${page}
     ${orders}=    Đọc Bảng    orders    ${page}
     ${order}=    Evaluate    [row for row in $orders if row['gid'] == $order_gid][0]
+    Should Be Equal    ${order}[status]    void    Đơn chưa về trạng thái huỷ trên máy này.
     ${payments}=    Đọc Bảng    payments    ${page}
     ${found}=    Evaluate    [row for row in $payments if row['orderId'] == $order['id']]
     Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
