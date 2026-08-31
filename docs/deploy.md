@@ -124,6 +124,24 @@ npm run test:staging -- robot/tests/hai-may.robot
 unset STAGING_ADMIN_SECRET
 ```
 
+Chỉ chạy `hai-may.robot` ở đây, không chạy cả `robot/tests`. Các suite còn lại không cần Worker thật
+và chạy từ xa chỉ tốn thời gian.
+
+**Lượt này đỏ một ca không tự động nghĩa là hồi quy.** Ngưỡng chờ trong `hai-may.robot` được hiệu
+chuẩn cho Worker ở `127.0.0.1`: mặc định 15s cho một chữ hiện ra (`app.resource`, `Set Browser
+Timeout`), 10–40s cho các vòng dò sổ, và 3s cho SLA "đơn chốt ở quầy này phải hiện ở quầy kia"
+(`hai-may.robot`, `30x 100ms` kèm `Should Be True ${độ_trễ} <= 3.0`). Trên staging mỗi vòng đồng bộ
+phải đi qua biên Cloudflare tới Durable Object, nên các ngưỡng đó mỏng đi nhiều.
+
+Quan sát ngày 31/08/2026, bốn lượt chạy trên staging: hai lượt xanh sạch, hai lượt đỏ — mỗi lượt một
+ca khác nhau, không ca nào lặp lại. Chạy riêng từng ca đỏ đó thì xanh 3–4/4. **Vì vậy lượt staging là
+thăm dò, không phải cổng phát hành**; cổng vẫn là `npm run test:live` cục bộ và CI. Trước khi kết luận
+một ca đỏ ở đây là lỗi thật, chạy riêng ca đó vài lượt; đỏ lặp lại mới đáng điều tra.
+
+Đừng nới ngưỡng cho xanh. Ngưỡng 3s là lời hứa với người bán, nới nó là bỏ đi đúng thứ nó đang canh.
+Muốn staging thành cổng thật thì cho ngưỡng phân biệt local với remote (`ROBOT_REMOTE=1` đã có sẵn),
+và con số remote phải đo ra chứ không đoán.
+
 Rollback Worker staging bằng version tốt gần nhất; Pages preview giữ URL bất biến của từng deployment,
 nên checkout commit tốt, build lại bằng `build:staging` rồi deploy lại cùng nhánh để đưa alias về bản đó:
 
