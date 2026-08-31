@@ -277,8 +277,8 @@ describe('phiếu dài chia thành nhiều tấm ảnh', () => {
 })
 
 describe('nợ luỹ kế trên phiếu', () => {
-  /** Khách có sẵn một đơn nợ cũ 100.000, rồi bán nợ thêm 55.000 — đúng cảnh của chủ quán. */
-  async function seedKhachNoCu() {
+  /** Khách có sẵn một đơn nợ cũ 100.000, rồi bán thêm 55.000 — nợ tiếp hay trả đủ tuỳ `thanhToan`. */
+  async function seedKhachNoCu(thanhToan: { amount: number; method: 'cash'; note: string } | null = null) {
     const customerId = await db.customers.add({
       gid: testGid(202),
       name: 'Anh Hùng',
@@ -306,7 +306,7 @@ describe('nợ luỹ kế trên phiếu', () => {
       surcharge: 0,
       soldAt,
       note: '',
-      payment: null,
+      payment: thanhToan,
     })
     return { id, customerId }
   }
@@ -321,6 +321,21 @@ describe('nợ luỹ kế trên phiếu', () => {
 
     const tổng = screen.getByText('TỔNG PHẢI TRẢ').parentElement as HTMLElement
     expect(within(tổng).getByText('155.000 đ')).toBeDefined()
+  })
+
+  it('đơn này trả đủ mà khách còn nợ cũ → gộp một dòng NỢ CŨ CÒN LẠI, không hai dòng trùng số', async () => {
+    // Đơn hôm nay không góp đồng nào vào nợ nên `Nợ cũ` và `TỔNG PHẢI TRẢ` ra đúng một con số. Đây là
+    // tờ giấy đưa tận tay khách; hai dòng trùng nhau đọc như lỗi in. Gộp, nhưng KHÔNG bỏ trơn dòng nợ
+    // cũ: `TỔNG PHẢI TRẢ` đứng một mình ngay dưới `Đã trả` sẽ bị đọc thành tổng của đơn hôm nay.
+    const { id } = await seedKhachNoCu({ amount: 55_000, method: 'cash', note: '' })
+    renderReceipt(id)
+
+    const gộp = (await screen.findByText(/^NỢ CŨ CÒN LẠI \(đến /)).parentElement as HTMLElement
+    expect(within(gộp).getByText('100.000 đ')).toBeDefined()
+    expect(screen.queryByText('TỔNG PHẢI TRẢ')).toBeNull()
+    expect(screen.queryByText(/^Nợ cũ \(đến /)).toBeNull()
+    // Khối tiền của đơn cũng không được mọc dòng "Còn nợ": đơn này đã trả đủ.
+    expect(screen.queryByText('Còn nợ')).toBeNull()
   })
 
   it('thu bớt nợ cũ → phiếu đang mở chụp lại ảnh, không cầm số cũ', async () => {

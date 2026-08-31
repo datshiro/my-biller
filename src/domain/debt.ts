@@ -38,6 +38,19 @@ export function showsDebtBlock(order: DebtOrder, totalDue: number): boolean {
 }
 
 /**
+ * Đơn này không góp đồng nào vào nợ, nên "Nợ cũ" và "TỔNG PHẢI TRẢ" sẽ ra ĐÚNG một con số. Hai dòng
+ * trùng nhau trên tờ giấy đưa tận tay khách đọc như lỗi in, nên gộp thành một dòng mang nhãn tự nói
+ * ra đây là nợ của đơn TRƯỚC — bỏ trơn dòng "Nợ cũ" thì "TỔNG PHẢI TRẢ" đứng ngay dưới "Đã trả" lại
+ * bị đọc thành tổng của đơn hôm nay.
+ *
+ * Bắt buộc `prior > 0`: khách có tiền trả trước chưa phân bổ làm cả hai vế bằng 0, gộp lúc đó là in
+ * một dòng nợ cũ cho người không nợ đồng nào.
+ */
+export function showsPriorDebtOnly(prior: number, totalDue: number): boolean {
+  return prior > 0 && prior === totalDue
+}
+
+/**
  * Gộp nợ theo khách, nợ lâu nhất lên đầu.
  *
  * Đơn không gắn khách bị **loại hẳn**: nợ là tiền của một người cụ thể, đơn khách lẻ mà chưa trả đủ

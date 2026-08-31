@@ -167,6 +167,34 @@ Phiếu của khách còn nợ đơn cũ thì gộp thành một bill có nợ c
     Should Be Equal As Integers    ${nợ}    155000
     ...    Phiếu ghi tổng phải trả khác tổng nợ trong sổ — người bán sẽ đòi sai số tiền.
 
+Phiếu của khách nợ cũ mà đơn này trả đủ thì gộp một dòng, không in hai dòng trùng số
+    [Documentation]    Đơn hôm nay trả đủ nên không góp đồng nào vào nợ: "Nợ cũ" và "TỔNG PHẢI TRẢ"
+    ...    ra ĐÚNG một con số. Hai dòng trùng nhau trên tờ giấy đưa tận tay khách đọc như lỗi in.
+    ...    Gộp, nhưng KHÔNG bỏ trơn dòng nợ cũ — "TỔNG PHẢI TRẢ" đứng một mình ngay dưới "Đã trả"
+    ...    sẽ bị đọc thành tổng của đơn hôm nay, mà 100.000 chẳng liên quan gì tới đơn này.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
+    Chọn Khách Trong Sheet    Anh Hùng
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Chờ Thấy Chữ    NỢ CŨ CÒN LẠI
+    Chờ Thấy Chữ    100.000 đ
+    Không Được Thấy Chữ    TỔNG PHẢI TRẢ
+    Không Được Thấy Chữ    Còn nợ
+
+    # Bộ mẫu cho Anh Hùng nợ sẵn 100.000 (đơn 2: total 150.000, thu 50.000 — src/db/seed.ts). Đơn
+    # vừa bán trả đủ nên nợ THẬT không đổi. Đối chiếu thẳng sổ: con số gộp trên phiếu là tiền, và
+    # giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất của app này.
+    ${khách}=    Đọc Bảng    customers
+    ${hùng}=    Evaluate    [c for c in $khách if c['name'] == 'Anh Hùng'][0]
+    ${đơn}=    Đọc Bảng    orders
+    ${nợ}=    Evaluate
+    ...    sum(max(0, o['total'] - o['paidAmount']) for o in $đơn if o['customerId'] == ${hùng}[id] and o['status'] != 'void')
+    Should Be Equal As Integers    ${nợ}    100000
+    ...    Con số gộp trên phiếu phải bằng tổng nợ thật của khách trong sổ.
+
 Phiếu khách lẻ không có dòng nợ cũ
     Bán Nhanh    Phở bò
     Chờ Thấy Chữ    PHIẾU BÁN HÀNG

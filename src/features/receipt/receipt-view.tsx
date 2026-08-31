@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import { RECEIPT_WIDTH } from './share-receipt'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
-import { owingOf, showsDebtBlock } from '@/domain/debt'
+import { owingOf, showsDebtBlock, showsPriorDebtOnly } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 const METHOD: Record<Payment['method'], string> = {
@@ -129,10 +129,16 @@ export function ReceiptView({
               dùng đúng một định nghĩa — lý do chọn cổng đó ghi ngay tại hàm. */}
           {showsDebtBlock(order, totalDue) ? (
             <div className="mt-2 border-t border-dashed border-line pt-2">
-              {priorDebt > 0 && debtAsOf !== null ? (
-                <Row label={`Nợ cũ (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(priorDebt)} />
-              ) : null}
-              <Row label="TỔNG PHẢI TRẢ" value={formatVnd(totalDue)} strong />
+              {showsPriorDebtOnly(priorDebt, totalDue) && debtAsOf !== null ? (
+                <Row label={`NỢ CŨ CÒN LẠI (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(totalDue)} strong />
+              ) : (
+                <>
+                  {priorDebt > 0 && debtAsOf !== null ? (
+                    <Row label={`Nợ cũ (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(priorDebt)} />
+                  ) : null}
+                  <Row label="TỔNG PHẢI TRẢ" value={formatVnd(totalDue)} strong />
+                </>
+              )}
             </div>
           ) : null}
 
