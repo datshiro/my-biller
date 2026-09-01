@@ -1,5 +1,43 @@
 # Ghi chú phát hành
 
+## 2.2.0 — phiếu đọc được trên máy in nhiệt, đá chung/đá riêng theo ly (1/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5) và không có bước di trú. Khác 2.1.0, bản
+> này **không** bắt buộc deploy Worker trước Pages: thay đổi chỉ nằm ở frontend,
+> `shared/ledger-schemas.ts` và `worker/` không đụng tới dòng nào.
+
+### Người bán thấy gì
+
+- **Phiếu in ra đọc được trên giấy nhiệt.** Bỏ hết chữ xám và viền xám khỏi
+  phiếu. Đầu in nhiệt chỉ có hai mức mực, nên nó *dither* màu xám `#5a6673`
+  thành lấm tấm chấm thưa — trên màn hình là "chữ nhạt", trên giấy là chữ mờ
+  không đọc nổi. Kèm theo: hạ bộ cỡ chữ, và rút đầu cột `Đơn giá` thành `Đ.GIÁ`
+  để tên món dài bớt bị đẩy vỡ dòng.
+- **Ghi chú từng món in ra phiếu**, đứng riêng một dòng dưới tên món, ở cả phiếu
+  ảnh PNG lẫn bản chữ gửi Zalo. Trước đây ghi chú lưu xuống sổ (từ 2.1.0) nhưng
+  không xuất hiện trên phiếu, nên bếp không đọc được.
+- **Đánh dấu Đá chung / Đá riêng theo từng ly.** Cùng một món, cùng một giá,
+  khác ghi chú thì nay là hai dòng giỏ riêng: 3 ly Đá chung và 2 ly Đá riêng
+  không còn bị gộp thành một dòng 5 ly. Sửa ghi chú cho trùng nhau thì hai dòng
+  gộp lại và cộng đúng số lượng.
+- **Bấm In ra đúng khổ giấy.** Trước đây `window.print()` trải phiếu rộng theo
+  màn hình nên chữ in ra to hơn phiếu ảnh và vỡ dòng ở chỗ khác; nay hai đường
+  dùng chung một bố cục.
+
+### Thay đổi vận hành
+
+- `@page` khai `size: 80mm 350mm`. Con số 350mm không phải trần đoán mà là số đo:
+  Chromium ngắt trang theo hộp **bố cục**, không theo phần đã `scale`, nên một
+  trần ngắn hơn làm hai tấm phiếu đẻ ra ba trang PDF, tức một trang trắng chen
+  vào giữa. Đổi lại, mỗi lần bấm In tốn tới 35cm giấy. Bằng chứng hiện có cho
+  thấy chủ quán in qua **đường ảnh** chứ không qua `window.print()`, nên đây là
+  đường phụ; nếu sau này chuyển sang in trực tiếp thì phải đo lại.
+- **Chưa có xác nhận trên giấy nhiệt thật.** Máy in không có ở chỗ dev. Mọi tiêu
+  chí đều đo được bằng máy — bề ngang bản in đo sau `transform`, khổ giấy đo bằng
+  cách parse `/MediaBox` từ PDF thật, số dòng vỡ đo bằng `Range.getClientRects()`
+  — nhưng độ đậm mực trên giấy thì chỉ mắt người trước tờ giấy mới kết luận được.
+  Chủ quán in thử và xác nhận sau khi bản này lên.
+
 ## 2.1.0 — số lượng, nợ luỹ kế trên phiếu, ghi chú từng món (1/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5) và không có bước di trú. Người bán cập nhật
