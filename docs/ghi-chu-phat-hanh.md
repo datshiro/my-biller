@@ -1,5 +1,32 @@
 # Ghi chú phát hành
 
+## 2.1.0 — số lượng, nợ luỹ kế trên phiếu, ghi chú từng món (1/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5) và không có bước di trú. Người bán cập nhật
+> xong dùng ngay, sổ cũ giữ nguyên.
+
+### Người bán thấy gì
+
+- **Gõ thẳng số lượng vào giỏ.** Trước chỉ bấm `+`/`−` từng nấc; giờ nhập được
+  số vào ô số lượng của từng dòng.
+- **Phiếu gộp nợ cũ thành một bill** có dòng `TỔNG PHẢI TRẢ`. Khi đơn này khách
+  đã trả đủ mà vẫn còn nợ cũ, phiếu in **một dòng** `NỢ CŨ CÒN LẠI` thay vì hai
+  dòng trùng số đọc như lỗi in.
+- **Ghi chú từng món được lưu xuống sổ** và đi qua sổ chung tới máy kia, thay vì
+  chỉ nằm trên màn hình lúc bán.
+- Sửa vài đường làm **mất dòng trong giỏ mà không báo gì**, đường bấm nhầm
+  *Hoàn lại*, và đường mất dòng ở ô tìm món.
+
+### Thay đổi vận hành
+
+- `OrderLineSchema` trong `shared/ledger-schemas.ts` thêm trường `note` với
+  `.default('')`. Cộng thêm nên file sao lưu cũ vẫn nhập lại được và event từ máy
+  chưa cập nhật vẫn đi qua.
+- **Worker phải deploy trước Pages.** Worker dùng chính `OrderLineSchema` để nhận
+  event rồi thay payload bằng bản đã parse, nên Worker bản cũ sẽ **cắt mất ghi
+  chú** trước khi ghi vào sổ chung: máy A giữ ghi chú cục bộ, máy B không bao giờ
+  thấy, và không lỗi nào hiện ra. Workflow phát hành đã deploy Worker trước Pages.
+
 ## 2.0.1 — CI/smoke (23/8/2026)
 
 > Thay đổi so với 2.0.0 chỉ nằm ở đường CI/vận hành, không đụng frontend hay
