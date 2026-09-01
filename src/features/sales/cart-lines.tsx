@@ -3,6 +3,13 @@ import { calcLineAmount } from '@/domain/order-total'
 import { formatAmount, formatQty, parseQtyInput } from '@/domain/money'
 import type { CartLine } from '@/domain/cart'
 
+/**
+ * Cùng một món giờ tách được thành hai dòng theo ghi chú, nên tên món một mình KHÔNG còn phân biệt
+ * được hai dòng: người dùng trình đọc màn hình gặp hai nút y hệt, và `sales.resource` bốc theo
+ * `Số lượng %s` sẽ vi phạm strict mode. Dòng không ghi chú giữ nguyên nhãn cũ nên ca cũ không đỏ.
+ */
+const nhãnDòng = (line: CartLine) => `${line.name}${line.note ? ` (${line.note})` : ''}`
+
 function StepperButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -47,7 +54,7 @@ function QtyInput({
       type="text"
       inputMode="decimal"
       enterKeyHint="done"
-      aria-label={`Số lượng ${line.name}`}
+      aria-label={`Số lượng ${nhãnDòng(line)}`}
       value={text}
       onFocus={() => {
         qtyAtFocus.current = line.qty
@@ -114,7 +121,7 @@ export function CartLines({
             type="button"
             onClick={() => onEdit(line)}
             className="w-full min-w-0 text-left"
-            aria-label={`Sửa ${line.name}`}
+            aria-label={`Sửa ${nhãnDòng(line)}`}
           >
             <span className="block text-[15px] font-semibold">{line.name}</span>
             <span className="block text-[13px] text-muted">

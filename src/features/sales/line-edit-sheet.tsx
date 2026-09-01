@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import type { CartLine } from '@/domain/cart'
+import { hasNoteToken, type CartLine } from '@/domain/cart'
 import { parseQtyInput, formatQty } from '@/domain/money'
+import { ICE, toggleIceToken } from './ice-note'
 import { Button } from '@/ui/button'
+import { SelectChip } from '@/ui/chip'
 import { MoneyInput } from '@/ui/money-input'
 import { Sheet } from '@/ui/sheet'
 import { TextField } from '@/ui/text-field'
@@ -66,6 +68,20 @@ export function LineEditSheet({
           error={unitPrice === null ? 'Nhập đơn giá.' : undefined}
           hint="Chỉ đổi trong đơn này. Giá trong danh mục giữ nguyên."
         />
+
+        {/* Chip đứng TRÊN ô ghi chú vì nó ghi vào chính ô đó — người bán bấm rồi thấy chữ hiện ra
+            ngay bên dưới, không phải đoán nó đi đâu. Không có state thứ hai: `note` là nguồn duy nhất. */}
+        <div className="flex gap-2 overflow-x-auto">
+          {ICE.map((token) => (
+            <SelectChip
+              key={token}
+              selected={hasNoteToken(note, token)}
+              onClick={() => setNote(toggleIceToken(note, token))}
+            >
+              {token}
+            </SelectChip>
+          ))}
+        </div>
 
         <TextField
           label="Ghi chú"

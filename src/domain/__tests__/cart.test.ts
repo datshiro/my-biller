@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { cartCount, cartReducer, cartTotals, emptyCart, type Cart, type CartLine } from '../cart'
+import {
+  cartCount,
+  cartReducer,
+  cartTotals,
+  emptyCart,
+  hasNoteToken,
+  toggleNoteToken,
+  type Cart,
+  type CartLine,
+} from '../cart'
 import type { PriceBook } from '../wholesale-price'
 import { calcChange, suggestCashAmounts } from '../cash-suggestion'
 import type { Item } from '../schema'
@@ -382,5 +391,334 @@ describe('bất biến qty > 0 trên MỌI đường chèn', () => {
     // Bất biến phải toàn phần chứ không dựa vào call site sản xuất hôm nay tình cờ không truyền qty.
     expect(run([{ type: 'addItem', item: item(), qty: 0, book: RONG }]).lines).toEqual([])
     expect(run([{ type: 'addItem', item: item(), qty: -1, book: RONG }]).lines).toEqual([])
+  })
+})
+
+/**
+ * Cùng một món cùng một giá phải tách được thành nhiều dòng theo ghi chú: ca thật là 3 ly đá chung +
+ * 2 ly đá riêng. Ghi chú vào khoá dòng nên mọi đường đổi ghi chú cũng là đường đổi khoá — và hai
+ * dòng đụng khoá nhau thì phải gộp, không được để hai bản ghi mang chung một khoá.
+ */
+describe('ghi chú nằm trong khoá dòng giỏ', () => {
+  const hàng = (note?: string, qty = 1) => ({
+    itemId: 1,
+    name: 'Phở bò',
+    unit: 'tô',
+    unitPrice: 55_000,
+    costPrice: 30_000,
+    qty,
+    ...(note === undefined ? {} : { note }),
+  })
+
+  const khoá = (gio: Cart, index = 0) => gio.lines[index]?.key ?? ''
+
+  it('B1 · chạm cùng món hai lần, cả hai không ghi chú → vẫn một dòng cộng dồn', () => {
+    const gio = run([
+      { type: 'addItem', item: item(), book: RONG },
+      { type: 'addItem', item: item(), book: RONG },
+    ])
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]?.qty).toBe(2)
+  })
+
+  it('B2 · hai dòng cùng món cùng giá khác ghi chú là hai dòng riêng', () => {
+    const gio = run([
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+      { type: 'addLine', line: hàng('Đá riêng', 2), book: RONG },
+    ])
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines.map((line) => [line.note, line.qty])).toEqual([
+      ['Đá chung', 3],
+      ['Đá riêng', 2],
+    ])
+  })
+
+  it('B3 · chạm lại món khi giỏ đã có dòng đánh dấu → đẻ dòng mới, không nhập vào dòng đã đánh dấu', () => {
+    const gio = run([
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+      { type: 'addItem', item: item(), book: RONG },
+    ])
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines[1]).toMatchObject({ note: '', qty: 1 })
+  })
+
+  it('B4 · đổi ghi chú khi không dòng nào trùng khoá mới → giữ nguyên vị trí trong giỏ', () => {
+    const gốc = run([
+      { type: 'addItem', item: item(), book: RONG },
+      { type: 'addItem', item: item({ id: 2, name: 'Trà đá', unitPrice: 3_000 }), book: RONG },
+    ])
+    const cũ = khoá(gốc)
+
+    const gio = run([{ type: 'updateLine', key: cũ, qty: 1, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines[0]).toMatchObject({ name: 'Phở bò', note: 'Đá chung' })
+    expect(gio.lines[0]?.key).not.toBe(cũ)
+  })
+
+  it('B5 · đổi ghi chú làm đụng khoá dòng khác → gộp, qty là số vừa đặt cộng dòng bị đụng', () => {
+    const gốc = run([
+      { type: 'addLine', line: hàng(undefined, 2), book: RONG },
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+    ])
+
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]).toMatchObject({ note: 'Đá chung', qty: 5 })
+  })
+
+  it('B5b · dòng sống sót sau khi gộp giữ trường của dòng VỪA SỬA, không của dòng bị đụng', () => {
+    // Hai lựa chọn đều bảo vệ được và chúng ngược nhau, nên phải khoá bằng test: đổi ý sau này sẽ
+    // làm đỏ một ca có tên chứ không trôi im lặng. `unit`, `retailPrice`, `costPrice` không nằm
+    // trong khoá nên chúng là chỗ duy nhất phân biệt được hai dòng đang đụng nhau.
+    const dựng = run([
+      { type: 'addLine', line: hàng(undefined, 2), book: RONG },
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+    ])
+    const [vừaSửa, đích] = dựng.lines as [CartLine, CartLine]
+    const gốc: Cart = {
+      ...dựng,
+      lines: [vừaSửa, { ...đích, unit: 'CHÉN', retailPrice: 99_000, costPrice: 1 }],
+    }
+
+    const gio = run([{ type: 'updateLine', key: vừaSửa.key, qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]).toMatchObject({
+      unit: 'tô',
+      retailPrice: 55_000,
+      costPrice: 30_000,
+      itemId: 1,
+      priceSource: 'catalog',
+      qty: 5,
+    })
+  })
+
+  it('B6 · XOÁ ghi chú cũng làm đụng khoá và cũng phải gộp', () => {
+    const gốc = run([
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+      { type: 'addLine', line: hàng(undefined, 2), book: RONG },
+    ])
+
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, note: '' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]).toMatchObject({ note: '', qty: 5 })
+  })
+
+  it('B7 · mở sheet rồi bấm XONG mà không đổi gì thì không tự cộng dồn với chính mình', () => {
+    const gốc = run([{ type: 'addLine', line: hàng('Đá chung', 3), book: RONG }])
+
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]?.qty).toBe(3)
+  })
+
+  it('B8 · đổi cả giá lẫn ghi chú một lượt → khoá mang cả hai, dòng thành giá gõ tay', () => {
+    const gốc = run([{ type: 'addLine', line: hàng(undefined, 1), book: RONG }])
+
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 1, unitPrice: 60_000, note: 'Đá riêng' }], gốc)
+
+    expect(gio.lines[0]).toMatchObject({ unitPrice: 60_000, note: 'Đá riêng', priceSource: 'manual' })
+    expect(gio.lines[0]?.key).toContain('Đá riêng')
+    expect(gio.lines[0]?.key).toContain('60000')
+  })
+
+  it('B9 · setLineNote tính lại khoá theo đúng khuôn của withPrice', () => {
+    const gốc = run([{ type: 'addItem', item: item(), book: RONG }])
+    const cũ = khoá(gốc)
+
+    const gio = run([{ type: 'setLineNote', key: cũ, note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]?.note).toBe('Đá chung')
+    expect(gio.lines[0]?.key).not.toBe(cũ)
+    expect(gio.lines[0]?.priceSource).toBe('catalog')
+  })
+
+  it('B10 · setLineNote làm đụng khoá cũng gộp, đi chung một helper với updateLine', () => {
+    const gốc = run([
+      { type: 'addLine', line: hàng(undefined, 2), book: RONG },
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+    ])
+
+    const gio = run([{ type: 'setLineNote', key: khoá(gốc), note: 'Đá chung' }], gốc)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]).toMatchObject({ note: 'Đá chung', qty: 5 })
+  })
+
+  it('B11 · đổi giá dòng đã đánh dấu thì khoá mới vẫn mang ghi chú, không rơi mất', () => {
+    const gốc = run([{ type: 'addLine', line: hàng('Đá riêng', 2), book: RONG }])
+
+    const gio = run([{ type: 'setUnitPrice', key: khoá(gốc), unitPrice: 60_000 }], gốc)
+
+    expect(gio.lines[0]).toMatchObject({ note: 'Đá riêng', unitPrice: 60_000 })
+    expect(gio.lines[0]?.key).toContain('Đá riêng')
+  })
+
+  it('B12 · sửa giá dòng này thành đúng giá dòng kia thì gộp, không để hai dòng chung một khoá', () => {
+    // Lỗ có sẵn từ trước tính năng ghi chú: `mapLine` cũ để lọt hai dòng cùng khoá, từ đó `mapLine`
+    // và `removeLine` tác động cả hai cùng lúc. Tính năng này biến "cùng món hai dòng" thành chuyện
+    // thường ngày nên lỗ từ hiếm thành dễ gặp; cùng một helper vá luôn.
+    const mộtTô = run([{ type: 'addItem', item: item(), book: RONG }])
+    const gõTay = run([{ type: 'setUnitPrice', key: khoá(mộtTô), unitPrice: 60_000 }], mộtTô)
+    const chạmLại = run([{ type: 'addItem', item: item(), book: RONG }], gõTay)
+    expect(chạmLại.lines).toHaveLength(2)
+
+    const gio = run([{ type: 'setUnitPrice', key: khoá(chạmLại, 1), unitPrice: 60_000 }], chạmLại)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]).toMatchObject({ unitPrice: 60_000, qty: 2, priceSource: 'manual' })
+  })
+
+  it('B13 · bật SỈ cho hai dòng cùng món khác ghi chú → giá bằng nhau nhưng vẫn hai dòng', () => {
+    const gốc = run([
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+      { type: 'addLine', line: hàng('Đá riêng', 2), book: RONG },
+    ])
+
+    const gio = run([{ type: 'applyPriceMode', mode: 'wholesale', book: new Map([[1, 45_000]]) }], gốc)
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines.map((line) => [line.unitPrice, line.note, line.qty])).toEqual([
+      [45_000, 'Đá chung', 3],
+      [45_000, 'Đá riêng', 2],
+    ])
+  })
+
+  it('B14 · bật rồi tắt SỈ trả đúng giá lẻ, vẫn hai dòng, ghi chú nguyên vẹn', () => {
+    const gốc = run([
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+      { type: 'addLine', line: hàng('Đá riêng', 2), book: RONG },
+    ])
+
+    const vòng = run(
+      [
+        { type: 'applyPriceMode', mode: 'wholesale', book: new Map([[1, 45_000]]) },
+        { type: 'applyPriceMode', mode: 'retail', book: new Map() },
+      ],
+      gốc,
+    )
+
+    expect(vòng).toEqual(gốc)
+  })
+
+  it('B15 · nháp cũ thiếu cả priceSource lẫn ghi chú trong khoá → tính lại đủ, chạm thêm vẫn cộng dồn', () => {
+    const nháp: Cart = {
+      ...emptyCart(),
+      lines: [
+        {
+          key: '1@55000',
+          itemId: 1,
+          name: 'Phở bò',
+          unit: 'tô',
+          unitPrice: 55_000,
+          retailPrice: 55_000,
+          priceSource: 'catalog',
+          costPrice: 30_000,
+          qty: 1,
+          note: '',
+        },
+      ],
+    }
+
+    const gio = run([{ type: 'restore', cart: nháp }, { type: 'addItem', item: item(), book: RONG }])
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]?.qty).toBe(2)
+  })
+
+  it('B16 · addLine không truyền note → khoá dùng chuỗi rỗng, không phải chữ "undefined"', () => {
+    const gio = run([{ type: 'addLine', line: hàng(undefined, 1), book: RONG }])
+
+    expect(gio.lines[0]?.note).toBe('')
+    expect(gio.lines[0]?.key).not.toContain('undefined')
+  })
+
+  it('B17 · ghi chú chứa # hay @ không đụng khoá của dòng khác', () => {
+    const gio = run([
+      { type: 'addLine', line: hàng('ly #2', 1), book: RONG },
+      { type: 'addLine', line: hàng(undefined, 1), book: RONG },
+      { type: 'addLine', line: hàng('x@1', 1), book: RONG },
+    ])
+
+    expect(gio.lines).toHaveLength(3)
+    expect(new Set(gio.lines.map((line) => line.key)).size).toBe(3)
+  })
+
+  it('hoàn lại một dòng đã bị gộp mất là KHÔNG LÀM GÌ, không cộng dồn số lượng lần hai', () => {
+    // Dòng sống sót sau khi gộp mang đúng khoá của dòng bị nuốt, nên chốt chặn có sẵn ở `restoreLine`
+    // ("dòng đã quay lại giỏ rồi thì hoàn lại là không làm gì") tự bắt được ca này. Số lượng của nó
+    // đã được cộng vào dòng gộp rồi; chèn lại nữa là ghi thừa 3 ly vào đơn.
+    const gốc = run([
+      { type: 'addLine', line: hàng(undefined, 2), book: RONG },
+      { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
+    ])
+    const bịGộp = gốc.lines[1] as CartLine
+
+    const đãGộp = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    expect(đãGộp.lines).toHaveLength(1)
+    expect(đãGộp.lines[0]?.qty).toBe(5)
+
+    const gio = run([{ type: 'restoreLine', line: bịGộp }], đãGộp)
+
+    expect(gio.lines).toHaveLength(1)
+    expect(gio.lines[0]?.qty).toBe(5)
+  })
+})
+
+describe('bật/tắt một nhãn trong ghi chú dòng', () => {
+  it('T1 · ghi chú rỗng thì nhãn thành cả nội dung', () => {
+    expect(toggleNoteToken('', 'Đá chung')).toBe('Đá chung')
+  })
+
+  it('T2 · nối vào cuối, không đè chữ người bán tự gõ', () => {
+    expect(toggleNoteToken('ít đường', 'Đá chung')).toBe('ít đường, Đá chung')
+  })
+
+  it('T3 · bấm lại thì gỡ đúng nhãn đó, phần còn lại nguyên vẹn', () => {
+    expect(toggleNoteToken('ít đường, Đá chung', 'Đá chung')).toBe('ít đường')
+  })
+
+  it('T4 · gỡ nhãn duy nhất thì ghi chú về rỗng', () => {
+    expect(toggleNoteToken('Đá chung', 'Đá chung')).toBe('')
+  })
+
+  it('T5 · gỡ được cả khi nhãn đứng đầu', () => {
+    expect(toggleNoteToken('Đá chung, ít đường', 'Đá chung')).toBe('ít đường')
+  })
+
+  it('T6 · khớp NGUYÊN phần tử: "Đá chung nhiều" không phải là nhãn "Đá chung"', () => {
+    expect(toggleNoteToken('Đá chung nhiều', 'Đá chung')).toBe('Đá chung nhiều, Đá chung')
+  })
+
+  it('T7 · là toggle THUẦN, không biết luật loại trừ của nghiệp vụ đá', () => {
+    expect(toggleNoteToken('Đá chung, Đá riêng', 'Đá riêng')).toBe('Đá chung')
+  })
+
+  it('T8 · trim từng phần trước khi so, khoảng trắng thừa không làm hụt nhãn', () => {
+    expect(toggleNoteToken('ít đường ,  Đá chung', 'Đá chung')).toBe('ít đường')
+  })
+
+  it('H1 · thấy nhãn đang bật', () => {
+    expect(hasNoteToken('ít đường, Đá chung', 'Đá chung')).toBe(true)
+  })
+
+  it('H2 · không có nhãn thì false', () => {
+    expect(hasNoteToken('ít đường', 'Đá chung')).toBe(false)
+  })
+
+  it('H3 · "Đá chung nhiều" KHÔNG tính là có nhãn "Đá chung" — `includes` sẽ sai ở đây', () => {
+    expect(hasNoteToken('Đá chung nhiều', 'Đá chung')).toBe(false)
+  })
+
+  it('H4 · ghi chú rỗng thì false', () => {
+    expect(hasNoteToken('', 'Đá chung')).toBe(false)
   })
 })

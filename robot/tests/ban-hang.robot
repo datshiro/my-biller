@@ -613,6 +613,89 @@ Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi 
     ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Trà đá'][0]
     Should Be Equal    ${trà}[note]    ${EMPTY}    Dòng không ghi chú phải là '' chứ không thiếu trường.
 
+Đánh dấu đá chung rồi thêm tiếp thì hai nhóm ly nằm trên hai dòng riêng
+    [Documentation]    Ca thật của chủ quán: cùng một món, 3 ly đá chung + 2 ly đá riêng. Hôm nay
+    ...    người bán không diễn đạt được chuyện đó — cùng món cùng giá thì `upsert` gộp về một dòng.
+    ...    Đọc thẳng sổ chứ không tin con số trên màn: gộp nhầm thì bếp pha 5 ly cùng một kiểu đá,
+    ...    mà tổng tiền vẫn đúng nên không lỗi nào hiện ra.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    3
+    Keyboard Key    press    Tab
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Chọn Chip    Đá chung
+    Bấm Nút    XONG
+
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    2
+    Keyboard Key    press    Tab
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Chọn Chip    Đá riêng
+    Bấm Nút    XONG
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    2
+    ...    Hai nhóm ly bị gộp về một dòng — bếp sẽ pha 5 ly cùng một kiểu đá.
+    ${chung}=    Evaluate    [d for d in $của_đơn if d['note'] == 'Đá chung'][0]
+    ${riêng}=    Evaluate    [d for d in $của_đơn if d['note'] == 'Đá riêng'][0]
+    Should Be Equal As Numbers    ${chung}[qty]    3    Số ly đá chung xuống sổ sai.
+    Should Be Equal As Numbers    ${riêng}[qty]    2    Số ly đá riêng xuống sổ sai.
+
+Gõ ghi chú tay rồi bấm chip thì ghi chú giữ cả hai, không bị đè
+    [Documentation]    Chip chỉ NỐI một nhãn vào ghi chú, không thay cả ô. Đối chiếu tận sổ vì kiểu
+    ...    hỏng của `note` đã có tiền lệ ở ca ngay trên: màn hình hiện đúng, sổ ghi thiếu.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Ghi chú    ít đường
+    Chọn Chip    Đá riêng
+    ${ghi_chú}=    Đọc Ô    Ghi chú
+    Should Be Equal    ${ghi_chú}    ít đường, Đá riêng
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${phở}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]][0]
+    Should Be Equal    ${phở}[note]    ít đường, Đá riêng
+    ...    Chip đè mất chữ người bán tự gõ — bếp mất nửa yêu cầu của khách.
+
+Bấm lại chip đang chọn thì gỡ đúng nhãn đó, ghi chú gõ tay còn nguyên
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Ghi chú    ít đường
+    Chọn Chip    Đá riêng
+    Chọn Chip    Đá riêng
+
+    ${ghi_chú}=    Đọc Ô    Ghi chú
+    Should Be Equal    ${ghi_chú}    ít đường
+    ${đang_chọn}=    Chip Đang Chọn    Đá riêng
+    Should Be Equal    ${đang_chọn}    false
+
+Hai chip đá loại trừ nhau: bấm cái này thì cái kia tự tắt
+    [Documentation]    Một ly không thể vừa đá chung vừa đá riêng. Muốn cả hai kiểu thì đó là HAI
+    ...    DÒNG — đúng thứ tính năng này làm, nên hai chip không được phép cùng bật.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Ghi chú    ít đường
+    Chọn Chip    Đá chung
+    Chọn Chip    Đá riêng
+
+    ${riêng}=    Chip Đang Chọn    Đá riêng
+    Should Be Equal    ${riêng}    true
+    ${chung}=    Chip Đang Chọn    Đá chung
+    Should Be Equal    ${chung}    false
+    ${ghi_chú}=    Đọc Ô    Ghi chú
+    Should Be Equal    ${ghi_chú}    ít đường, Đá riêng
+
 Bấm Đã hiểu để dọn banner bỏ món, không phải bấm Hoàn lại
     [Documentation]    Bỏ món bằng cách gõ 0 thường là CỐ Ý, và banner sống tới hết đơn. Trước đây nút
     ...    duy nhất trên banner là "Hoàn lại", nên người bán muốn dọn banner phải bấm đúng cái nút
