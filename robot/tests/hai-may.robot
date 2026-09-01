@@ -131,7 +131,11 @@ Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nố
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    4    ${MÁY_A_PAGE}
-    Bảng Máy Phải Có Số Dòng    orders    4    ${MÁY_B_PAGE}
+    # Máy B hội tụ độc lập với máy A, không ăn theo. Đo ra hai máy cách nhau dưới 0,2s nên khẳng định
+    # trần ở đây xanh gần như mọi lượt — rồi thua đúng lượt máy B chậm hơn, và thua tức thì vì nó
+    # không có ngưỡng nào để chờ.
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
+    ...    orders    4    ${MÁY_B_PAGE}
     # Outbox rỗng chỉ chứng minh Worker đã nhận thao tác. Phiếu thu còn sinh thêm bản order chuẩn
     # từ Worker, nên chờ đúng điều kiện hội tụ thay vì đọc giữa hai sự kiện hoặc Sleep cứng.
     Hai Bảng Phải Hội Tụ    orders
@@ -358,7 +362,10 @@ Tab dẫn đầu bị treo thì epoch mới fence tab cũ
     Wait Until Keyword Succeeds    40x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    3    ${MÁY_B_PAGE}
     Epoch Máy Phải Từ    ${MÁY_A_PAGE}    2
-    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    # `Bán Nhanh` đẩy HAI sự kiện: đơn rồi phiếu thu. Vòng chờ trên chỉ chứng minh sự kiện ĐƠN đã tới
+    # máy B, nên khẳng định trần ở đây là đua với vòng đi-về của phiếu thu. Trên loopback vòng đó xong
+    # trong khe giữa hai dòng nên ca luôn xanh; trên Worker thật nó thua chừng một nửa số lượt.
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
 
 Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
     [Documentation]    Cửa tử của trường mới: zod strip khoá lạ TRONG IM LẶNG, và Worker dùng chính

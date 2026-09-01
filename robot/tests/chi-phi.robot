@@ -16,8 +16,7 @@ ${SHEET_SỬA}    css=[role=dialog][aria-label="Sửa khoản chi"]
 
 *** Test Cases ***
 Danh sách hiện khoản chi của bộ mẫu
-    Mở Màn    /chi-phi
-    Chờ Thấy Chữ    Chi phí
+    Mở Chi Phí Ở Tháng Của Khoản Mẫu
     Chờ Thấy Chữ    Chợ đầu mối
     Chờ Thấy Chữ    1.200.000
 
@@ -40,7 +39,7 @@ Chưa nhập số tiền thì nút lưu còn khoá
     Nút Phải Bị Khoá    LƯU
 
 Sửa khoản chi thì số tiền trong sổ đổi theo
-    Mở Màn    /chi-phi
+    Mở Chi Phí Ở Tháng Của Khoản Mẫu
     Click    css=button:has-text("Chợ đầu mối")
     Wait For Elements State    ${SHEET_SỬA}    visible
     Điền Ô    Số tiền    900000
@@ -51,7 +50,7 @@ Sửa khoản chi thì số tiền trong sổ đổi theo
     Should Be Equal As Integers    ${khoản}[amount]    900000
 
 Xoá khoản chi phải qua hộp xác nhận
-    Mở Màn    /chi-phi
+    Mở Chi Phí Ở Tháng Của Khoản Mẫu
     Click    css=button:has-text("Chợ đầu mối")
     Bấm Nút    Xoá khoản chi
     Chờ Hộp Xác Nhận    Xoá khoản chi?
@@ -61,7 +60,7 @@ Xoá khoản chi phải qua hộp xác nhận
     Length Should Be    ${chi}    1    Bấm Huỷ trong hộp xác nhận mà khoản chi vẫn bị xoá.
 
 Xoá khoản chi xong thì nó biến khỏi tổng tháng
-    Mở Màn    /chi-phi
+    Mở Chi Phí Ở Tháng Của Khoản Mẫu
     Click    css=button:has-text("Chợ đầu mối")
     Bấm Nút    Xoá khoản chi
     Xác Nhận Trong Hộp    Xoá
@@ -95,7 +94,7 @@ Lọc theo loại chi thì chỉ còn khoản của loại đó
     Chờ Thấy Chữ    Mua thịt
 
 Lùi về tháng trước thì không thấy khoản chi của tháng này
-    Mở Màn    /chi-phi
+    Mở Chi Phí Ở Tháng Của Khoản Mẫu
     Chờ Thấy Chữ    Chợ đầu mối
     Click    css=button[aria-label="Tháng trước"]
 
@@ -109,6 +108,15 @@ Không xem trước được tháng chưa tới
 
 
 *** Keywords ***
+Mở Chi Phí Ở Tháng Của Khoản Mẫu
+    [Documentation]    Bộ mẫu đặt khoản chi vào HÔM QUA (`src/db/seed.ts`), còn màn Chi phí mở ở tháng
+    ...    hiện tại. Đúng ngày mùng 1 thì "hôm qua" rơi sang tháng trước và khoản mẫu biến mất khỏi
+    ...    màn — cả suite đỏ mỗi đầu tháng dù không ai sửa gì. Lùi một tháng đúng hôm đó.
+    Mở Màn    /chi-phi
+    Chờ Thấy Chữ    Chi phí
+    ${ngày}=    Evaluate    datetime.date.today().day    datetime
+    IF    ${ngày} == 1    Click    css=button[aria-label="Tháng trước"]
+
 Đọc Ô Tổng
     [Documentation]    Số nằm ở <span> ngay sau nhãn của ô. Dấu trừ là U+2212 chứ không phải gạch nối.
     [Arguments]    ${nhãn}
