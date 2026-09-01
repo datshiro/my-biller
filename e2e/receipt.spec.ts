@@ -94,10 +94,18 @@ async function captureDownloadedImages(page: Page): Promise<CapturedImage[]> {
   })
 }
 
+/**
+ * Tên món dài nhất thực địa. Ảnh in thử của chủ quán cho thấy nó vỡ 4 dòng trong ô cột 1 — đây là
+ * chuỗi mọi phép đo bẻ dòng bám vào, nên nó nằm ở một chỗ chứ không chép lại từng ca.
+ */
+const TÊN_DÀI_NHẤT = 'TRÀ SỮA TRUYỀN THỐNG KEM CHEESE'
+
+type LineOptions = { name?: (index: number) => string; unit?: string; note?: string }
+
 /** Dựng đơn nhiều dòng qua chính repository của app, rồi mở phiếu của nó. */
-async function openReceiptWithLines(page: Page, lineCount: number) {
+async function buildReceiptWithLines(page: Page, lineCount: number, options: LineOptions = {}) {
   const orderId = await page.evaluate(
-    async ([modulePath, count]) => {
+    async ([modulePath, count, unit, note, longName]) => {
       const orders = (await import(modulePath as string)) as typeof import('@/db/repositories/orders')
       const total = 25_000 * (count as number)
       const { id } = await orders.createOrder({
@@ -105,11 +113,12 @@ async function openReceiptWithLines(page: Page, lineCount: number) {
         customerName: 'Khách lẻ',
         lines: Array.from({ length: count as number }, (_, index) => ({
           itemId: null,
-          name: `Món số ${index + 1} tên dài vừa phải`,
-          unit: 'phần',
+          name: (longName as string | null) ?? `Món số ${index + 1} tên dài vừa phải`,
+          unit: unit as string,
           unitPrice: 25_000,
           costPrice: null,
           qty: 1,
+          note: note as string,
         })),
         discount: 0,
         surcharge: 0,
@@ -119,12 +128,40 @@ async function openReceiptWithLines(page: Page, lineCount: number) {
       })
       return id
     },
-    [ORDERS_MODULE, lineCount] as const,
+    [
+      ORDERS_MODULE,
+      lineCount,
+      options.unit ?? 'phần',
+      options.note ?? '',
+      // `page.evaluate` tuần tự hoá tham số nên hàm `name` không đi qua được; ca duy nhất cần đặt tên
+      // riêng dùng đúng một tên cho mọi dòng, nên truyền chuỗi đã dựng sẵn.
+      options.name ? options.name(0) : null,
+    ] as const,
   )
 
   await page.goto(`/don/${orderId}/phieu`)
   await receiptReady(page)
+  return orderId
+}
+
+async function openReceiptWithLines(page: Page, lineCount: number, options: LineOptions = {}) {
+  await buildReceiptWithLines(page, lineCount, options)
   return captureDownloadedImages(page)
+}
+
+/**
+ * Số dòng chữ thật của ô cột 1. `Range.getClientRects()` trả một hình chữ nhật cho mỗi hộp dòng —
+ * API DOM duy nhất đọc thẳng kết quả bẻ dòng thay vì suy từ chiều cao chia line-height. Gom theo
+ * `top` làm tròn 0,1 để tên món và `<span> (Ly)</span>` cùng dòng không bị đếm hai lần.
+ */
+async function textLineCount(page: Page, cellText: string) {
+  return page.evaluate((needle) => {
+    const cell = [...document.querySelectorAll('td')].find((td) => td.textContent?.includes(needle))
+    if (!cell) throw new Error(`Không thấy ô chứa "${needle}"`)
+    const range = document.createRange()
+    range.selectNodeContents(cell)
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top * 10) / 10)).size
+  }, cellText)
 }
 
 // Mỗi ca chạy trong một BrowserContext riêng nên IndexedDB đã sạch sẵn — không cần (và không nên)
@@ -214,6 +251,14 @@ test('bản in chỉ còn phiếu: không header, không nút, không thanh đi�
   expect(layout.overflowing).toBe(false)
 
   await page.emulateMedia({ media: null })
+})
+
+test('phiếu: tên món dài nhất chỉ vỡ 2 dòng trên đường ảnh', async ({ page }) => {
+  // Ảnh in thử của chủ quán: đúng tên này vỡ 4 dòng vì thân bảng 13px và header "Đơn giá" chiếm cột.
+  // Tiêu chí chỉ tính TÊN MÓN — dòng ghi chú bên dưới là dòng thứ ba có chủ ý.
+  await buildReceiptWithLines(page, 1, { name: () => TÊN_DÀI_NHẤT, unit: 'Ly' })
+
+  expect(await textLineCount(page, TÊN_DÀI_NHẤT)).toBeLessThanOrEqual(2)
 })
 
 test('phiếu 15 dòng → chia 2 tấm, tấm nào cũng dưới 300KB và vẫn chụp ở 2×', async ({ page }) => {

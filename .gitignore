@@ -21,6 +21,9 @@ robot/downloads/
 # working artifacts, never committed
 plans/
 journals/
+.agentkit/
+.claude/
+.grok/
 
 # ảnh chụp lúc kiểm thử — wireframe thật là docs/wireframe/index.html
 docs/wireframes/
