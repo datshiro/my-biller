@@ -303,6 +303,24 @@ Ghi chú từng món hiện trên phiếu dưới tên món
 
     Chờ Thấy Chữ    Đá riêng
 
+Bản in giữ khung 360px chứ không trải rộng theo màn hình
+    [Documentation]    `.receipt-view{width:auto !important}` là dòng đã làm chữ in ra **3,44mm**
+    ...    trong khi cùng phiếu đó ra ảnh chỉ 2,60mm: nó cắt đứt khung 360px khỏi đường
+    ...    `window.print()`, nên bản in bố cục lại theo bề ngang màn hình và bẻ dòng ở chỗ khác hẳn
+    ...    tấm ảnh gửi khách. Nới `RECEIPT_WIDTH` KHÔNG chữa được — nó chỉ chạm đường ảnh.
+    ...    Giờ khung giữ nguyên 360px rồi `transform: scale()` xuống 72mm, nên hai đường dùng chung
+    ...    đúng một lượt bố cục.
+    [Tags]    regression
+    [Teardown]    Trả Media Về Mặc Định
+    Bán Nhanh    Phở bò
+    Emulate Media    media=print
+
+    Get Style    css=.receipt-view    width    ==    360px
+    ${bề_ngang}=    Evaluate JavaScript    css=.receipt-view
+    ...    (view) => view.getBoundingClientRect().width
+    Should Be True    abs(${bề_ngang} - 272.1) < 1
+    ...    Phần mực trên giấy phải rộng đúng 72mm (272,1px); đo được ${bề_ngang}px.
+
 
 *** Keywords ***
 Thêm Nhanh Mặt Hàng
@@ -331,3 +349,9 @@ Thêm Nhanh Khách
     Điền Ô    Tên khách hàng *    ${tên}
     Bấm Nút    LƯU KHÁCH HÀNG
     Chờ Thấy Chữ    ${tên}
+
+Trả Media Về Mặc Định
+    [Documentation]    `media=${None}` KHÔNG reset — nó gửi `not_set` và wrapper bỏ qua. Phải
+    ...    `media=null` mới tắt emulation. Đặt ở Teardown để ca chết giữa chừng cũng không bỏ lại
+    ...    page ở media print.
+    Emulate Media    media=null
