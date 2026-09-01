@@ -100,12 +100,18 @@ async function captureDownloadedImages(page: Page): Promise<CapturedImage[]> {
  */
 const TÊN_DÀI_NHẤT = 'TRÀ SỮA TRUYỀN THỐNG KEM CHEESE'
 
-type LineOptions = { name?: (index: number) => string; unit?: string; note?: string }
+type LineOptions = {
+  name?: (index: number) => string
+  unit?: string
+  note?: string
+  /** Ghi chú của cả đơn — chữ tự do, không chặn độ dài, và chỉ in ở tấm cuối. */
+  orderNote?: string
+}
 
 /** Dựng đơn nhiều dòng qua chính repository của app, rồi mở phiếu của nó. */
 async function buildReceiptWithLines(page: Page, lineCount: number, options: LineOptions = {}) {
   const orderId = await page.evaluate(
-    async ([modulePath, count, unit, note, longName]) => {
+    async ([modulePath, count, unit, note, longName, orderNote]) => {
       const orders = (await import(modulePath as string)) as typeof import('@/db/repositories/orders')
       const total = 25_000 * (count as number)
       const { id } = await orders.createOrder({
@@ -123,7 +129,7 @@ async function buildReceiptWithLines(page: Page, lineCount: number, options: Lin
         discount: 0,
         surcharge: 0,
         soldAt: Date.now(),
-        note: '',
+        note: orderNote as string,
         payment: { amount: total, method: 'cash' as const, note: '' },
       })
       return id
@@ -136,6 +142,7 @@ async function buildReceiptWithLines(page: Page, lineCount: number, options: Lin
       // `page.evaluate` tuần tự hoá tham số nên hàm `name` không đi qua được; ca duy nhất cần đặt tên
       // riêng dùng đúng một tên cho mọi dòng, nên truyền chuỗi đã dựng sẵn.
       options.name ? options.name(0) : null,
+      options.orderNote ?? '',
     ] as const,
   )
 
@@ -359,6 +366,41 @@ test('@page ra đúng khổ 80mm, không rơi về Letter', async ({ page }) => 
   // Cổng đếm trang: một `.receipt-frame` phải ra đúng một tờ. Nó là cổng DUY NHẤT bắt được `H` hụt.
   const sốTấm = await page.locator('.receipt-frame').count()
   expect((raw.match(/\/MediaBox/g) ?? []).length).toBe(sốTấm)
+})
+
+/**
+ * Ghi chú đơn và chân phiếu là chữ TỰ DO, không chặn độ dài, và chỉ in ở tấm cuối — nên tấm cuối là
+ * tấm duy nhất có thể cao hơn khổ trang. Đây là ranh giới trước nay không có cổng nào canh.
+ *
+ * Cổng đếm trang ở ca trên đòi số tờ BẰNG số tấm cho phiếu thường; ở đây thì ngược lại — nội dung
+ * thật sự dài hơn một tờ thì chẻ ra nhiều tờ mới là đúng, còn bằng nhau nghĩa là phần thừa đã biến
+ * mất khỏi phiếu tiền mà không báo gì.
+ *
+ * ĐÃ ĐO, để lần review sau khỏi tranh lại: `overflow: hidden` trên `.receipt-frame` KHÔNG cắt mất
+ * phần thừa. Chạy đúng ca này ở cả hai cấu hình cho ra số liệu y hệt — tấm cao 1991,5px trên khổ
+ * trang 1292,6px đều ra 2 tờ. Chromium vẫn chẻ tấm dù `overflow` khác `visible`, nên `overflow:
+ * hidden` (thứ cắt phần TRÀN NGANG vô hình của hộp bố cục 360px) không đánh đổi bằng chữ bị mất.
+ */
+test('ghi chú đơn dài không bị cắt mất: tấm cao quá khổ thì chẻ sang tờ sau', async ({ page }) => {
+  const ghiChúDài = Array.from({ length: 200 }, (_, i) => `Dòng ghi chú số ${i + 1} của đơn này`).join(' — ')
+  await buildReceiptWithLines(page, 2, { orderNote: ghiChúDài })
+
+  await page.emulateMedia({ media: 'print' })
+
+  // Chứng minh bằng sản phẩm đầu ra chứ không bằng computed style: tấm cao hơn khổ trang thì PDF
+  // phải có nhiều tờ hơn số tấm. Bằng nhau tức phần thừa đã biến mất.
+  const caoTấm = await page.evaluate(
+    () => (document.querySelector('.receipt-frame') as HTMLElement).getBoundingClientRect().height,
+  )
+  const caoTrangPx = (CAO_TRANG_MM - 8) * MM_PX // trừ `margin: 4mm` hai đầu
+  expect(caoTấm).toBeGreaterThan(caoTrangPx)
+
+  const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
+  const raw = pdf.toString('latin1')
+  const sốTấm = await page.locator('.receipt-frame').count()
+  expect((raw.match(/\/MediaBox/g) ?? []).length).toBeGreaterThan(sốTấm)
+
+  await page.emulateMedia({ media: null })
 })
 
 /**

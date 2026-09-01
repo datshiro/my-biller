@@ -32,6 +32,15 @@
   vào giữa. Đổi lại, mỗi lần bấm In tốn tới 35cm giấy. Bằng chứng hiện có cho
   thấy chủ quán in qua **đường ảnh** chứ không qua `window.print()`, nên đây là
   đường phụ; nếu sau này chuyển sang in trực tiếp thì phải đo lại.
+- **Nếu phải quay về 2.1.0: dặn người bán chốt hoặc xoá giỏ đang lên dở trước.**
+  Từ 2.2.0 khoá dòng giỏ có thêm ghi chú ở cuối, nên hai dòng "Đá chung" và "Đá
+  riêng" của cùng một món cùng một giá là hai khoá khác nhau. Bản 2.1.0 tính khoá
+  **không** có ghi chú, nên khi nó nạp lại nháp do 2.2.0 ghi thì hai dòng đó đụng
+  chung một khoá, và từ đó `+`/`−` hay xoá dòng sẽ tác động **cả hai cùng lúc**.
+  Nháp rỗng thì không có chuyện này. Đây là hiểm của đường quay ngược, không phải
+  của đường cập nhật: chiều 2.1.0 → 2.2.0 an toàn vì khoá được tính lại lúc nạp và
+  hai dòng vốn khác khoá thì sau khi thêm ghi chú vẫn khác khoá.
+
 - **Chưa có xác nhận trên giấy nhiệt thật.** Máy in không có ở chỗ dev. Mọi tiêu
   chí đều đo được bằng máy — bề ngang bản in đo sau `transform`, khổ giấy đo bằng
   cách parse `/MediaBox` từ PDF thật, số dòng vỡ đo bằng `Range.getClientRects()`
