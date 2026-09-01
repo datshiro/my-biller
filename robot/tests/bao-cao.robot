@@ -123,7 +123,10 @@ Chọn ngày đầu sau ngày cuối thì không xem được
 
 Kỳ không có đơn cũng không có khoản chi thì nói rõ chứ không để trống
     Mở Màn    /bao-cao
-    Chờ Thấy Chữ    LỖ
+    # Chờ "DOANH THU" chứ đừng chờ "LỖ": bộ mẫu chi vào hôm qua nên mùng 1 khoản đó thuộc tháng
+    # trước, tháng này hoá ra có lãi và chữ "LỖ" không hiện. Đây chỉ là bước chờ trang tải, khẳng
+    # định thật nằm ở dòng dưới.
+    Chờ Thấy Chữ    DOANH THU
     Click    css=button[aria-label="Tháng trước"]
     Click    css=button[aria-label="Tháng trước"]
     Chờ Thấy Chữ    chưa có đơn nào và cũng chưa ghi khoản chi nào

@@ -44,15 +44,26 @@ export function parseMoneyInput(raw: string): number | null {
   return Number.isSafeInteger(value) ? value : null
 }
 
-const QTY_INPUT = /^(\d+)(?:[.,](\d{1,3}))?$/
+// Đúng 3 chữ số sau dấu là hình dạng phân nhóm TIỀN (`GROUPED_DIGITS` ở trên), nên "1.000" không
+// phân xử được giữa "một nghìn" và "một". Chặn ở 2 chữ số để chỗ giao nhau đó rơi vào `null` thay vì
+// bị đoán thành 1. Trần 6 chữ số phần nguyên: 999.999 ly là thừa cho quán, mà không có trần thì gõ
+// khoảng 12 chữ số đủ đưa `đơn giá × qty` vượt số nguyên an toàn, `assertMoney` ném ngay trong render
+// và ErrorBoundary nuốt cả màn Bán hàng.
+const QTY_INPUT = /^(\d{1,6})(?:[.,](\d{1,2}))?$/
 
-/** Số lượng là giá trị duy nhất được phép thập phân (0,5 kg). Tối đa 3 chữ số sau dấu phẩy. */
+/**
+ * Số lượng là giá trị duy nhất được phép thập phân (0,5 kg). Tối đa 2 chữ số sau dấu phẩy.
+ *
+ * Đây là PARSER, không phải validator: `0` là số đọc được và có nghĩa "bỏ món" — cùng ngữ nghĩa với
+ * nút `−` bấm ở qty 1. `null` chỉ còn đúng một nghĩa: không đọc được. Người gọi phải tự phân biệt
+ * hai thứ đó; gộp lại là đường mất món im lặng.
+ */
 export function parseQtyInput(raw: string): number | null {
   const matched = QTY_INPUT.exec(raw.trim().replace(/\s/g, ''))
   if (!matched) return null
 
   const value = Number(`${matched[1]}.${matched[2] ?? '0'}`)
-  return Number.isFinite(value) && value > 0 ? value : null
+  return Number.isFinite(value) && value >= 0 ? value : null
 }
 
 export function formatQty(qty: number): string {

@@ -29,7 +29,7 @@ const order = (id: number, gid: number, code: string, total: number, paidAmount:
   createdAt: 1,
   updatedAt: 1,
 })
-const line = (id: number, gid: number, orderId: number, amount: number) => ({ id, gid: testGid(gid), orderId, itemId: 1, name: 'Phở', unit: 'tô', unitPrice: amount, costPrice: 20_000, qty: 1, amount })
+const line = (id: number, gid: number, orderId: number, amount: number) => ({ id, gid: testGid(gid), orderId, itemId: 1, name: 'Phở', unit: 'tô', unitPrice: amount, costPrice: 20_000, qty: 1, amount, note: '' })
 const payment = (id: number, gid: number, orderId: number, amount: number, allocatedOrderId: number) => ({ id, gid: testGid(gid), orderId, allocatedOrderId, customerId: 1, amount, method: 'cash' as const, paidAt: at + id, note: '' })
 
 export const ledgerA: BackupData = {

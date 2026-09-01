@@ -116,6 +116,10 @@ export const OrderLineSchema = z.object({
   costPrice: Money.nullable(),
   qty: z.number().positive(),
   amount: Money,
+  // Không index nên Dexie không cần bump `version` — bump là đóng dấu `schemaGen` mới lên
+  // `deviceState` và tự chặn app của chính máy đó khi hai bản JS cùng sống (registerType: 'prompt').
+  // `.default('')` giữ file sao lưu cũ nhập lại được, và giữ event từ máy chưa cập nhật đi qua.
+  note: z.string().default(''),
 })
 
 export const PaymentSchema = z.object({

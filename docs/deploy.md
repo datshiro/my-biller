@@ -124,6 +124,50 @@ npm run test:staging -- robot/tests/hai-may.robot
 unset STAGING_ADMIN_SECRET
 ```
 
+Chỉ chạy `hai-may.robot` ở đây, không chạy cả `robot/tests`. Các suite còn lại không cần Worker thật
+và chạy từ xa chỉ tốn thời gian.
+
+**Lượt này đỏ một ca không tự động nghĩa là hồi quy.** Ngưỡng chờ trong `hai-may.robot` được hiệu
+chuẩn cho Worker ở `127.0.0.1`: mặc định 15s cho một chữ hiện ra (`app.resource`, `Set Browser
+Timeout`), 10–40s cho các vòng dò sổ, và 3s cho SLA "đơn chốt ở quầy này phải hiện ở quầy kia"
+(`hai-may.robot`, `30x 100ms` kèm `Should Be True ${độ_trễ} <= 3.0`).
+
+Đo ngày 31/08/2026, ba lượt mỗi bên, kịch bản hai máy mất mạng rồi nối lại — mốc chậm nhất trong bốn
+điều kiện hội tụ (hai outbox rỗng, hai sổ đủ 4 đơn), tính từ lúc bật mạng:
+
+| Môi trường | Lượt 1 | Lượt 2 | Lượt 3 |
+| --- | --- | --- | --- |
+| Local (Worker `127.0.0.1`) | 14,80s | 14,81s | 14,79s |
+| Staging (Pages preview + Worker staging) | 16,37s | 15,35s | 15,62s |
+
+Biên Cloudflare chỉ tốn thêm khoảng 0,6–1,6s trên đường này, và ngưỡng 40s vẫn còn dư 2,4 lần. Nên
+các lượt đỏ trên staging **không phải** chuyện ngưỡng chật.
+
+Nguyên nhân thật, tìm ra ngày 01/09/2026: hai chỗ trong `hai-may.robot` chờ một điều kiện rồi khẳng
+định NGAY một điều kiện khác mà không có vòng chờ. Dòng 361 chờ đơn tới máy B rồi đòi outbox máy A
+rỗng — nhưng `Bán Nhanh` đẩy hai sự kiện, đơn đi trước còn phiếu thu vẫn trên đường. Dòng 134 chờ máy
+A đủ 4 đơn rồi đòi máy B cũng đủ, trong khi máy B hội tụ độc lập chứ không ăn theo máy A.
+
+Dấu vân tay của lỗi này nằm trong `robot/results/output.xml`: keyword đỏ có `elapsed` gần bằng không
+(lượt bắt được là `0,008s`). Ngưỡng chật thì phải cháy hết 40s mới đỏ; đỏ tức thì nghĩa là dòng đó
+không có ngưỡng nào để chờ. Cả hai chỗ nay đã bọc `Wait Until Keyword Succeeds`.
+
+Vì sao chỉ lộ trên staging: trên loopback điều kiện thứ hai luôn kịp trong khe giữa hai dòng, thêm
+chừng một giây qua biên Cloudflare là thua. Bốn lượt `hai-may.robot` trước khi sửa: hai lượt đỏ. Bốn
+lượt sau khi sửa: 16/16 xanh cả bốn.
+
+**Lượt staging vẫn là thăm dò, không phải cổng phát hành**; cổng vẫn là `npm run test:live` cục bộ và
+CI. Nhưng đừng vội gọi một ca đỏ ở đây là nhiễu: mở `output.xml`, tìm keyword đỏ, đọc `elapsed`. Gần
+bằng không là khẳng định thiếu vòng chờ — sửa được ngay. Cháy hết ngưỡng mới là chuyện chậm thật.
+
+Một chỗ khác từng bị nghi nhưng **không** phải thủ phạm ở đây, giữ lại làm ghi chú: `src/db/sync/runner.ts:25`
+để nhịp thăm dò dự phòng 2s khi local và 30s khi remote, nên máy nào lỡ bản tin broadcast đúng lúc mở
+lại socket sau khi nối mạng thì phải đợi trọn nhịp đó. Không lượt đo nào rơi vào nhánh này.
+
+Đừng nới ngưỡng cho xanh. Ngưỡng 3s là lời hứa với người bán, nới nó là bỏ đi đúng thứ nó đang canh.
+Số đo trên cũng nói rằng ngưỡng hội tụ chưa cần rẽ theo môi trường: local và staging chênh nhau chưa
+tới 2s, nên thêm nhánh remote lúc này là thêm chỗ chỉnh mà không mua được gì.
+
 Rollback Worker staging bằng version tốt gần nhất; Pages preview giữ URL bất biến của từng deployment,
 nên checkout commit tốt, build lại bằng `build:staging` rồi deploy lại cùng nhánh để đưa alias về bản đó:
 

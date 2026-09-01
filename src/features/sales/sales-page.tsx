@@ -14,8 +14,8 @@ import { useItemGroups, useItems } from '@/features/items/use-items'
 import { BackupBanner } from '@/features/settings/backup-banner'
 import { useDeviceIdentity } from '@/features/settings/use-settings'
 import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
-import { formatAmount, formatVnd } from '@/domain/money'
-import { normalizeName, parseOrderText } from '@/domain/order-draft/parse-order-text'
+import { formatAmount, formatQty, formatVnd } from '@/domain/money'
+import { normalizeName, readOrderText } from '@/domain/order-draft/parse-order-text'
 import { resolveUnitPrice, type PriceBook, type PriceMode } from '@/domain/wholesale-price'
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
@@ -54,7 +54,7 @@ export function SalesPage() {
    */
   const [shownMode, setShownMode] = useState<PriceMode>(cart.priceMode)
   const [repricing, setRepricing] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ text: string; undo?: CartLine } | null>(null)
   /** Chạm SỈ khi chưa có khách: nhớ ý định, bật lên sau khi người bán chọn xong khách. */
   const [wantWholesale, setWantWholesale] = useState(false)
   /**
@@ -102,6 +102,10 @@ export function SalesPage() {
    */
   const applyMode = async (mode: PriceMode, customerId: number | null) => {
     const req = (requestId.current += 1)
+    // Nút Hoàn lại giữ ảnh chụp của dòng lúc bị gỡ, kèm giá theo bảng giá của khách CŨ. Đổi khách
+    // hay bật/tắt SỈ xong mới bấm Hoàn lại là chèn giá cũ vào giỏ của khách mới, và không gì tính
+    // lại nó cho tới lần toggle sau. Bỏ đường hoàn tác đi khi nền giá đã đổi.
+    setNotice(null)
     setShownMode(mode)
     setRepricing(true)
     try {
@@ -119,7 +123,9 @@ export function SalesPage() {
       // không action nào khác đụng tới `priceMode`. Không trả công tắc về đây là để nó nói dối.
       setShownMode(cart.priceMode)
       setRepricing(false)
-      setNotice('Không đọc được bảng giá của khách. Giá trong giỏ giữ nguyên — chọn lại khách để thử lại.')
+      setNotice({
+        text: 'Không đọc được bảng giá của khách. Giá trong giỏ giữ nguyên — chọn lại khách để thử lại.',
+      })
     }
   }
 
@@ -145,7 +151,9 @@ export function SalesPage() {
       }
       dispatch({ type: 'setCustomer', customerId: null, customerName: '' })
       await applyMode('retail', null)
-      setNotice('Khách của đơn đang lên dở không còn nữa. Đã chuyển về giá lẻ — xem lại giá trước khi thu tiền.')
+      setNotice({
+        text: 'Khách của đơn đang lên dở không còn nữa. Đã chuyển về giá lẻ — xem lại giá trước khi thu tiền.',
+      })
     })()
     // Chỉ chạy đúng một lần lúc mở màn; `repricedOnMount` là chốt, không phải mảng phụ thuộc.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,11 +197,23 @@ export function SalesPage() {
         ? []
         : [{ id: item.id, name: item.name, unit: item.unit, unitPrice: item.unitPrice, costPrice: item.costPrice }],
     )
-    const parsed = parseOrderText(query, candidates)
-    if (parsed.length === 0) return
+    const { lines, rejected } = readOrderText(query, candidates)
 
-    for (const line of parsed) dispatch({ type: 'addLine', line, book })
-    setQuery('')
+    // Báo TRƯỚC khi thoát sớm: không đọc được cụm nào là hỏng nặng hơn đọc được một nửa, im lặng ở
+    // nhánh nặng hơn là ngược đời. Chỉ ĐẶT notice của mình, không `setNotice(null)` để dọn —
+    // banner đang đứng có thể là cảnh báo giỏ mang giá lẻ trong khi công tắc là SỈ (`applyMode`),
+    // và nuốt nó đi là để đơn chốt ở giá sai không dấu vết.
+    if (rejected.length > 0) {
+      setNotice({
+        text: `Chưa đọc được ${rejected.length === 1 ? 'phần' : `${rejected.length} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.`,
+      })
+    }
+    if (lines.length === 0) return
+
+    for (const line of lines) dispatch({ type: 'addLine', line, book })
+    // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
+    // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
+    setQuery(rejected.join(', '))
   }
 
   // Nhánh lỗi của `run` không đụng tới giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
@@ -209,6 +229,7 @@ export function SalesPage() {
           unitPrice: line.unitPrice,
           costPrice: line.costPrice,
           qty: line.qty,
+          note: line.note,
         })),
         discount: cart.discount,
         surcharge: cart.surcharge,
@@ -242,6 +263,26 @@ export function SalesPage() {
         />
       </div>
     )
+  }
+
+  // `restoreLine` cố ý không làm gì khi dòng đã quay lại giỏ (nếu không thì `upsert` cộng dồn qty).
+  // Nút vẫn hiện trong trạng thái đó là nút hứa suông, và hứa suông ở đây đi theo hướng IM: bỏ 3 tô,
+  // chạm lại 1 lần, bấm Hoàn lại tưởng lấy được 3 — sổ ghi 1, không con số nào nhảy để người bán thấy.
+  const undo = notice?.undo && !cart.lines.some((line) => line.key === notice.undo?.key) ? notice.undo : undefined
+
+  /**
+   * Gõ `0` là bỏ món (chốt của chủ quán), nhưng `0` cũng là phím ĐẦU của "0,5" — nên phải luôn có
+   * đường về. Giữ nguyên dòng vừa gỡ để nút Hoàn lại đặt lại y hệt.
+   *
+   * Một handler cho CẢ ô số lượng trong giỏ lẫn sheet sửa dòng: hai đường cùng nói "0 là bỏ món" mà
+   * chỉ một đường dựng được banner hoàn lại thì quy tắc đó có ngoại lệ không ai ghi ở đâu.
+   */
+  const setQtyWithUndo = (key: string, qty: number) => {
+    if (qty === 0) {
+      const removed = cart.lines.find((line) => line.key === key)
+      if (removed) setNotice({ text: `Đã bỏ ${removed.name} khỏi đơn.`, undo: removed })
+    }
+    dispatch({ type: 'setQty', key, qty })
   }
 
   return (
@@ -279,7 +320,24 @@ export function SalesPage() {
 
       {notice ? (
         <p className="flex items-start gap-2 bg-warn-tint px-4 py-2 text-[13px] font-semibold text-warn">
-          <span className="min-w-0 flex-1">{notice}</span>
+          <span className="min-w-0 flex-1">{notice.text}</span>
+          {/*
+            "Hoàn lại" đứng CẠNH "Đã hiểu", không thay chỗ nó. Bỏ món bằng cách gõ `0` thường là cố ý,
+            và banner sống tới hết đơn — nếu nút duy nhất để dọn banner lại là nút chèn dòng thì người
+            bán bấm theo quán tính, và `restoreLine` cộng dồn qty vào dòng họ vừa chạm lại.
+          */}
+          {undo ? (
+            <button
+              type="button"
+              onClick={() => {
+                dispatch({ type: 'restoreLine', line: undo })
+                setNotice(null)
+              }}
+              className="shrink-0 underline"
+            >
+              Hoàn lại
+            </button>
+          ) : null}
           <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
             Đã hiểu
           </button>
@@ -353,8 +411,21 @@ export function SalesPage() {
             <h2 className="label-xs px-4 pb-2 pt-4 text-muted">TRONG ĐƠN</h2>
             <CartLines
               lines={cart.lines}
-              onBump={(key, delta) => dispatch({ type: 'bumpQty', key, delta })}
+              onBump={(key, delta) => {
+                // `bumpQty` xuống 0 đi thẳng vào `removeLine` TRONG reducer, không qua handler dựng
+                // banner. `money.ts` đã viết `0` "cùng ngữ nghĩa với nút − bấm ở qty 1" — cùng ngữ
+                // nghĩa thì phải cùng lối về, nhất là khi nút − là ô 44px nằm sát ô số lượng ở 320px.
+                const target = cart.lines.find((line) => line.key === key)
+                if (delta < 0 && target?.qty === 1) setQtyWithUndo(key, 0)
+                else dispatch({ type: 'bumpQty', key, delta })
+              }}
               onEdit={setEditing}
+              onSetQty={setQtyWithUndo}
+              onUnreadableQty={(name, restored) =>
+                setNotice({
+                  text: `Số lượng của ${name} không đọc được — đã giữ nguyên ${formatQty(restored)}.`,
+                })
+              }
             />
             <div className="px-4 py-3">
               <Button variant="secondary" onClick={() => setSheet('adjust')}>
@@ -456,10 +527,16 @@ export function SalesPage() {
         <LineEditSheet
           line={editing}
           onApply={({ qty, unitPrice, note }) => {
-            dispatch({ type: 'updateLine', key: editing.key, qty, unitPrice, note })
+            // `updateLine` với qty 0 cũng gỡ dòng, nhưng lặng lẽ. Đẩy nhánh đó qua cùng handler với ô
+            // số lượng trong giỏ để người bán có đúng một đường hoàn lại, dù bỏ món từ chỗ nào.
+            if (qty === 0) setQtyWithUndo(editing.key, 0)
+            else dispatch({ type: 'updateLine', key: editing.key, qty, unitPrice, note })
             setEditing(null)
           }}
           onRemove={() => {
+            // CỐ Ý đứng ngoài luật "bỏ món thì phải có lối về": nhãn nút đã tự nói ra ý định, và phải
+            // mở sheet mới bấm được. Lối về sinh ra cho bề mặt LỠ TAY (gõ `0` — phím đầu của `0,5` —
+            // và chạm nhầm nút −), không phải cho một nút tên là "Bỏ món này khỏi đơn".
             dispatch({ type: 'removeLine', key: editing.key })
             setEditing(null)
           }}

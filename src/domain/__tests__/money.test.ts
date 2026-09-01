@@ -66,11 +66,28 @@ describe('parseQtyInput', () => {
     ['0,5', 0.5],
     ['0.5', 0.5],
     ['1,25', 1.25],
+    // `0` là số ĐỌC ĐƯỢC, nghĩa là "bỏ món" — cùng ngữ nghĩa với nút `−` ở qty 1. `null` từ đây trở
+    // đi chỉ còn đúng một nghĩa: không đọc được.
+    ['0', 0],
+    ['999999', 999_999],
   ])('đọc được %s', (input, expected) => {
     expect(parseQtyInput(input)).toBe(expected)
   })
 
-  it.each(['0', '-1', '', 'x', '1,2345'])('từ chối %s', (input) => {
+  it.each([
+    '-1',
+    '',
+    'x',
+    // Ba chữ số sau dấu là hình dạng phân nhóm TIỀN (`money.ts:28`), không phân xử được với thập
+    // phân. Từ chối chứ không đoán: chủ quán gõ "1.000" là định nói một nghìn, không phải một.
+    '1.000',
+    '2.500',
+    '1,000',
+    '1,2345',
+    // RT-9: không có trần phần nguyên thì ~12 chữ số làm `assertMoney` ném ngay trong render của
+    // SalesPage và ErrorBoundary nuốt màn Bán hàng giữa lúc bán.
+    '1234567',
+  ])('từ chối %s', (input) => {
     expect(parseQtyInput(input)).toBeNull()
   })
 

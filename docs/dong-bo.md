@@ -18,6 +18,12 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   được stage.
 - Khoản thu giữ `orderId` là nguồn phát sinh và `allocatedOrderId` là đơn đang nhận tiền. Giá trị `0`
   nghĩa là tiền đã được ghi nhận nhưng đang chờ đối soát; không được xoá phiếu thu để làm hết cảnh báo.
+- `orderLines.note` (ghi chú từng món: "ít đường, mang về") là dữ liệu tiện dụng, KHÔNG phải dữ liệu
+  tiền. Zod bỏ khoá lạ trong im lặng, nên máy hoặc Worker còn chạy bản trước khi có trường này sẽ cắt
+  mất ghi chú trên đường qua sổ chung mà không báo lỗi nào. Quy tắc vận hành: đừng dùng ghi chú từng
+  món làm căn cứ duy nhất cho việc bếp phải làm cho tới khi mọi máy và Worker đã lên cùng một bản.
+  Ghi chú mất không làm sai một đồng nào của sổ — đó là lý do rủi ro này được chấp nhận thay vì phải
+  đánh phiên bản sự kiện.
 
 ## Đường ghi và đọc
 

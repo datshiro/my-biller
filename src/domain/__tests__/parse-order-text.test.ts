@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeName, parseOrderText, type ItemCandidate } from '../order-draft/parse-order-text'
+import { normalizeName, parseOrderText, readOrderText, type ItemCandidate } from '../order-draft/parse-order-text'
 
 const items: ItemCandidate[] = [
   { id: 1, name: 'Phở bò đặc biệt', unit: 'tô', unitPrice: 55_000, costPrice: 30_000 },
@@ -69,5 +69,35 @@ describe('parseOrderText', () => {
 
   it('tách được cả xuống dòng và dấu cộng', () => {
     expect(parseOrderText('2 tra da\n1 bia 333 + 1 pho bo', items)).toHaveLength(3)
+  })
+
+  it('gõ "0 pho" ở ô tìm món thì không thêm dòng nào', () => {
+    // Trước bản này `parseQtyInput('0')` trả `null` nên nhánh `qty === null` chặn hộ. Giờ `0` là số
+    // đọc được, chỗ này phải tự chặn: để lọt là một dòng 0 ly nằm trong giỏ, và `calcLineAmount` ném
+    // khi chốt đơn — ném trong thân render, tức màn trắng giữa lúc bán.
+    expect(parseOrderText('0 pho bo', items)).toEqual([])
+  })
+
+  it('"1.000 pho" không âm thầm thành 1 tô', () => {
+    // Chủ quán gõ kiểu tiền tệ: định nói một nghìn tô. Từ chối, không đoán.
+    expect(parseOrderText('1.000 pho bo', items)).toEqual([])
+  })
+})
+
+describe('readOrderText giữ lại cụm không đọc được', () => {
+  it('cụm bị từ chối không biến mất khi cụm khác khớp', () => {
+    // Đường mất dòng tệ nhất: "1.000 pho bo" bị bỏ, "2 tra da" khớp ⇒ `parsed.length` khác 0 nên
+    // màn Bán hàng xoá trắng ô tìm món, và ý định "một nghìn tô" không còn dấu vết nào để đối chiếu.
+    const đọc = readOrderText('1.000 pho bo + 2 tra da', items)
+    expect(đọc.lines.map((line) => line.itemId)).toEqual([3])
+    expect(đọc.rejected).toEqual(['1.000 pho bo'])
+  })
+
+  it('cụm không khớp mặt hàng nào cũng được giữ lại nguyên văn', () => {
+    expect(readOrderText('2 xyz, 1 tra da', items).rejected).toEqual(['2 xyz'])
+  })
+
+  it('đọc được hết thì không có gì bị giữ lại', () => {
+    expect(readOrderText('2 pho bo, 3 tra da', items).rejected).toEqual([])
   })
 })

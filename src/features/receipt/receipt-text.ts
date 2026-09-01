@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
-import { remainingOf } from '@/domain/order-status'
+import { owingOf, showsDebtBlock, showsPriorDebtOnly } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
 const METHOD: Record<Payment['method'], string> = {
@@ -17,11 +17,17 @@ export function receiptToText({
   order,
   lines,
   payments,
+  priorDebt,
+  totalDue,
+  debtAsOf,
 }: {
   shop: ShopSettings
   order: Order
   lines: readonly OrderLine[]
   payments: readonly Payment[]
+  priorDebt: number
+  totalDue: number
+  debtAsOf: number | null
 }): string {
   const blocks: string[] = []
 
@@ -48,8 +54,19 @@ export function receiptToText({
   for (const payment of payments) {
     money.push(`Đã trả (${METHOD[payment.method]}): ${formatVnd(payment.amount)}`)
   }
-  const remaining = remainingOf(order.total, order.paidAmount)
+  // Xem chú thích cùng chỗ ở `receipt-view.tsx` — hai bản phải dùng chung một định nghĩa "còn nợ".
+  const remaining = owingOf(order)
   if (remaining > 0) money.push(`CÒN NỢ: ${formatVnd(remaining)}`)
+  if (showsDebtBlock(order, totalDue)) {
+    if (showsPriorDebtOnly(priorDebt, totalDue) && debtAsOf !== null) {
+      money.push(`NỢ CŨ CÒN LẠI (đến ${format(debtAsOf, 'HH:mm dd/MM')}): ${formatVnd(totalDue)}`)
+    } else {
+      if (priorDebt > 0 && debtAsOf !== null) {
+        money.push(`NỢ CŨ (đến ${format(debtAsOf, 'HH:mm dd/MM')}): ${formatVnd(priorDebt)}`)
+      }
+      money.push(`TỔNG PHẢI TRẢ: ${formatVnd(totalDue)}`)
+    }
+  }
   blocks.push(money.join('\n'))
 
   if (order.note) blocks.push(`Ghi chú: ${order.note}`)

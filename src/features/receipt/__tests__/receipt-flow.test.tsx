@@ -8,13 +8,25 @@ import { ReceiptPage } from '../receipt-page'
 import { db } from '@/db/db'
 import { createItem, updateItem } from '@/db/repositories/items'
 import { createOrder } from '@/db/repositories/orders'
+import { collectDebt, listCustomerPayments } from '@/db/repositories/payments'
 import { saveShop } from '@/db/repositories/settings'
+import { renderReceiptPng } from '../share-receipt'
+import { receiptSignature, type ReceiptData } from '../use-receipt'
+import { DEFAULT_SHOP } from '@/domain/schema'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 14, 32).getTime()
 
 // html-to-image cần canvas thật; jsdom không có. Ảnh không phải thứ màn này chịu trách nhiệm tạo ra —
 // nó chỉ phải xử lý ĐÚNG kết quả trả về, nên chặn ở ranh giới đó và đo ảnh thật trên trình duyệt.
+// Đếm số lần `useReceipt` thật sự chạy lại truy vấn. Ca "chống chụp thừa" mà không có bằng chứng
+// này thì xanh giả: nó không phân biệt được "chữ ký ổn định nên không chụp lại" với "liveQuery
+// chẳng buồn chạy lại nên chẳng có gì để chụp".
+vi.mock('@/db/repositories/payments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/db/repositories/payments')>()
+  return { ...actual, listCustomerPayments: vi.fn(actual.listCustomerPayments) }
+})
+
 vi.mock('../share-receipt', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../share-receipt')>()
   return {
@@ -261,5 +273,160 @@ describe('phiếu dài chia thành nhiều tấm ảnh', () => {
 
     await waitFor(() => expect(share).toHaveBeenCalledOnce())
     expect(share.mock.calls[0]?.[0].files?.map((file) => file.name)).toEqual(['PBH-260807-A001.png'])
+  })
+})
+
+describe('nợ luỹ kế trên phiếu', () => {
+  /** Khách có sẵn một đơn nợ cũ 100.000, rồi bán thêm 55.000 — nợ tiếp hay trả đủ tuỳ `thanhToan`. */
+  async function seedKhachNoCu(thanhToan: { amount: number; method: 'cash'; note: string } | null = null) {
+    const customerId = await db.customers.add({
+      gid: testGid(202),
+      name: 'Anh Hùng',
+      phone: '',
+      address: '',
+      note: '',
+      createdAt: soldAt,
+      updatedAt: soldAt,
+    })
+    await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Cơm tấm', unit: 'đĩa', unitPrice: 150_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: soldAt - 86_400_000,
+      note: '',
+      payment: { amount: 50_000, method: 'cash', note: '' },
+    })
+    const { id } = await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt,
+      note: '',
+      payment: thanhToan,
+    })
+    return { id, customerId }
+  }
+
+  it('khách còn nợ đơn cũ → phiếu gộp thành một bill có Nợ cũ và TỔNG PHẢI TRẢ', async () => {
+    const { id } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    expect(await screen.findByText(/^Nợ cũ \(đến /)).toBeDefined()
+    const nợCũ = screen.getByText(/^Nợ cũ \(đến /).parentElement as HTMLElement
+    expect(within(nợCũ).getByText('100.000 đ')).toBeDefined()
+
+    const tổng = screen.getByText('TỔNG PHẢI TRẢ').parentElement as HTMLElement
+    expect(within(tổng).getByText('155.000 đ')).toBeDefined()
+  })
+
+  it('đơn này trả đủ mà khách còn nợ cũ → gộp một dòng NỢ CŨ CÒN LẠI, không hai dòng trùng số', async () => {
+    // Đơn hôm nay không góp đồng nào vào nợ nên `Nợ cũ` và `TỔNG PHẢI TRẢ` ra đúng một con số. Đây là
+    // tờ giấy đưa tận tay khách; hai dòng trùng nhau đọc như lỗi in. Gộp, nhưng KHÔNG bỏ trơn dòng nợ
+    // cũ: `TỔNG PHẢI TRẢ` đứng một mình ngay dưới `Đã trả` sẽ bị đọc thành tổng của đơn hôm nay.
+    const { id } = await seedKhachNoCu({ amount: 55_000, method: 'cash', note: '' })
+    renderReceipt(id)
+
+    const gộp = (await screen.findByText(/^NỢ CŨ CÒN LẠI \(đến /)).parentElement as HTMLElement
+    expect(within(gộp).getByText('100.000 đ')).toBeDefined()
+    expect(screen.queryByText('TỔNG PHẢI TRẢ')).toBeNull()
+    expect(screen.queryByText(/^Nợ cũ \(đến /)).toBeNull()
+    // Khối tiền của đơn cũng không được mọc dòng "Còn nợ": đơn này đã trả đủ.
+    expect(screen.queryByText('Còn nợ')).toBeNull()
+  })
+
+  it('thu bớt nợ cũ → phiếu đang mở chụp lại ảnh, không cầm số cũ', async () => {
+    // Bẫy CHỤP THIẾU. Thêm ba trường nợ vào phiếu mà quên thêm vào `receiptSignature` thì màn hiện
+    // số mới trong khi nút CHIA SẺ vẫn gửi ảnh PNG mang số cũ — khách nhận qua Zalo một tờ sai.
+    const { id, customerId } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    await screen.findByText('155.000 đ')
+    const lầnĐầu = vi.mocked(renderReceiptPng).mock.calls.length
+
+    await collectDebt({ customerId, amount: 40_000, method: 'cash', note: '', paidAt: soldAt })
+
+    await waitFor(() => expect(screen.getByText('115.000 đ')).toBeDefined())
+    await waitFor(() => expect(vi.mocked(renderReceiptPng).mock.calls.length).toBeGreaterThan(lầnĐầu))
+  })
+
+  it('truy vấn chạy lại mà nợ không đổi trong cùng một phút → không chụp lại thừa', async () => {
+    // Bẫy CHỤP THỪA, đối nghịch với ca trên. Bán thêm cho CHÍNH khách này một đơn đã trả đủ: bảng
+    // `orders` đổi nên `listOrdersByCustomer` chạy lại thật, nhưng đơn trả đủ không nợ gì nên tổng
+    // nợ y nguyên. Để `debtAsOf` nguyên mili-giây thì chữ ký vẫn đổi và phiếu chụp lại ảnh vô ích;
+    // máy yếu treo ở "Đang chuẩn bị ảnh…".
+    const { id, customerId } = await seedKhachNoCu()
+    renderReceipt(id)
+
+    await screen.findByText('155.000 đ')
+    await waitFor(() => expect(vi.mocked(renderReceiptPng).mock.calls.length).toBeGreaterThan(0))
+    const chụpTrước = vi.mocked(renderReceiptPng).mock.calls.length
+    const truyVấnTrước = vi.mocked(listCustomerPayments).mock.calls.length
+
+    await createOrder({
+      customerId,
+      customerName: 'Anh Hùng',
+      lines: [{ itemId: null, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt,
+      note: '',
+      payment: { amount: 3_000, method: 'cash', note: '' },
+    })
+
+    // Trước hết phải chứng minh liveQuery ĐÃ chạy lại — không thì phần dưới không đo gì cả.
+    await waitFor(() =>
+      expect(vi.mocked(listCustomerPayments).mock.calls.length).toBeGreaterThan(truyVấnTrước),
+    )
+    expect(screen.getByText('155.000 đ')).toBeDefined()
+    expect(vi.mocked(renderReceiptPng).mock.calls.length).toBe(chụpTrước)
+  })
+})
+
+describe('receiptSignature', () => {
+  const data = (over: Partial<ReceiptData> = {}): ReceiptData => ({
+    shop: DEFAULT_SHOP,
+    order: {
+      id: 1, gid: testGid(1), code: 'A1', originalCode: 'A1', customerId: 1, customerName: 'Anh Hùng', subtotal: 30_000,
+      discount: 0, surcharge: 0, total: 30_000, paidAmount: 30_000, status: 'paid', soldAt,
+      note: '', createdAt: soldAt, updatedAt: soldAt,
+    },
+    lines: [],
+    payments: [],
+    priorDebt: 0,
+    totalDue: 0,
+    debtAsOf: soldAt,
+    ...over,
+  })
+
+  it('mốc đọc nợ KHÔNG vào chữ ký khi phiếu không vẽ khối nợ', () => {
+    // Chiều ngược của luật "thứ gì in trên phiếu thì phải nằm trong chữ ký": thứ KHÔNG in thì đừng
+    // nằm trong chữ ký. `debtAsOf` là đồng hồ sống, nên để nó vào vô điều kiện thì mỗi lần bảng
+    // orders/payments đổi ở bất kỳ đâu qua mốc phút là phiếu chụp lại một tờ y nguyên — nút CHIA SẺ
+    // nháy về "Đang chuẩn bị ảnh…" giữa lúc người bán đưa máy cho khách.
+    const trảĐủ = data()
+    expect(receiptSignature(trảĐủ)).toBe(receiptSignature(data({ debtAsOf: soldAt + 60_000 })))
+  })
+
+  it('khách có tiền trả trước chưa phân bổ: vẽ khối nợ nhưng KHÔNG in mốc, nên mốc không vào chữ ký', () => {
+    // `priorDebt = max(0, totalDue − owingOf(order))` bằng 0 khi khách trả trước nhiều hơn nợ. Khối nợ
+    // vẫn vẽ (`TỔNG PHẢI TRẢ` khác `Còn nợ`) nhưng dòng "Nợ cũ (đến HH:mm)" thì không — nên mốc đó
+    // không được phép làm phiếu chụp lại. Cổng chữ ký chỉ khớp tầng ngoài là lọt đúng ca này.
+    const cóCredit = {
+      order: { ...data().order, paidAmount: 0, status: 'unpaid' as const, total: 30_000, subtotal: 30_000 },
+      priorDebt: 0,
+      totalDue: 5_000,
+    }
+    expect(receiptSignature(data(cóCredit))).toBe(receiptSignature(data({ ...cóCredit, debtAsOf: soldAt + 60_000 })))
+  })
+
+  it('nhưng VẪN vào chữ ký khi mốc đó được in ra', () => {
+    // `priorDebt` phải > 0 cùng lúc: đây mới là trạng thái `receiptDebt` dựng ra được
+    // (prior = max(0, totalDue − owingOf), mà đơn của `data()` đã trả đủ nên owingOf = 0).
+    const đangNợ = { priorDebt: 100_000, totalDue: 100_000 }
+    expect(receiptSignature(data(đangNợ))).not.toBe(receiptSignature(data({ ...đangNợ, debtAsOf: soldAt + 60_000 })))
   })
 })

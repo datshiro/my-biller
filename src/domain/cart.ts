@@ -45,6 +45,12 @@ export type CartAction =
       line: Omit<CartLine, 'key' | 'note' | 'priceSource' | 'retailPrice'> & { note?: string }
       book: PriceBook
     }
+  /**
+   * Đặt lại nguyên trạng một dòng vừa bị gỡ (nút Hoàn lại). Cố ý KHÔNG đi qua `addLine`: `addLine`
+   * tính lại `unitPrice` theo chế độ giá hiện hành và ép `priceSource: 'catalog'`, nên dòng
+   * giá-gõ-tay sẽ bị bảng giá sỉ đè mất giá riêng. Hoàn lại mà đổi tiền thì không phải hoàn lại.
+   */
+  | { type: 'restoreLine'; line: CartLine }
   /** Đổi giá **cả giỏ** một lượt. Payload cố ý không mang danh mục — xem `retailPrice`. */
   | { type: 'applyPriceMode'; mode: PriceMode; book: PriceBook }
   | { type: 'setQty'; key: string; qty: number }
@@ -119,6 +125,10 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
     case 'addItem': {
       const { item, qty = 1, book } = action
       if (item.id === undefined) throw new Error('Mặt hàng chưa lưu thì chưa thêm vào giỏ được.')
+      // Khoan dung chứ không ném, khác dòng trên: `qty <= 0` là bất biến chung của giỏ, và hai đường
+      // chèn còn lại (`addLine`, `restoreLine`) cũng xử bằng `return cart`. Ném ở đây là ném giữa
+      // thân render. Món chưa lưu thì khác — đó là lỗi lập trình không có nghĩa nghiệp vụ nào.
+      if (qty <= 0) return cart
 
       const retailPrice = item.unitPrice
       const unitPrice = resolveUnitPrice({ itemId: item.id, retailPrice }, cart.priceMode, book)
@@ -139,8 +149,21 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       }
     }
 
+    case 'restoreLine':
+      // Cùng bất biến với `addLine`/`setQty`/`updateLine`: không đường chèn nào được phép để lọt
+      // qty <= 0. Mở một action mới mà không gác là mở lại đúng cái lỗ vừa bịt.
+      if (action.line.qty <= 0) return cart
+      // Dòng đã quay lại giỏ rồi thì hoàn lại là KHÔNG LÀM GÌ, không phải cộng thêm. `upsert` cộng
+      // dồn qty, nên bỏ nhánh này là biến nút Hoàn lại thành nút nhân đôi số lượng: bỏ 3 tô, chạm
+      // lại món 3 lần, rồi bấm Hoàn lại theo quán tính ⇒ đơn ghi 6 tô.
+      if (cart.lines.some((line) => line.key === action.line.key)) return cart
+      return { ...cart, lines: upsert(cart.lines, action.line) }
+
     case 'addLine': {
       const { line, book } = action
+      // Bất biến "không dòng giỏ nào có qty <= 0" phải toàn phần, không phụ thuộc call site nhớ chặn.
+      // Mọi đường chèn đều gác: `setQty`, `updateLine`, `addItem`, `restoreLine` và chỗ này.
+      if (line.qty <= 0) return cart
       const retailPrice = line.unitPrice
       const unitPrice = resolveUnitPrice({ itemId: line.itemId, retailPrice }, cart.priceMode, book)
       // Món ngoài danh mục không có giá riêng nào để tra, và cũng không có giá lẻ để quay về.

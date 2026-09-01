@@ -131,7 +131,11 @@ Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nố
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    4    ${MÁY_A_PAGE}
-    Bảng Máy Phải Có Số Dòng    orders    4    ${MÁY_B_PAGE}
+    # Máy B hội tụ độc lập với máy A, không ăn theo. Đo ra hai máy cách nhau dưới 0,2s nên khẳng định
+    # trần ở đây xanh gần như mọi lượt — rồi thua đúng lượt máy B chậm hơn, và thua tức thì vì nó
+    # không có ngưỡng nào để chờ.
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng
+    ...    orders    4    ${MÁY_B_PAGE}
     # Outbox rỗng chỉ chứng minh Worker đã nhận thao tác. Phiếu thu còn sinh thêm bản order chuẩn
     # từ Worker, nên chờ đúng điều kiện hội tụ thay vì đọc giữa hai sự kiện hoặc Sleep cứng.
     Hai Bảng Phải Hội Tụ    orders
@@ -358,7 +362,36 @@ Tab dẫn đầu bị treo thì epoch mới fence tab cũ
     Wait Until Keyword Succeeds    40x    500ms    Bảng Máy Phải Có Số Dòng
     ...    orders    3    ${MÁY_B_PAGE}
     Epoch Máy Phải Từ    ${MÁY_A_PAGE}    2
-    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    # `Bán Nhanh` đẩy HAI sự kiện: đơn rồi phiếu thu. Vòng chờ trên chỉ chứng minh sự kiện ĐƠN đã tới
+    # máy B, nên khẳng định trần ở đây là đua với vòng đi-về của phiếu thu. Trên loopback vòng đó xong
+    # trong khe giữa hai dòng nên ca luôn xanh; trên Worker thật nó thua chừng một nửa số lượt.
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+
+Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
+    [Documentation]    Cửa tử của trường mới: zod strip khoá lạ TRONG IM LẶNG, và Worker dùng chính
+    ...    `OrderLineSchema` để nhận event rồi THAY payload bằng bản đã parse. Worker chạy bản cũ sẽ
+    ...    cắt mất `note` trước khi ghi vào sổ chung — máy A giữ ghi chú cục bộ, máy B không bao giờ
+    ...    thấy, và không một lỗi nào hiện ra. Ca này phải nằm ở suite hai máy: máy chưa ghép đặt
+    ...    `enabled = false` nên không sinh sự kiện sync nào, ca có xanh cũng chẳng chứng minh gì.
+    Chọn Máy A
+    Click    ${NAV_BAN}
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Ghi chú    ít đường
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Hai Bảng Phải Hội Tụ    orderLines
+
+    # Lọc theo GHI CHÚ chứ không theo tên món: bộ mẫu đã có sẵn một dòng "Cà phê sữa" (seed.ts) nên
+    # bốc phần tử [0] theo tên là bốc nhầm dòng seed, và ca sẽ xanh mà không đo gì. `orderId` cũng
+    # không so được giữa hai máy — applier localize refs nên id là số cục bộ của từng máy.
+    ${dòng_b}=    Đọc Bảng    orderLines    ${MÁY_B_PAGE}
+    ${có_ghi_chú}=    Evaluate    [d for d in $dòng_b if d.get('note') == 'ít đường']
+    Length Should Be    ${có_ghi_chú}    1
+    ...    Ghi chú bị cắt trên đường qua sổ chung — máy B không thấy thứ máy A đã ghi.
+    Should Be Equal    ${có_ghi_chú}[0][name]    Cà phê sữa
 
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
@@ -384,9 +417,16 @@ Bấm Nút Thu Hai Máy
     Should Be Equal    ${found}[0][status]    ${trạng_thái}
 
 Phiếu Của Đơn Phải Chưa Phân Bổ
+    [Documentation]    Chờ ĐỦ HAI bảng, không chỉ `payments`. Nhãn "Khoản thu chờ xử lý" trên màn chi
+    ...    tiết đơn cần cả `order.status == 'void'` (`order-detail-page.tsx:58` → `voidedRetailOrder`),
+    ...    nên chờ mỗi `allocatedOrderId == 0` là chờ hụt: máy nhận xong `payments` mà `orders` chưa về
+    ...    thì keyword này đã xanh, trang render "Đã trả", và bước `Chờ Thấy Chữ` sau đó đếm ngược 15
+    ...    giây trong lúc `orders` còn đang trên đường. Đúng cách ca "Thiết bị cũ không ghi đè khoản
+    ...    thu đã hoàn" đỏ trên CI và trên staging — chỉ đỏ khi chạy cả bộ, chạy riêng thì không.
     [Arguments]    ${order_gid}    ${page}
     ${orders}=    Đọc Bảng    orders    ${page}
     ${order}=    Evaluate    [row for row in $orders if row['gid'] == $order_gid][0]
+    Should Be Equal    ${order}[status]    void    Đơn chưa về trạng thái huỷ trên máy này.
     ${payments}=    Đọc Bảng    payments    ${page}
     ${found}=    Evaluate    [row for row in $payments if row['orderId'] == $order['id']]
     Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
