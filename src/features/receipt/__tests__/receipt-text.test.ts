@@ -55,8 +55,11 @@ describe('receiptToText', () => {
 
     expect(text).toContain('Số: PBH-260807-001')
     expect(text).toContain('07/08/2026 14:32')
-    expect(text).toContain('Phở bò — 2 × 55.000 = 110.000')
+    // Fixture dòng Phở bò mang sẵn `note: 'ít hành'`. Assert cũ không có ngoặc nên nó xanh dù bản
+    // chữ chưa từng in ghi chú — người bếp đọc tin Zalo không thấy thứ người bán đã ghi.
+    expect(text).toContain('Phở bò (ít hành) — 2 × 55.000 = 110.000')
     expect(text).toContain('Trà đá — 1 × 3.000 = 3.000')
+    expect(text).not.toContain('Trà đá ()')
     expect(text).toContain('TỔNG CỘNG: 113.000 đ')
     expect(text).toContain('Đã trả (tiền mặt): 113.000 đ')
   })

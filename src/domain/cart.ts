@@ -87,13 +87,18 @@ export const emptyCart = (): Cart => ({
  * dòng tới đều bị bỏ. Không có nó thì: giỏ có 1 tô gõ tay 38.000 + 3 tô giá lẻ 55.000, bật SỈ đúng giá
  * 38.000 → dòng catalog trùng khoá dòng manual → gộp thành 1 dòng `manual` qty 4. Tắt SỈ không đụng dòng
  * manual, nên 4 tô bán 38.000 thay vì 1×38.000 + 3×55.000: **mất 51.000đ, không một lỗi nào hiện ra**.
+ *
+ * `note` nằm CUỐI khoá để 3 ly đá chung và 2 ly đá riêng của cùng một món cùng một giá tách được thành
+ * hai dòng. Đặt cuối và ngăn bằng `~` là đủ chống nhập nhằng: mọi trường phía trước có khuôn cố định và
+ * `priceSource` là enum không chứa `~`, nên ghi chú tự do không lấn được sang trường nào.
  */
 const lineKey = (
   itemId: number | null,
   name: string,
   unitPrice: number,
   priceSource: CartLine['priceSource'],
-) => `${itemId ?? `x:${name}`}@${unitPrice}#${priceSource}`
+  note: string,
+) => `${itemId ?? `x:${name}`}@${unitPrice}#${priceSource}~${note}`
 
 function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const at = lines.findIndex((line) => line.key === incoming.key)
@@ -110,13 +115,70 @@ const mapLine = (lines: CartLine[], key: string, change: (line: CartLine) => Car
   lines.map((line) => (line.key === key ? change(line) : line))
 
 /**
+ * Như `mapLine`, nhưng dành cho thay đổi làm ĐỔI KHOÁ (giá hoặc ghi chú). Nếu khoá mới đụng một dòng
+ * khác thì gộp lại, vì để hai bản ghi mang chung một khoá là mở cửa cho `mapLine`/`removeLine` tác
+ * động cả hai cùng lúc.
+ *
+ * Dòng sống sót giữ MỌI TRƯỜNG của dòng vừa sửa, không của dòng bị đụng — cố ý ngược khuôn `upsert`:
+ * người bán vừa nói ra ý định của mình trên đúng dòng này. Ca B5b khoá lựa chọn đó bằng test.
+ */
+function mapLineRekey(
+  lines: CartLine[],
+  key: string,
+  change: (line: CartLine) => CartLine,
+): CartLine[] {
+  const at = lines.findIndex((line) => line.key === key)
+  const target = lines[at]
+  if (!target) return lines
+
+  const changed = change(target)
+  // Gác bằng CHỈ SỐ chứ không bằng so khoá: mở sheet rồi bấm XONG mà không đổi gì thì khoá mới bằng
+  // khoá cũ, so khoá sẽ bắt trúng chính nó và nhân đôi số lượng.
+  const hit = lines.findIndex((line, index) => index !== at && line.key === changed.key)
+  const collision = lines[hit]
+  if (!collision) return lines.map((line, index) => (index === at ? changed : line))
+
+  const merged = { ...changed, qty: changed.qty + collision.qty }
+  return lines.flatMap((line, index) => {
+    if (index === at) return [merged]
+    if (index === hit) return []
+    return [line]
+  })
+}
+
+/** Tách ghi chú thành từng nhãn. Khớp NGUYÊN phần tử — `includes` sẽ coi "Đá chung nhiều" là có nhãn
+ *  "Đá chung" và làm hỏng luật loại trừ ở sheet sửa dòng. */
+const noteTokens = (note: string): string[] =>
+  note
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+/**
+ * Bật/tắt một nhãn trong ghi chú dòng, giữ nguyên phần người bán tự gõ. Là toggle **thuần**: nó không
+ * biết luật nghiệp vụ nào (ví dụ hai nhãn đá loại trừ nhau) — luật đó thuộc về chỗ dựng giao diện.
+ */
+export function toggleNoteToken(note: string, token: string): string {
+  const tokens = noteTokens(note)
+  const next = tokens.includes(token) ? tokens.filter((part) => part !== token) : [...tokens, token]
+  return next.join(', ')
+}
+
+export const hasNoteToken = (note: string, token: string): boolean => noteTokens(note).includes(token)
+
+/**
  * Người bán tự đặt giá cho một dòng ⇒ dòng đó thành `manual` và từ đó `applyPriceMode` không đụng vào
  * nữa. Chỉ đổi khi giá **thật sự khác**: mở sheet sửa rồi bấm lưu mà không đổi giá thì dòng vẫn là giá
  * danh mục, bật/tắt SỈ vẫn hoàn nguyên được.
  */
 function withPrice(line: CartLine, unitPrice: number): CartLine {
   const priceSource = unitPrice === line.unitPrice ? line.priceSource : 'manual'
-  return { ...line, unitPrice, priceSource, key: lineKey(line.itemId, line.name, unitPrice, priceSource) }
+  return {
+    ...line,
+    unitPrice,
+    priceSource,
+    key: lineKey(line.itemId, line.name, unitPrice, priceSource, line.note),
+  }
 }
 
 export function cartReducer(cart: Cart, action: CartAction): Cart {
@@ -135,7 +197,7 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       return {
         ...cart,
         lines: upsert(cart.lines, {
-          key: lineKey(item.id, item.name, unitPrice, 'catalog'),
+          key: lineKey(item.id, item.name, unitPrice, 'catalog', ''),
           itemId: item.id,
           name: item.name,
           unit: item.unit,
@@ -172,7 +234,7 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
         ...cart,
         lines: upsert(cart.lines, {
           ...line,
-          key: lineKey(line.itemId, line.name, unitPrice, priceSource),
+          key: lineKey(line.itemId, line.name, unitPrice, priceSource, line.note ?? ''),
           unitPrice,
           retailPrice,
           priceSource,
@@ -191,7 +253,7 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
         return upsert(acc, {
           ...line,
           unitPrice,
-          key: lineKey(line.itemId, line.name, unitPrice, 'catalog'),
+          key: lineKey(line.itemId, line.name, unitPrice, 'catalog', line.note),
         })
       }, [])
 
@@ -211,19 +273,30 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
 
     case 'setUnitPrice':
       // Đổi giá là đổi luôn khoá dòng, nếu không hai dòng cùng mặt hàng sẽ đụng khoá nhau.
-      return { ...cart, lines: mapLine(cart.lines, action.key, (line) => withPrice(line, action.unitPrice)) }
+      return {
+        ...cart,
+        lines: mapLineRekey(cart.lines, action.key, (line) => withPrice(line, action.unitPrice)),
+      }
 
+    // HIỆN CHƯA CÓ CONSUMER nào trong app — sheet sửa dòng gửi `updateLine`. Giữ lại vì nó là đường
+    // đổi ghi chú duy nhất không đụng tới giá; nếu đi tìm chỗ gọi thì đừng tìm nữa, không có.
+    // Đặt note TRƯỚC rồi mới qua `withPrice`: khoá phải tính theo ghi chú mới, và truyền đúng giá cũ
+    // nên `priceSource` không bị đổi.
     case 'setLineNote':
-      return { ...cart, lines: mapLine(cart.lines, action.key, (line) => ({ ...line, note: action.note })) }
+      return {
+        ...cart,
+        lines: mapLineRekey(cart.lines, action.key, (line) =>
+          withPrice({ ...line, note: action.note }, line.unitPrice),
+        ),
+      }
 
     case 'updateLine': {
       if (action.qty <= 0) return cartReducer(cart, { type: 'removeLine', key: action.key })
       return {
         ...cart,
-        lines: mapLine(cart.lines, action.key, (line) => ({
-          ...withPrice(line, action.unitPrice),
+        lines: mapLineRekey(cart.lines, action.key, (line) => ({
+          ...withPrice({ ...line, note: action.note }, action.unitPrice),
           qty: action.qty,
-          note: action.note,
         })),
       }
     }
@@ -250,7 +323,8 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
         ...action.cart,
         lines: action.cart.lines.map((line) => ({
           ...line,
-          key: lineKey(line.itemId, line.name, line.unitPrice, line.priceSource),
+          note: line.note ?? '',
+          key: lineKey(line.itemId, line.name, line.unitPrice, line.priceSource, line.note ?? ''),
         })),
       }
 

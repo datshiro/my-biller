@@ -14,6 +14,16 @@ Test Tags           phieu
 ${LINES_PER_PAGE}    10
 ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
 
+# Token `--color-ink` (src/styles/index.css). Máy in nhiệt chỉ có đen hoặc trắng, nên mọi chữ trên
+# phiếu phải ra đúng màu này — bất kỳ giá trị nào khác là một vùng bị dither thành chấm thưa.
+${MÀU_MỰC}          rgb(20, 24, 29)
+${ĐỊA_CHỈ_PHIẾU}    css=.receipt-view p:text-is("12 Lê Lợi, Q1")
+${HEADER_BẢNG}      css=.receipt-view thead th >> nth=0
+${Ô_TÊN_MÓN}        css=.receipt-view tbody td >> nth=0
+${GHI_CHÚ_ĐƠN}      css=.receipt-view p:has-text("Ghi chú:")
+${CHÂN_PHIẾU}       css=.receipt-view p:text-is("Cảm ơn quý khách!")
+${DÒNG_TỔNG_CỘNG}    css=.receipt-view span:text-is("Tổng cộng")
+
 
 *** Test Cases ***
 Phiếu hiện đủ đầu phiếu: tên quán, số phiếu, khách và giờ bán
@@ -244,6 +254,74 @@ Phiếu của đơn đã huỷ không đòi tiền, dù sổ vẫn ghi paidAmoun
     Không Được Thấy Chữ    TỔNG PHẢI TRẢ
 
 
+Phiếu không còn chữ xám: địa chỉ, header bảng và ghi chú đều màu mực
+    [Documentation]    Đầu in nhiệt là 1-bit, không có mức xám: nó dither `#5a6673` thành lưới chấm
+    ...    thưa, và trên giấy nhiệt lưới đó đọc ra "chữ mờ" — đúng lời chủ quán kêu, có ảnh in thử
+    ...    làm bằng. Không chữa được bằng "in đậm hơn", chỉ chữa được bằng bỏ hẳn màu xám khỏi phiếu.
+    ...    Gỡ ca này là mở lại đúng lỗi khách đã kêu.
+    [Tags]    regression
+    Bán Nhanh    Phở bò
+    ${đơn}=    Đơn Mới Nhất
+    Mở Màn    /don/${đơn}[id]
+    Điền Ô    Ghi chú    Giao trước 5 giờ
+    Bấm Nút    Lưu ghi chú
+    Bấm Nút    XEM PHIẾU
+    Chờ Thấy Chữ    Ghi chú: Giao trước 5 giờ
+
+    Get Style    ${ĐỊA_CHỈ_PHIẾU}    color    ==    ${MÀU_MỰC}
+    Get Style    ${HEADER_BẢNG}    color    ==    ${MÀU_MỰC}
+    Get Style    ${GHI_CHÚ_ĐƠN}    color    ==    ${MÀU_MỰC}
+    Get Style    ${CHÂN_PHIẾU}    color    ==    ${MÀU_MỰC}
+
+Phiếu dùng cỡ chữ nhỏ cho thân bảng và địa chỉ
+    [Documentation]    Bộ cỡ chữ do chủ quán tự thực nghiệm trên chính máy in nhiệt 80mm rồi chốt.
+    ...    Con số px là quyết định của khách, không phải hằng số chọn cho đẹp — đổi phải hỏi lại.
+    Bán Nhanh    Phở bò
+    Get Style    ${ĐỊA_CHỈ_PHIẾU}    font-size    ==    11px
+    Get Style    ${Ô_TÊN_MÓN}    font-size    ==    11px
+    Get Style    ${HEADER_BẢNG}    font-size    ==    10px
+    Get Style    ${DÒNG_TỔNG_CỘNG}    font-size    ==    13px
+
+Header cột đơn giá rút thành Đ.GIÁ
+    [Documentation]    "Đơn giá" chiếm cột rộng nên cột tên món hẹp lại và tên dài vỡ thêm dòng.
+    ...    Chuỗi viết hoa sẵn trong nguồn: Robot khớp text theo DOM, không theo `text-transform`.
+    Bán Nhanh    Phở bò
+    Chờ Thấy Chữ    Đ.GIÁ
+    Không Được Thấy Chữ    Đơn giá
+
+Ghi chú từng món hiện trên phiếu dưới tên món
+    [Documentation]    Ghi chú từng dòng đã xuống sổ (ban-hang.robot) nhưng chưa từng lên tờ giấy
+    ...    đưa bếp. Dòng note là dòng thứ ba trong ô tên món một cách CÓ CHỦ Ý — tiêu chí "tên món
+    ...    không quá 2 dòng" chỉ tính phần tên.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Điền Ô    Ghi chú    Đá riêng
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Chờ Thấy Chữ    Đá riêng
+
+Bản in giữ khung 360px chứ không trải rộng theo màn hình
+    [Documentation]    `.receipt-view{width:auto !important}` là dòng đã làm chữ in ra **3,44mm**
+    ...    trong khi cùng phiếu đó ra ảnh chỉ 2,60mm: nó cắt đứt khung 360px khỏi đường
+    ...    `window.print()`, nên bản in bố cục lại theo bề ngang màn hình và bẻ dòng ở chỗ khác hẳn
+    ...    tấm ảnh gửi khách. Nới `RECEIPT_WIDTH` KHÔNG chữa được — nó chỉ chạm đường ảnh.
+    ...    Giờ khung giữ nguyên 360px rồi `transform: scale()` xuống 72mm, nên hai đường dùng chung
+    ...    đúng một lượt bố cục.
+    [Tags]    regression
+    [Teardown]    Trả Media Về Mặc Định
+    Bán Nhanh    Phở bò
+    Emulate Media    media=print
+
+    Get Style    css=.receipt-view    width    ==    360px
+    ${bề_ngang}=    Evaluate JavaScript    css=.receipt-view
+    ...    (view) => view.getBoundingClientRect().width
+    Should Be True    abs(${bề_ngang} - 272.1) < 1
+    ...    Phần mực trên giấy phải rộng đúng 72mm (272,1px); đo được ${bề_ngang}px.
+
+
 *** Keywords ***
 Thêm Nhanh Mặt Hàng
     [Arguments]    ${tên}    ${giá}
@@ -271,3 +349,9 @@ Thêm Nhanh Khách
     Điền Ô    Tên khách hàng *    ${tên}
     Bấm Nút    LƯU KHÁCH HÀNG
     Chờ Thấy Chữ    ${tên}
+
+Trả Media Về Mặc Định
+    [Documentation]    `media=${None}` KHÔNG reset — nó gửi `not_set` và wrapper bỏ qua. Phải
+    ...    `media=null` mới tắt emulation. Đặt ở Teardown để ca chết giữa chừng cũng không bỏ lại
+    ...    page ở media print.
+    Emulate Media    media=null

@@ -9,7 +9,20 @@ const browserGlobalsDisabled = Object.fromEntries(
 )
 
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist', 'coverage', 'node_modules', 'worker/.wrangler'] },
+  // `.agentkit`, `.claude`, `.grok`: thư mục công cụ của trợ lý, không phải mã của app. Chúng không
+  // được commit nên để lọt vào lint là làm cổng đỏ vì thứ không ai trong repo sửa được.
+  {
+    ignores: [
+      'dist',
+      'dev-dist',
+      'coverage',
+      'node_modules',
+      'worker/.wrangler',
+      '.agentkit',
+      '.claude',
+      '.grok',
+    ],
+  },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

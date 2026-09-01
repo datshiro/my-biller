@@ -27,10 +27,13 @@
   /* Trên màn hình phiếu nằm trong một cái khung có viền cho ra dáng tờ giấy. In ra giấy thật thì
      khung đó thừa — và nếu để nguyên `w-fit` của nó thì nội dung tràn ra ngoài viền. */
   .receipt-frame {
-    width: auto;
+    width: 72mm;
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    /* Hộp BỐ CỤC của phiếu vẫn rộng 360px, chỉ phần vẽ mới bị `scale` xuống 72mm — nên frame
+       "tràn" theo nghĩa layout dù không có nét mực nào ra ngoài. Cắt phần tràn vô hình đó. */
+    overflow: hidden;
   }
 
   /* Phiếu dài chia thành nhiều trang: mỗi trang ra một tờ giấy riêng, khớp với các tấm ảnh gửi khách. */
@@ -38,15 +41,21 @@
     break-before: page;
   }
 
-  /* Bề ngang 360px là để ảnh PNG ổn định; in ra giấy thì cứ trải hết khổ.
-     Giữ nguyên padding của phiếu — bỏ đi thì chữ dính sát mép. */
+  /* Bản in dùng CHUNG một bố cục với ảnh PNG: giữ nguyên khung 360px (đặt bằng inline style từ
+     `RECEIPT_WIDTH`, cố ý không khai lại ở đây để hai chỗ không trôi ra khỏi nhau) rồi `scale`
+     xuống đúng 72mm giấy. `transform` là phép VẼ chứ không phải phép BỐ CỤC, nên điểm vỡ dòng
+     giống hệt đường ảnh — trước đây `width: auto !important` cắt đứt đúng chỗ đó và làm chữ
+     in ra 3,44mm trong khi ảnh ra 2,60mm. Nới `RECEIPT_WIDTH` không chữa được nó. */
   .receipt-view {
-    width: auto !important;
     max-width: none;
     margin: 0;
+    /* 72mm / 360px = 0,755906 */
+    transform: scale(0.755906);
+    transform-origin: top left;
   }
 
   @page {
-    margin: 8mm;
+    size: 80mm 350mm;
+    margin: 4mm;
   }
 }

@@ -11,8 +11,8 @@ const METHOD: Record<Payment['method'], string> = {
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex justify-between gap-3 py-0.5 ${strong ? 'text-[15px] font-bold' : 'text-[13px]'}`}>
-      <span className={strong ? '' : 'text-muted'}>{label}</span>
+    <div className={`flex justify-between gap-3 py-0.5 ${strong ? 'text-[13px] font-bold' : 'text-[11px]'}`}>
+      <span>{label}</span>
       <span className="money whitespace-nowrap">{value}</span>
     </div>
   )
@@ -66,8 +66,8 @@ export function ReceiptView({
       {hasShopHeader ? (
         <div className="text-center">
           {shop.name ? <p className="text-[17px] font-bold uppercase">{shop.name}</p> : null}
-          {shop.address ? <p className="text-[12px] text-muted">{shop.address}</p> : null}
-          {shop.phone ? <p className="text-[12px] text-muted">{shop.phone}</p> : null}
+          {shop.address ? <p className="text-[11px]">{shop.address}</p> : null}
+          {shop.phone ? <p className="text-[11px]">{shop.phone}</p> : null}
         </div>
       ) : null}
 
@@ -75,20 +75,20 @@ export function ReceiptView({
         PHIẾU BÁN HÀNG
       </h2>
 
-      <div className="mt-2 flex justify-between text-[12px] text-muted">
+      <div className="mt-2 flex justify-between text-[11px]">
         <span>Số: {order.code}</span>
         <span>{format(order.soldAt, 'dd/MM/yyyy HH:mm')}</span>
       </div>
-      <p className="mt-1 text-[13px]">
+      <p className="mt-1 text-[11px]">
         Khách: <span className="font-semibold">{order.customerName}</span>
       </p>
 
-      <table className="mt-3 w-full border-collapse text-[13px]">
+      <table className="mt-3 w-full border-collapse text-[11px]">
         <thead>
-          <tr className="border-b border-line text-[11px] uppercase text-muted">
+          <tr className="border-b border-ink text-[10px] uppercase">
             <th className="py-1 text-left font-semibold">Mặt hàng</th>
             <th className="py-1 text-right font-semibold">SL</th>
-            <th className="py-1 text-right font-semibold">Đơn giá</th>
+            <th className="py-1 text-right font-semibold">Đ.GIÁ</th>
             <th className="py-1 text-right font-semibold">T.tiền</th>
           </tr>
         </thead>
@@ -97,7 +97,10 @@ export function ReceiptView({
             <tr key={line.id} className="align-top">
               <td className="py-1 pr-2">
                 {line.name}
-                {line.unit ? <span className="text-muted"> ({line.unit})</span> : null}
+                {line.unit ? <span> ({line.unit})</span> : null}
+                {/* Ghi chú đứng riêng một dòng dưới tên: bếp đọc "Đá riêng" của ĐÚNG dòng nào, và
+                    tên món không bị đẩy vỡ thêm dòng vì một chuỗi nối đuôi. */}
+                {line.note ? <span className="block text-[10px]">{line.note}</span> : null}
               </td>
               <td className="money py-1 pl-1 text-right">{formatQty(line.qty)}</td>
               <td className="money py-1 pl-2 text-right">{formatAmount(line.unitPrice)}</td>
@@ -109,7 +112,7 @@ export function ReceiptView({
 
       {isLast ? (
         <>
-          <div className="mt-3 border-t border-dashed border-line pt-2">
+          <div className="mt-3 border-t border-dashed border-ink pt-2">
             {adjusted ? (
               <>
                 <Row label="Hàng" value={formatVnd(order.subtotal)} />
@@ -128,7 +131,7 @@ export function ReceiptView({
               tiền khách nợ tất cả. Điều kiện vẽ nằm trong `showsDebtBlock` để bản chữ và chữ ký ảnh
               dùng đúng một định nghĩa — lý do chọn cổng đó ghi ngay tại hàm. */}
           {showsDebtBlock(order, totalDue) ? (
-            <div className="mt-2 border-t border-dashed border-line pt-2">
+            <div className="mt-2 border-t border-dashed border-ink pt-2">
               {showsPriorDebtOnly(priorDebt, totalDue) && debtAsOf !== null ? (
                 <Row label={`NỢ CŨ CÒN LẠI (đến ${format(debtAsOf, 'HH:mm dd/MM')})`} value={formatVnd(totalDue)} strong />
               ) : (
@@ -143,13 +146,13 @@ export function ReceiptView({
           ) : null}
 
           {order.note ? (
-            <p className="mt-3 border-t border-dashed border-line pt-2 text-[12px] text-muted">
+            <p className="mt-3 border-t border-dashed border-ink pt-2 text-[10px]">
               Ghi chú: {order.note}
             </p>
           ) : null}
 
           {shop.footerNote ? (
-            <p className="mt-3 border-t border-dashed border-line pt-2 text-center text-[12px] text-muted">
+            <p className="mt-3 border-t border-dashed border-ink pt-2 text-center text-[10px]">
               {shop.footerNote}
             </p>
           ) : null}
@@ -157,7 +160,7 @@ export function ReceiptView({
       ) : null}
 
       {pageCount > 1 ? (
-        <p className="mt-3 border-t border-dashed border-line pt-2 text-center text-[12px] font-semibold text-muted">
+        <p className="mt-3 border-t border-dashed border-ink pt-2 text-center text-[10px] font-semibold">
           Trang {page}/{pageCount}
           {isLast ? '' : ' · còn tiếp'}
         </p>

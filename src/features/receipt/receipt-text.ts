@@ -40,7 +40,10 @@ export function receiptToText({
 
   blocks.push(
     lines
-      .map((line) => `${line.name} — ${formatQty(line.qty)} × ${formatAmount(line.unitPrice)} = ${formatAmount(line.amount)}`)
+      .map(
+        (line) =>
+          `${line.name}${line.note ? ` (${line.note})` : ''} — ${formatQty(line.qty)} × ${formatAmount(line.unitPrice)} = ${formatAmount(line.amount)}`,
+      )
       .join('\n'),
   )
 

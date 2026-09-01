@@ -94,10 +94,24 @@ async function captureDownloadedImages(page: Page): Promise<CapturedImage[]> {
   })
 }
 
+/**
+ * Tên món dài nhất thực địa. Ảnh in thử của chủ quán cho thấy nó vỡ 4 dòng trong ô cột 1 — đây là
+ * chuỗi mọi phép đo bẻ dòng bám vào, nên nó nằm ở một chỗ chứ không chép lại từng ca.
+ */
+const TÊN_DÀI_NHẤT = 'TRÀ SỮA TRUYỀN THỐNG KEM CHEESE'
+
+type LineOptions = {
+  name?: (index: number) => string
+  unit?: string
+  note?: string
+  /** Ghi chú của cả đơn — chữ tự do, không chặn độ dài, và chỉ in ở tấm cuối. */
+  orderNote?: string
+}
+
 /** Dựng đơn nhiều dòng qua chính repository của app, rồi mở phiếu của nó. */
-async function openReceiptWithLines(page: Page, lineCount: number) {
+async function buildReceiptWithLines(page: Page, lineCount: number, options: LineOptions = {}) {
   const orderId = await page.evaluate(
-    async ([modulePath, count]) => {
+    async ([modulePath, count, unit, note, longName, orderNote]) => {
       const orders = (await import(modulePath as string)) as typeof import('@/db/repositories/orders')
       const total = 25_000 * (count as number)
       const { id } = await orders.createOrder({
@@ -105,26 +119,97 @@ async function openReceiptWithLines(page: Page, lineCount: number) {
         customerName: 'Khách lẻ',
         lines: Array.from({ length: count as number }, (_, index) => ({
           itemId: null,
-          name: `Món số ${index + 1} tên dài vừa phải`,
-          unit: 'phần',
+          name: (longName as string | null) ?? `Món số ${index + 1} tên dài vừa phải`,
+          unit: unit as string,
           unitPrice: 25_000,
           costPrice: null,
           qty: 1,
+          note: note as string,
         })),
         discount: 0,
         surcharge: 0,
         soldAt: Date.now(),
-        note: '',
+        note: orderNote as string,
         payment: { amount: total, method: 'cash' as const, note: '' },
       })
       return id
     },
-    [ORDERS_MODULE, lineCount] as const,
+    [
+      ORDERS_MODULE,
+      lineCount,
+      options.unit ?? 'phần',
+      options.note ?? '',
+      // `page.evaluate` tuần tự hoá tham số nên hàm `name` không đi qua được; ca duy nhất cần đặt tên
+      // riêng dùng đúng một tên cho mọi dòng, nên truyền chuỗi đã dựng sẵn.
+      options.name ? options.name(0) : null,
+      options.orderNote ?? '',
+    ] as const,
   )
 
   await page.goto(`/don/${orderId}/phieu`)
   await receiptReady(page)
+  return orderId
+}
+
+async function openReceiptWithLines(page: Page, lineCount: number, options: LineOptions = {}) {
+  await buildReceiptWithLines(page, lineCount, options)
   return captureDownloadedImages(page)
+}
+
+/** 1mm = 96/25,4 px. Hộp nội dung trang = 80 − 2×4 = 72mm ⇒ 272,126 px; k = 272,126/360 = 0,755906. */
+const MM_PX = 96 / 25.4
+const NỘI_DUNG_TRANG_PX = 72 * MM_PX
+
+/**
+ * Chiều cao `@page`, CHỐT BẰNG SỐ ĐO chứ không chọn cho đẹp.
+ *
+ * Chromium fragment theo hộp **BỐ CỤC**, không theo phần đã `scale` — đo được: với `@page` 200mm,
+ * hai `.receipt-frame` (layout 700px + 745px) ra **ba** trang PDF, dù phần mực chỉ cao 140mm và
+ * 149mm. Nên `H` phải phủ chiều cao CHƯA scale.
+ *
+ * Trang xấu nhất đo được: 10 dòng tên dài nhất + ghi chú từng dòng + giảm giá + phụ thu + khối nợ
+ * cũ + ghi chú đơn dài + chân phiếu + số trang = **1110px** = 293,7mm. Cộng 8mm lề và 15% dư,
+ * làm tròn lên chục ⇒ 350mm.
+ */
+const CAO_TRANG_MM = 350
+const CAO_TRANG_PT = (CAO_TRANG_MM * 72) / 25.4
+
+/**
+ * Bộ chỉ số làm nên mệnh đề "hai đường dùng chung một layout". `offsetWidth`/`offsetHeight` là hộp
+ * BỐ CỤC nên miễn nhiễm với `transform`; `getBoundingClientRect()` là hộp SAU transform, tức phần
+ * mực thật sự chiếm trên giấy. Tỉ số của hai cái đó chính là px→mm.
+ */
+async function layoutProbe(page: Page) {
+  return page.evaluate((needle) => {
+    const view = document.querySelector('.receipt-view') as HTMLElement
+    const cell = [...document.querySelectorAll('td')].find((td) => td.textContent?.includes(needle))
+    if (!cell) throw new Error(`Không thấy ô chứa "${needle}"`)
+    const range = document.createRange()
+    range.selectNodeContents(cell)
+    return {
+      layoutWidth: view.offsetWidth,
+      cssWidth: getComputedStyle(view).width,
+      layoutHeight: view.offsetHeight,
+      tdHeight: cell.offsetHeight,
+      textLines: new Set([...range.getClientRects()].map((rect) => Math.round(rect.top * 10) / 10)).size,
+      visualWidth: view.getBoundingClientRect().width,
+    }
+  }, TÊN_DÀI_NHẤT)
+}
+
+/**
+ * Số dòng chữ thật của ô cột 1. `Range.getClientRects()` trả một hình chữ nhật cho mỗi hộp dòng —
+ * API DOM duy nhất đọc thẳng kết quả bẻ dòng thay vì suy từ chiều cao chia line-height. Gom theo
+ * `top` làm tròn 0,1 để tên món và `<span> (Ly)</span>` cùng dòng không bị đếm hai lần.
+ */
+async function textLineCount(page: Page, cellText: string) {
+  return page.evaluate((needle) => {
+    const cell = [...document.querySelectorAll('td')].find((td) => td.textContent?.includes(needle))
+    if (!cell) throw new Error(`Không thấy ô chứa "${needle}"`)
+    const range = document.createRange()
+    range.selectNodeContents(cell)
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top * 10) / 10)).size
+  }, cellText)
 }
 
 // Mỗi ca chạy trong một BrowserContext riêng nên IndexedDB đã sạch sẵn — không cần (và không nên)
@@ -205,15 +290,130 @@ test('bản in chỉ còn phiếu: không header, không nút, không thanh đi�
   await expect(page.getByRole('heading', { name: 'Phiếu bán hàng', exact: true })).toBeHidden()
   await expect(receiptTitle(page)).toBeVisible()
 
-  // Khung 360px chỉ để ảnh ổn định; in ra giấy phải trải rộng và KHÔNG được cắt chữ.
+  // Bản in giữ nguyên khung bố cục 360px rồi mới `scale` xuống 72mm — đo bằng
+  // `getBoundingClientRect()` chứ không `offsetWidth`, vì `offsetWidth` là hộp bố cục và KHÔNG đổi
+  // theo transform. Đổi API đo, không chỉ nới con số: `offsetWidth` một mình không phân biệt được
+  // "trải rộng theo viewport" với "360px rồi thu nhỏ".
   const layout = await page.evaluate(() => {
     const view = document.querySelector('.receipt-view') as HTMLElement
-    return { width: view.offsetWidth, overflowing: view.scrollWidth > view.clientWidth }
+    return {
+      visualWidth: view.getBoundingClientRect().width,
+      overflowing: view.scrollWidth > view.clientWidth,
+    }
   })
-  expect(layout.width).toBeGreaterThan(360)
+  expect(layout.visualWidth).toBeCloseTo(NỘI_DUNG_TRANG_PX, 0)
   expect(layout.overflowing).toBe(false)
 
   await page.emulateMedia({ media: null })
+})
+
+test('bản in và ảnh dùng chung một layout', async ({ page }) => {
+  // `transform: scale()` là phép VẼ, không phải phép BỐ CỤC: Chromium chạy layout ở bề ngang chưa
+  // scale rồi mới thu nhỏ lúc paint. Nên chứng minh hai media bố cục cùng một cây DOM ở cùng bề
+  // ngang 360px là chứng minh điểm vỡ dòng giống nhau THEO CẤU TẠO, không cần so ảnh.
+  await buildReceiptWithLines(page, 3, { name: () => TÊN_DÀI_NHẤT, unit: 'Ly' })
+
+  const trênMànHình = await layoutProbe(page)
+  await page.emulateMedia({ media: 'print' })
+  const bảnIn = await layoutProbe(page)
+
+  expect(trênMànHình.layoutWidth).toBe(360)
+  expect(bảnIn.layoutWidth).toBe(360)
+  // `offsetWidth` một mình không phân biệt "360 vì ta khai" với "360 vì tình cờ"; `width:auto` cũ
+  // cho ra bề ngang viewport (Pixel 7 ≈ 412px) nên chính assert này bắt được thủ phạm.
+  expect(bảnIn.cssWidth).toBe('360px')
+  expect(bảnIn.layoutHeight).toBe(trênMànHình.layoutHeight)
+  expect(bảnIn.tdHeight).toBe(trênMànHình.tdHeight)
+  expect(bảnIn.textLines).toBe(trênMànHình.textLines)
+  expect(bảnIn.textLines).toBeLessThanOrEqual(2)
+
+  // Có `visualWidth = 72mm` và `layoutWidth = 360px` thì "1 px bố cục = 0,2mm" là hằng đẳng thức,
+  // nên `font-size: 11px ⇒ 2,20mm` SUY RA được chứ không phải đo thêm.
+  expect(bảnIn.visualWidth).toBeCloseTo(NỘI_DUNG_TRANG_PX, 0)
+  expect(bảnIn.visualWidth / bảnIn.layoutWidth).toBeCloseTo(0.7559, 3)
+
+  await page.emulateMedia({ media: null })
+})
+
+/**
+ * Cổng đếm trang ĐÃ ĐƯỢC CHỨNG MINH LÀ ĐỎ ĐƯỢC: đặt tạm `@page { size: 80mm 100mm }` (cùng lúc hạ
+ * `CAO_TRANG_MM` để hai assert khổ giấy vẫn xanh) thì ca đỏ ở **đúng** assert đếm trang — 6 trang
+ * cho 2 `.receipt-frame` — chứ không đỏ ở assert bề ngang. Không có bước đó thì không ai biết cổng
+ * này có biết đỏ hay không.
+ *
+ * Đối chứng đã đo cho `size`: bỏ hẳn `size` ⇒ 612×792pt (Letter); `size: 80mm auto` ⇒ **cũng Letter**
+ * (Chromium nuốt khai báo một-length), page count đúng nhưng khổ giấy sai. Chỉ hai length mới ăn.
+ */
+test('@page ra đúng khổ 80mm, không rơi về Letter', async ({ page }) => {
+  await buildReceiptWithLines(page, 15, { name: () => TÊN_DÀI_NHẤT, unit: 'Ly', note: 'Đá riêng' })
+
+  // `MediaBox` là khổ giấy Chromium THẬT SỰ đã dùng, đọc từ chính sản phẩm đầu ra. Khi Chromium
+  // nuốt một khai báo `@page` sai cú pháp thì `document.styleSheets` vẫn hiện khai báo đó — chỉ
+  // `MediaBox` mới tố cáo. Đối chứng đã đo: không có `size` thì ra 612×792pt (Letter).
+  const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
+  const raw = pdf.toString('latin1')
+  const hộp = raw.match(/\/MediaBox\s*\[\s*0(?:\.\d+)?\s+0(?:\.\d+)?\s+([\d.]+)\s+([\d.]+)\s*\]/)
+  expect(hộp).not.toBeNull()
+
+  const [, bềNgang, chiềuCao] = hộp as RegExpMatchArray
+  expect(Number(bềNgang)).toBeGreaterThan(226.0) // 80mm = 226,77pt
+  expect(Number(bềNgang)).toBeLessThan(227.5)
+  // Range tường minh ±1pt chứ không `toBeCloseTo(…, 0)` (chỉ ±0,5): Chromium làm tròn mm→pt hơi
+  // lệch — 100mm ra 282,96pt thay vì 283,46 — nên ±0,5 đỏ oan vì phép làm tròn, không vì lỗi.
+  expect(Number(chiềuCao)).toBeGreaterThan(CAO_TRANG_PT - 1)
+  expect(Number(chiềuCao)).toBeLessThan(CAO_TRANG_PT + 1)
+
+  // Cổng đếm trang: một `.receipt-frame` phải ra đúng một tờ. Nó là cổng DUY NHẤT bắt được `H` hụt.
+  const sốTấm = await page.locator('.receipt-frame').count()
+  expect((raw.match(/\/MediaBox/g) ?? []).length).toBe(sốTấm)
+})
+
+/**
+ * Ghi chú đơn và chân phiếu là chữ TỰ DO, không chặn độ dài, và chỉ in ở tấm cuối — nên tấm cuối là
+ * tấm duy nhất có thể cao hơn khổ trang. Đây là ranh giới trước nay không có cổng nào canh.
+ *
+ * Cổng đếm trang ở ca trên đòi số tờ BẰNG số tấm cho phiếu thường; ở đây thì ngược lại — nội dung
+ * thật sự dài hơn một tờ thì chẻ ra nhiều tờ mới là đúng, còn bằng nhau nghĩa là phần thừa đã biến
+ * mất khỏi phiếu tiền mà không báo gì.
+ *
+ * ĐÃ ĐO, để lần review sau khỏi tranh lại: `overflow: hidden` trên `.receipt-frame` KHÔNG cắt mất
+ * phần thừa. Chạy đúng ca này ở cả hai cấu hình cho ra số liệu y hệt — tấm cao 1991,5px trên khổ
+ * trang 1292,6px đều ra 2 tờ. Chromium vẫn chẻ tấm dù `overflow` khác `visible`, nên `overflow:
+ * hidden` (thứ cắt phần TRÀN NGANG vô hình của hộp bố cục 360px) không đánh đổi bằng chữ bị mất.
+ */
+test('ghi chú đơn dài không bị cắt mất: tấm cao quá khổ thì chẻ sang tờ sau', async ({ page }) => {
+  const ghiChúDài = Array.from({ length: 200 }, (_, i) => `Dòng ghi chú số ${i + 1} của đơn này`).join(' — ')
+  await buildReceiptWithLines(page, 2, { orderNote: ghiChúDài })
+
+  await page.emulateMedia({ media: 'print' })
+
+  // Chứng minh bằng sản phẩm đầu ra chứ không bằng computed style: tấm cao hơn khổ trang thì PDF
+  // phải có nhiều tờ hơn số tấm. Bằng nhau tức phần thừa đã biến mất.
+  const caoTấm = await page.evaluate(
+    () => (document.querySelector('.receipt-frame') as HTMLElement).getBoundingClientRect().height,
+  )
+  const caoTrangPx = (CAO_TRANG_MM - 8) * MM_PX // trừ `margin: 4mm` hai đầu
+  expect(caoTấm).toBeGreaterThan(caoTrangPx)
+
+  const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true })
+  const raw = pdf.toString('latin1')
+  const sốTấm = await page.locator('.receipt-frame').count()
+  expect((raw.match(/\/MediaBox/g) ?? []).length).toBeGreaterThan(sốTấm)
+
+  await page.emulateMedia({ media: null })
+})
+
+/**
+ * Cổng này KHÔNG phải cổng đỏ-rồi-xanh: ở 13px tên món đã vỡ đúng 2 dòng rồi. Con số "vỡ 4 dòng"
+ * trong hợp đồng đến từ ảnh in thử THỨ NHẤT, mà rev.2 đã kết luận ảnh đó chụp từ bản PWA cũ còn kẹt
+ * cache. Nó là cổng phòng thủ — nên đã chứng minh là biết đỏ: tạm đẩy thân bảng lên 16px thì ca này
+ * đỏ ở đúng assert đếm dòng (ra 3).
+ */
+test('phiếu: tên món dài nhất chỉ vỡ 2 dòng trên đường ảnh', async ({ page }) => {
+  // Tiêu chí chỉ tính TÊN MÓN — dòng ghi chú bên dưới là dòng thứ ba có chủ ý.
+  await buildReceiptWithLines(page, 1, { name: () => TÊN_DÀI_NHẤT, unit: 'Ly' })
+
+  expect(await textLineCount(page, TÊN_DÀI_NHẤT)).toBeLessThanOrEqual(2)
 })
 
 test('phiếu 15 dòng → chia 2 tấm, tấm nào cũng dưới 300KB và vẫn chụp ở 2×', async ({ page }) => {
