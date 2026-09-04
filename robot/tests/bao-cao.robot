@@ -17,6 +17,8 @@ Test Tags           bao-cao
 *** Variables ***
 ${SHEET_KHOẢNG}     css=[role=dialog][aria-label="Chọn khoảng ngày"]
 ${SHEET_THU_NỢ}     css=[role=dialog][aria-label="Thu nợ · Anh Hùng"]
+# Nhãn kỳ như report.label in hoa trong khối LỢI NHUẬN/LỖ (use-report.ts).
+&{NHÃN_KỲ}          Hôm nay=HÔM NAY    7 ngày=7 NGÀY QUA
 
 
 *** Test Cases ***
@@ -107,6 +109,8 @@ Kỳ tự chọn lấy đúng khoảng ngày đã chọn
     Bấm Nút    XEM BÁO CÁO
 
     Wait For Elements State    ${SHEET_KHOẢNG}    detached
+    ${nhãn_kỳ}=    Evaluate    datetime.date.today().strftime('%d/%m – %d/%m/%Y')    datetime
+    Chờ Thấy Chữ    ${nhãn_kỳ}
     ${doanh_thu}=    Đọc Ô Số    DOANH THU
     Should Be Equal    ${doanh_thu}    150.000
 
@@ -144,6 +148,9 @@ Mở Báo Cáo Kỳ
     Chọn Chip    ${kỳ}
     ${đang_chọn}=    Chip Đang Chọn    ${kỳ}
     Should Be Equal    ${đang_chọn}    true
+    # Chip đổi ngay nhưng con số đi qua truy vấn bất đồng bộ, nên một lúc sau khi bấm màn vẫn hiện số
+    # của kỳ mặc định (Tháng). Nhãn LỢI NHUẬN/LỖ đổi cùng lượt render với con số: chờ nó rồi mới đọc.
+    Wait For Elements State    ${{ 'xpath=//span[contains(normalize-space(), "%s")]' % $NHÃN_KỲ[$kỳ] }}    visible
 
 Đọc Ô Số
     [Documentation]    Cả StatBox lẫn khối lãi/lỗ đều là <span> nhãn rồi <span> số ngay sau nó.
