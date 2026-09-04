@@ -6,6 +6,9 @@ const port = 5176
 const roots = {
   normal: resolve('dist'),
   recovery: resolve('dist-recovery'),
+  // Bản staging ghi ra thư mục riêng: hash bundle và sw.js khác bản normal, đủ để trình duyệt coi là
+  // "bản mới" khi test đường cập nhật; mạng ra Worker bị chặn trong test nên URL staging vô hại.
+  next: resolve('dist-next'),
 }
 let mode = 'recovery'
 
@@ -28,7 +31,7 @@ function respond(response, status, body, headers = {}) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`)
-  const switchMode = url.pathname.match(/^\/__test__\/mode\/(normal|recovery)$/)
+  const switchMode = url.pathname.match(/^\/__test__\/mode\/(normal|recovery|next|mat-mang)$/)
   if (request.method === 'POST' && switchMode) {
     mode = switchMode[1]
     respond(response, 204, '')
@@ -39,8 +42,15 @@ const server = createServer(async (request, response) => {
     return
   }
 
-  const root = roots[mode]
+  // `mat-mang`: vẫn phục vụ bản normal nhưng `sw.js` trả 503, để `registration.update()` reject như
+  // lúc mất mạng. Phải giả ở server vì `context.setOffline` của Playwright không chặn được cú tải
+  // `sw.js` do chính trình duyệt phát khi kiểm cập nhật.
+  const root = roots[mode === 'mat-mang' ? 'normal' : mode]
   const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html'
+  if (mode === 'mat-mang' && relative === 'sw.js') {
+    respond(response, 503, 'Service Unavailable')
+    return
+  }
   let file = resolve(root, relative)
   if (file !== root && !file.startsWith(`${root}${sep}`)) {
     respond(response, 403, 'Forbidden')

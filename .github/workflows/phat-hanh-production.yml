@@ -188,7 +188,9 @@ jobs:
             echo "Commit: \`$RELEASE_SHA\`"
             echo "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo
-            sed -n '7,/^## 1\.0\.3 /p' docs/ghi-chu-phat-hanh.md | sed '$d'
+            # Neo theo heading `## ` chứ không theo số dòng: blockquote đầu mục dài ngắn tuỳ bản,
+            # số dòng đóng cứng đã từng cắt mất câu "không cần deploy Worker".
+            sed -n '/^## /,/^## 1\.0\.3 /p' docs/ghi-chu-phat-hanh.md | sed '$d'
           } > release-notes.md
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             find release-artifact -exec touch -t 198001010000 {} +

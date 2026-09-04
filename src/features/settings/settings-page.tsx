@@ -11,6 +11,7 @@ import {
   sharePreparedBackup,
   type PreparedBackup,
 } from './backup'
+import { AppUpdateSection } from './app-update-section'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -348,6 +349,10 @@ export function SettingsPage() {
             </div>
           </>
         ) : null}
+      </Section>
+
+      <Section title="CẬP NHẬT APP">
+        <AppUpdateSection />
       </Section>
 
       <div className="border-t border-line">

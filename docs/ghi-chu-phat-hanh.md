@@ -1,5 +1,40 @@
 # Ghi chú phát hành
 
+## 2.3.0 — nút kiểm tra bản mới trong Cài đặt (4/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5), không có bước di trú, không cần deploy
+> Worker: chỉ frontend. Quay về 2.2.0 không có hiểm gì thêm.
+
+### Người bán thấy gì
+
+- **Cài đặt có mục CẬP NHẬT APP với nút KIỂM TRA BẢN MỚI.** Bấm là app đi hỏi
+  server ngay. Có bản mới thì tải về nền rồi nút đổi thành TẢI LẠI NGAY, bấm lần
+  nữa mới tải lại; không có gì mới thì báo "Đang dùng bản mới nhất." Mất mạng thì
+  báo lỗi và cho bấm lại.
+
+### Vì sao cần
+
+- Sau 2.2.0 chủ quán báo "không thấy nút Tải lại". Đo trên Chrome thật với hai
+  bản build khác nhau: trình duyệt chỉ kiểm `sw.js` lúc app được **mở mới**; app
+  để chạy nền rồi bật lên lại thì 60 giây sau khi server đổi bản vẫn không tải
+  `sw.js` — thanh "Có bản mới" không bao giờ có cơ hội hiện. Gọi
+  `registration.update()` bằng tay thì thanh hiện ngay; nút mới chính là cú gọi đó.
+- Đóng hẳn app rồi mở lại vẫn là cách thứ hai, ghi ở `docs/deploy.md` mục 5.
+
+### Thay đổi vận hành
+
+- CI bước "Build staging" nay ghi ra `dist-next` thay vì `dist`, để làm "bản mới"
+  cho ca Playwright `e2e-recovery/app-update.spec.ts` (server artifact có thêm
+  mode `next`). Thời gian CI không đổi. `npm run build:staging` cho quy trình
+  staging tay vẫn ghi ra `dist/` như cũ.
+- Robot chỉ lái tới được trạng thái "chưa có chế độ offline" của nút, vì dev
+  server không sinh service worker. Đường có bản mới thật do Playwright artifact
+  chốt chặn.
+- Suite Robot Báo cáo có sẵn một lỗi chờ: đọc số ngay sau khi bấm chip kỳ, trong
+  khi con số còn là của kỳ mặc định "Tháng". Mùng 1 hai số trùng nhau nên CI xanh,
+  từ mùng 2 thì đỏ hai ca. Sửa keyword `Mở Báo Cáo Kỳ` chờ nhãn kỳ mới trước khi
+  đọc; không đụng mã app.
+
 ## 2.2.0 — phiếu đọc được trên máy in nhiệt, đá chung/đá riêng theo ly (1/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5) và không có bước di trú. Khác 2.1.0, bản

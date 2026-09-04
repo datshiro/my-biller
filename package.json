@@ -1,7 +1,7 @@
 {
   "name": "my-biller",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:recovery": "npm run build && npm run build:recovery && npm run test:e2e:recovery:built",
+    "test:e2e:recovery": "npm run build && npm run build:staging -- --outDir dist-next && npm run build:recovery && npm run test:e2e:recovery:built",
     "test:e2e:recovery:built": "playwright test --config playwright.recovery.config.ts",
     "test:live": "./robot/run.sh",
     "test:live:recovery": "npm run build:recovery && ROBOT_APP_MODE=recovery ./robot/run.sh robot/recovery",
