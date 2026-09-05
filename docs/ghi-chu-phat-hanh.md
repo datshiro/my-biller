@@ -1,5 +1,33 @@
 # Ghi chú phát hành
 
+## 2.3.1 — đồng bộ không còn kẹt khi sổ chung chạm 500 sự kiện (5/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5), không có bước di trú. **Bắt buộc deploy Worker** (workflow
+> production đã làm Worker → smoke → Pages trong cùng một job). Máy đang kẹt tự hồi phục ở lượt kéo
+> kế tiếp sau khi Worker mới lên; chủ quán không phải làm gì ngoài để app mở.
+
+### Người bán thấy gì
+
+- Máy đã ghép sổ chung từng treo băng "Đang đưa N thay đổi lên sổ chung…" mãi không tắt một khi sổ
+  chung có từ 500 thay đổi trở lên — đơn bán ra không lên sổ chung nữa, máy kia không thấy. Sau bản
+  này băng tắt và đơn lên sổ chung như thường.
+
+### Vì sao cần
+
+- Cổng Worker dựng URL nội bộ chỉ từ đường dẫn, làm rơi `?since=N` khi chuyển tiếp tới Durable
+  Object. Sổ chung vì thế luôn trả trang đầu (seq 1..500) kèm "còn nữa"; máy kéo mãi cùng một trang
+  (đo được ~75 lượt/giây) và không bao giờ tới bước đưa hàng đợi lên. Lỗi có từ bản đồng bộ đầu
+  tiên (2.0.1); mọi test Worker chỉ hỏi `since=0` nên không thấy.
+- Lộ ra khi đo màn Đối soát (đang làm) trên sổ 12.027 sự kiện: máy dừng ở #500 dù sổ chung ở #12027.
+
+### Thay đổi vận hành
+
+- Máy có thêm chốt phòng thủ ở `pullAll`: sổ chung báo "còn nữa" mà trang vừa nhận không làm `lastSeq`
+  tiến thì dừng lượt kéo cho tick sau thử lại — lỗi máy chủ kiểu này không còn biến thành vòng lặp nóng
+  chặn cả đường ghi.
+- Không có ca Robot cho hai sửa này: cần sổ từ 500 sự kiện, bộ mẫu hai máy chưa tới. Ca Worker mới đi
+  đúng đường qua cổng (`since=N` phải trả đúng phần sau N); ca Vitest cho `pullAll` khoá chốt phòng thủ.
+
 ## 2.3.0 — nút kiểm tra bản mới trong Cài đặt (4/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không có bước di trú, không cần deploy
