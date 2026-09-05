@@ -749,3 +749,28 @@ describe('seq mới nhất của sổ chung', () => {
     expect(body.latestSeq).toBe(pulled.at(-1)?.seq)
   })
 })
+
+describe('kéo oplog theo trang', () => {
+  const pull = (since: number) =>
+    SELF.fetch(`https://example.com/shop/${shopId}/oplog?since=${since}`, { headers: auth() })
+
+  it('tôn trọng since: trang sau bắt đầu ngay sau seq đã có, không trả lại từ đầu', async () => {
+    // Gateway từng dựng URL nội bộ chỉ từ pathname nên `?since=` rơi mất: mọi trang đều là seq 1..500,
+    // máy có sổ từ 500 sự kiện kẹt ở seq 500 và quay vòng kéo mãi. Ca này khoá đúng đường đi qua gateway.
+    const gids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()]
+    for (const gid of gids) {
+      expect((await push(event('customers', gid, customerRow(gid)))).status).toBe(201)
+    }
+    const all = await pullAll()
+    expect(all.map((row) => row.entityKey)).toEqual(gids)
+    const secondSeq = all[1]!.seq
+
+    const tail = await (await pull(secondSeq)).json<{ events: Array<{ seq: number; entityKey: string }>; hasMore: boolean }>()
+    expect(tail.events.map((row) => row.entityKey)).toEqual([gids[2]])
+    expect(tail.events[0]!.seq).toBe(secondSeq + 1)
+    expect(tail.hasMore).toBe(false)
+
+    const empty = await (await pull(all.at(-1)!.seq)).json<{ events: unknown[]; hasMore: boolean }>()
+    expect(empty).toEqual({ events: [], hasMore: false })
+  })
+})
