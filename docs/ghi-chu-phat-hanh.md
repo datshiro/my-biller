@@ -14,8 +14,9 @@
 
 - **Cài đặt có mục ĐỐI SOÁT.** Dòng đầu nói máy này đứng ở đâu so với sổ chung, đúng
   một câu: "✓ Khớp sổ chung — máy này ở thay đổi #N", "Còn N thay đổi chưa về máy
-  này", "Đang đưa N thay đổi lên sổ chung", "Máy chưa ghép sổ chung", "Chưa đọc được
-  sổ chung"… kèm mốc "đối chiếu lúc HH:mm" và nút KIỂM TRA LẠI. Bên dưới là bốn tổng
+  này", "N thay đổi trên máy này chưa lên sổ chung.", "Máy này chưa ghép sổ chung.",
+  "Chưa đọc được sổ chung — số dưới đây là bản trên máy này."… kèm mốc "đối chiếu lúc
+  HH:mm" và nút KIỂM TRA LẠI. Bên dưới là bốn tổng
   toàn sổ (Doanh thu, Đã thu, Chi phí, Còn nợ) và số dòng của 9 bảng sổ (Đơn tính cả
   đơn đã huỷ).
 - **Để so hai máy:** mở màn này trên cả hai lúc đều có mạng, đợi cả hai hiện "✓ Khớp
