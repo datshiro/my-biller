@@ -1,26 +1,42 @@
-import { groupDebts } from './debt'
-import type { BackupData } from './schema'
+import { groupDebts, isCountedPayment, totalDebt } from './debt'
+import type { BackupData, Customer, Expense, Order, Payment } from './schema'
 
 export type LedgerTotals = {
   revenue: number
   expenses: number
   collected: number
+  /** Tổng mọi nhóm nợ, kể cả nhóm của khách không còn trong `customers` — cùng số với màn Công nợ. */
+  debtTotal: number
+  /** Chỉ nhóm tra được gid; dùng để đối chiếu từng khách qua đường gộp sổ. */
   debtByCustomerGid: Map<string, number>
 }
 
-export function ledgerTotals(data: BackupData): LedgerTotals {
+/**
+ * Bốn bảng đủ để tính tổng. Khai theo kiểu hàng DB (`id` tuỳ chọn) chứ không theo `BackupData` (`id`
+ * bắt buộc): nhờ vậy cả file sao lưu lẫn `toArray()` từ IndexedDB đều gán thẳng vào được.
+ */
+export type LedgerTotalsInput = {
+  orders: readonly Order[]
+  payments: readonly Payment[]
+  expenses: readonly Expense[]
+  customers: readonly Customer[]
+}
+
+export function ledgerTotals(data: LedgerTotalsInput): LedgerTotals {
   const customerGids = new Map(data.customers.map((customer) => [customer.id, customer.gid]))
   const unallocated = new Map<number, number>()
   for (const payment of data.payments) {
     if (payment.allocatedOrderId !== 0 || payment.customerId === null) continue
+    if (!isCountedPayment(payment)) continue
     unallocated.set(
       payment.customerId,
       (unallocated.get(payment.customerId) ?? 0) + payment.amount,
     )
   }
 
+  const groups = groupDebts(data.orders, unallocated)
   const debtByCustomerGid = new Map<string, number>()
-  for (const group of groupDebts(data.orders, unallocated)) {
+  for (const group of groups) {
     const gid = customerGids.get(group.customerId)
     if (gid) debtByCustomerGid.set(gid, group.total)
   }
@@ -31,7 +47,11 @@ export function ledgerTotals(data: BackupData): LedgerTotals {
       0,
     ),
     expenses: data.expenses.reduce((sum, expense) => sum + expense.amount, 0),
-    collected: data.payments.reduce((sum, payment) => sum + payment.amount, 0),
+    collected: data.payments.reduce(
+      (sum, payment) => sum + (isCountedPayment(payment) ? payment.amount : 0),
+      0,
+    ),
+    debtTotal: totalDebt(groups),
     debtByCustomerGid,
   }
 }
