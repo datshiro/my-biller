@@ -352,6 +352,17 @@ trên Android, nhưng trên iOS thì bản cài và bản trong Safari có thể
 Service worker chạy ở chế độ `prompt`: có bản mới thì app hiện thanh hỏi, người dùng bấm mới tải lại.
 Cố ý làm vậy — tự reload giữa lúc đang lên đơn là mất đơn.
 
+Trình duyệt chỉ kiểm `sw.js` lúc app được **mở mới**. App để chạy nền rồi bật lên lại thì không có
+lần kiểm nào, nên thanh hỏi không bao giờ hiện (đo 4/9/2026 trên Chrome thật: app mở liên tục 60 giây
+sau khi server đổi bản vẫn không tải `sw.js`). Hai cách lấy bản mới lúc đó:
+
+- **Cài đặt → CẬP NHẬT APP → KIỂM TRA BẢN MỚI.** Nút gọi thẳng `registration.update()`. Có bản mới
+  thì tải về nền rồi đổi thành TẢI LẠI NGAY, bấm lần nữa mới reload; không có gì mới thì báo
+  "Đang dùng bản mới nhất." Ca chốt chặn: `e2e-recovery/app-update.spec.ts` chạy trên hai bản build
+  thật (`dist` và `dist-next`).
+- **Đóng hẳn app rồi mở lại.** Lần mở mới sẽ kiểm `sw.js`. Nếu bản mới đã được tải về từ trước (đã
+  thấy thanh mà bấm "Để sau") thì nó tự kích hoạt, không cần bấm gì.
+
 ## Giới hạn đã biết
 
 - **iOS xoá dữ liệu của web app không dùng tới sau ~7 ngày.** Đó là lý do màn Cài đặt có nút ghim bộ

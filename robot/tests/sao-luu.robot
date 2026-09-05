@@ -225,6 +225,16 @@ Nhập lại được file an toàn tải về ngay trước lúc xoá
     Mở Màn    /
     Chờ Thấy Chữ    Phở bò đặc biệt
 
+Nút kiểm tra bản mới báo thẳng khi bản đang chạy chưa có chế độ offline
+    [Documentation]    Dev server không sinh service worker, nên đây là trạng thái duy nhất Robot lái
+    ...    tới được của nút này. Đường có bản mới thật (hai bản build, SW thật) nằm ở
+    ...    e2e-recovery/app-update.spec.ts.
+    Skip If    $BASE_URL.startswith('https://')    Bản deploy có service worker; ca này chỉ có nghĩa trên dev server.
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("KIỂM TRA BẢN MỚI")
+    Chờ Thấy Chữ    Chưa có chế độ offline trên bản này
+    Nút Không Được Khoá    KIỂM TRA BẢN MỚI
+
 
 *** Keywords ***
 Theo Dõi Yêu Cầu Tải
