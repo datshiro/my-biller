@@ -1,5 +1,58 @@
 # Ghi chú phát hành
 
+## 2.4.0 — màn Đối soát xem tổng thể sổ chung (5/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5), không có bước di trú. **Bắt buộc deploy Worker
+> trước Pages**: `GET /shop/:id/devices` trả thêm `latestSeq`, màn Đối soát dựa vào số
+> đó. Workflow tag `v*.*.*` đã đi đúng thứ tự Worker → smoke → Pages trong một job; chỉ
+> deploy tay mới có nguy cơ sai thứ tự. Nếu Pages lên trước Worker, màn Đối soát hiện
+> "Sổ chung chưa hỗ trợ đối soát — cần cập nhật máy chủ." — bán hàng và đồng bộ vẫn
+> chạy bình thường, deploy Worker xong là tự hết, không phải làm gì trên máy. Nếu 2.3.1
+> chưa lên production thì bản này kèm luôn sửa lỗi kẹt ở 500 sự kiện (mục 2.3.1).
+
+### Người bán thấy gì
+
+- **Cài đặt có mục ĐỐI SOÁT.** Dòng đầu nói máy này đứng ở đâu so với sổ chung, đúng
+  một câu: "✓ Khớp sổ chung — máy này ở thay đổi #N", "Còn N thay đổi chưa về máy
+  này", "Đang đưa N thay đổi lên sổ chung", "Máy chưa ghép sổ chung", "Chưa đọc được
+  sổ chung"… kèm mốc "đối chiếu lúc HH:mm" và nút KIỂM TRA LẠI. Bên dưới là bốn tổng
+  toàn sổ (Doanh thu, Đã thu, Chi phí, Còn nợ) và số dòng của 9 bảng sổ (Đơn tính cả
+  đơn đã huỷ).
+- **Để so hai máy:** mở màn này trên cả hai lúc đều có mạng, đợi cả hai hiện "✓ Khớp
+  sổ chung" **với cùng số #**, rồi so bốn tổng. Cùng # mà lệch tổng là có chuyện.
+- Máy chưa ghép vẫn xem được bốn tổng và số dòng của sổ cục bộ.
+
+### Vì sao cần
+
+- Hai máy dùng chung một sổ nhưng chủ quán không có cách nào biết máy này đã đuổi kịp
+  sổ chung chưa, ngoài so tay Báo cáo từng kỳ trên hai máy. Một con số neo và bốn
+  tổng toàn sổ trả lời câu đó trong mười giây.
+- Đo màn này trên sổ 12.027 sự kiện đã lộ lỗi kẹt ở 500 sự kiện (2.3.1).
+
+### Thay đổi vận hành
+
+- Worker: `GET /shop/:id/devices` trả thêm `latestSeq` = `MAX(seq)` của oplog (một lần
+  seek trên chỉ mục, không quét). Smoke production kiểm trường này là số trước khi
+  deploy Pages, để Worker cũ + Pages mới không lọt qua cổng.
+- Máy: đọc `latestSeq` lúc mở màn và khi bấm KIỂM TRA LẠI (hết hạn 8 giây, khoá nút 2
+  giây); sổ chung mới hơn máy thì tự hỏi lại một lần cho mỗi `lastSeq` mới rồi mới bảo
+  bấm tay. Tổng và số dòng đọc đúng 9 bảng sổ trong một transaction, không chạm
+  `outbox`/`deviceState`, nên không kích lại theo nhịp lease.
+- Hiệu năng đo trên Chrome + wrangler dev, sổ 2002 đơn / 4004 dòng / 2002 phiếu thu
+  (12.027 sự kiện, 25 trang): một lượt tính tổng 8–16 ms (36 ms lần đầu sau tải
+  trang); kéo lại toàn sổ khi đang mở màn 26 lượt tính lại, trung bình 7–8 ms, tối đa
+  19 ms, tổng 3,5–3,7 giây so với 3,9–4,2 giây khi không mở màn.
+- Kèm hai sửa trùng nội dung 2.3.1 (gateway giữ `?since`, chốt `pullAll`) để nhánh
+  này tự chạy được trên sổ lớn; merge sau 2.3.1 thì không có gì mới.
+- Robot: suite `doi-soat.robot` (bốn tổng khớp Báo cáo và Công nợ; phiếu đã trả lại
+  khách không cộng vào Đã thu, đối chiếu thẳng bảng `payments`); `hai-may.robot` thêm
+  ca hai máy cùng hiện "✓ Khớp" với cùng số # và cùng bốn tổng (17 ca). `Đọc Ô Số`,
+  `Mở Chi Tiết Đơn Mới Nhất` chuyển lên `app.resource` để các suite dùng chung.
+- Không có ca Robot, chỉ có Vitest, cho: nhánh "Còn N thay đổi chưa về máy này" (sau
+  tải trang cứng, lease cũ chặn tick tới 15 giây nên kết quả phụ thuộc thời điểm
+  đọc); nhánh Worker cũ không có `latestSeq` (Robot không dựng được Worker cũ); dòng
+  kiểm `latestSeq` trong smoke (chỉ chạy với secret production).
+
 ## 2.3.0 — nút kiểm tra bản mới trong Cài đặt (4/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không có bước di trú, không cần deploy

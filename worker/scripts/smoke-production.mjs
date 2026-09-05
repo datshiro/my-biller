@@ -72,6 +72,9 @@ async function checkHttpContract() {
   if (!Array.isArray(devicesBody?.devices) || devicesBody.devices.length === 0) {
     throw new Error('Synthetic shop không đọc lại được danh sách thiết bị.')
   }
+  if (typeof devicesBody.latestSeq !== 'number') {
+    throw new Error('Worker production chưa trả latestSeq — deploy Worker mới trước khi deploy Pages.')
+  }
 
   const oplog = await checkedFetch(
     `/shop/${shopId}/oplog?since=0`,
