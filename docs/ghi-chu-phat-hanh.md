@@ -10,7 +10,8 @@
 - **Cài đặt có mục CẬP NHẬT APP với nút KIỂM TRA BẢN MỚI.** Bấm là app đi hỏi
   server ngay. Có bản mới thì tải về nền rồi nút đổi thành TẢI LẠI NGAY, bấm lần
   nữa mới tải lại; không có gì mới thì báo "Đang dùng bản mới nhất." Mất mạng thì
-  báo lỗi và cho bấm lại.
+  báo lỗi và cho bấm lại. Chờ quá 20 giây mà chưa xong cũng báo và mở nút lại,
+  không để nút khoá. Rời màn Cài đặt là thôi chờ, không tải lại giữa lúc lên đơn.
 
 ### Vì sao cần
 
