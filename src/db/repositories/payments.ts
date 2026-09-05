@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { isCountedPayment } from '@/domain/debt'
 import { newGid } from '@/domain/gid'
 import { assertMoney, formatVnd } from '@/domain/money'
 import { deriveStatus, remainingOf } from '@/domain/order-status'
@@ -48,10 +49,6 @@ export async function addOrderPayment(input: PaymentInput): Promise<number> {
   })
 }
 
-export function listPaymentsBetween(from: number, to: number): Promise<Payment[]> {
-  return db.payments.where('paidAt').between(from, to, true, true).toArray()
-}
-
 /** Mới nhất lên đầu — lịch sử thu nợ đọc từ trên xuống. */
 export async function listCustomerPayments(customerId: number): Promise<Payment[]> {
   const payments = await db.payments.where('customerId').equals(customerId).sortBy('paidAt')
@@ -62,18 +59,14 @@ export function listUnallocatedPayments(): Promise<Payment[]> {
   return db.payments
     .where('allocatedOrderId')
     .equals(0)
-    .filter((payment) => (payment.unallocatedStatus ?? 'pending') === 'pending')
+    .filter(isCountedPayment)
     .toArray()
 }
 
 export function unallocatedByCustomer(payments: readonly Payment[]): Map<number, number> {
   const totals = new Map<number, number>()
   for (const payment of payments) {
-    if (
-      payment.allocatedOrderId !== 0 ||
-      payment.customerId === null ||
-      (payment.unallocatedStatus ?? 'pending') !== 'pending'
-    ) {
+    if (payment.allocatedOrderId !== 0 || payment.customerId === null || !isCountedPayment(payment)) {
       continue
     }
     totals.set(payment.customerId, (totals.get(payment.customerId) ?? 0) + payment.amount)

@@ -725,3 +725,27 @@ describe('oplog đồng bộ', () => {
     expect(pulled[0]).toMatchObject({ table: 'customers', entityKey: canonicalGid })
   })
 })
+
+describe('seq mới nhất của sổ chung', () => {
+  const listDevices = () =>
+    SELF.fetch(`https://example.com/shop/${shopId}/devices`, { headers: auth() })
+
+  it('trả latestSeq bằng 0 khi oplog còn rỗng', async () => {
+    const response = await listDevices()
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ latestSeq: 0 })
+  })
+
+  it('latestSeq bằng đúng seq của sự kiện cuối mà máy kéo về', async () => {
+    const customerGid = crypto.randomUUID()
+    const orderGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+    const order = orderRow(orderGid, customerGid)
+    expect((await push(event('orders', orderGid, order.after, order.refs))).status).toBe(201)
+
+    const pulled = await pullAll()
+    const body = await (await listDevices()).json<{ latestSeq: number }>()
+    expect(body.latestSeq).toBeGreaterThan(0)
+    expect(body.latestSeq).toBe(pulled.at(-1)?.seq)
+  })
+})

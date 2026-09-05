@@ -104,9 +104,10 @@ export function createPairCode(
   })
 }
 
+/** `latestSeq` vắng khi Worker chưa lên bản có trường này — là trạng thái hợp lệ, không phải `0`. */
 export function listShopDevices(
   connection: DeviceConnection,
-): Promise<{ devices: ShopDevice[] }> {
+): Promise<{ devices: ShopDevice[]; latestSeq?: number }> {
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/devices`, {
     headers: authHeaders(connection),
   })
