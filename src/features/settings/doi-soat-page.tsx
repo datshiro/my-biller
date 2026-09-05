@@ -40,7 +40,8 @@ type AnchorView = { line: string; showTotals: boolean; button: 'hidden' | 'disab
  * Mười hai nhánh, xét từ trên xuống và dừng ở nhánh đầu tiên đúng. Thứ tự là hợp đồng với test:
  * thu hồi đứng trên "chưa ghép" vì `markDeviceRevoked` xoá `connection` sau khi ghi `writeBlock`;
  * kéo lại sổ đứng trên mọi con số vì lúc đó mọi số đều dở dang; hàng đợi đứng trên phép so `seq`
- * vì khi còn hàng đợi bốn tổng đang lạc quan hơn sổ chung.
+ * vì khi còn hàng đợi bốn tổng đang lạc quan hơn sổ chung. Ba nhánh không đọc được sổ chung vẫn
+ * kèm số hàng đợi: số đó đọc cục bộ nên luôn có, và mất mạng chính là lúc hàng đợi dài nhất.
  */
 function describeAnchor(anchor: SyncAnchor, server: ServerState, checking: boolean): AnchorView {
   const shown = (line: string, button: AnchorView['button'] = 'enabled'): AnchorView => ({
@@ -48,6 +49,7 @@ function describeAnchor(anchor: SyncAnchor, server: ServerState, checking: boole
     showTotals: true,
     button,
   })
+  const pendingNote = anchor.pending > 0 ? ` ${anchor.pending} thay đổi trên máy này chưa lên sổ chung.` : ''
   if (anchor.revoked) return shown(REVOKED_LINE, 'hidden')
   if (anchor.resyncRequired) {
     return {
@@ -62,16 +64,16 @@ function describeAnchor(anchor: SyncAnchor, server: ServerState, checking: boole
   if (anchor.pairingSaved) return shown('Đang hoàn tất ghép máy — chưa đối soát được.', 'hidden')
   if (server.kind === 'idle') return shown('Đang kiểm tra sổ chung…', 'disabled')
   if (server.kind === 'failed' && server.reason === 'network') {
-    return shown('Chưa có mạng — số dưới đây là bản trên máy này.')
+    return shown(`Chưa có mạng — số dưới đây là bản trên máy này.${pendingNote}`)
   }
   if (server.kind === 'unsupported') {
-    return shown('Sổ chung chưa hỗ trợ đối soát — cần cập nhật máy chủ.')
+    return shown(`Sổ chung chưa hỗ trợ đối soát — cần cập nhật máy chủ.${pendingNote}`)
   }
   if (server.kind === 'failed') {
     return shown(
       server.reason === 'unauthorized'
         ? REVOKED_LINE
-        : 'Chưa đọc được sổ chung — số dưới đây là bản trên máy này.',
+        : `Chưa đọc được sổ chung — số dưới đây là bản trên máy này.${pendingNote}`,
     )
   }
   if (anchor.pending > 0) return shown(`${anchor.pending} thay đổi trên máy này chưa lên sổ chung.`)

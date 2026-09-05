@@ -20,7 +20,8 @@
   đơn đã huỷ).
 - **Để so hai máy:** mở màn này trên cả hai lúc đều có mạng, đợi cả hai hiện "✓ Khớp
   sổ chung" **với cùng số #**, rồi so bốn tổng. Cùng # mà lệch tổng là có chuyện.
-- Máy chưa ghép vẫn xem được bốn tổng và số dòng của sổ cục bộ.
+- Máy chưa ghép vẫn xem được bốn tổng và số dòng của sổ cục bộ. Mất mạng (hoặc không đọc được
+  sổ chung) thì câu neo vẫn kèm số thay đổi chưa lên sổ chung — đó là lúc hàng đợi dài nhất.
 
 ### Vì sao cần
 
@@ -46,7 +47,8 @@
   này tự chạy được trên sổ lớn; merge sau 2.3.1 thì không có gì mới.
 - Robot: suite `doi-soat.robot` (bốn tổng khớp Báo cáo và Công nợ; phiếu đã trả lại
   khách không cộng vào Đã thu, đối chiếu thẳng bảng `payments`); `hai-may.robot` thêm
-  ca hai máy cùng hiện "✓ Khớp" với cùng số # và cùng bốn tổng (17 ca). `Đọc Ô Số`,
+  ca hai máy cùng hiện "✓ Khớp" với cùng số # và cùng bốn tổng, và ca máy mất mạng vẫn thấy hàng
+  đợi của mình (18 ca). `Đọc Ô Số`,
   `Mở Chi Tiết Đơn Mới Nhất` chuyển lên `app.resource` để các suite dùng chung.
 - Không có ca Robot, chỉ có Vitest, cho: nhánh "Còn N thay đổi chưa về máy này" (sau
   tải trang cứng, lease cũ chặn tick tới 15 giây nên kết quả phụ thuộc thời điểm

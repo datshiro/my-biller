@@ -436,6 +436,39 @@ Màn Đối soát của hai máy nói cùng một con số
     Should Be Equal    ${a}[đã_thu]    169.000 đ
     Hai Bảng Phải Cùng Gid Và Nội Dung    payments
 
+Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
+    [Documentation]    Mất mạng là lúc hàng đợi dài nhất, và số hàng đợi đọc cục bộ nên luôn có: câu neo
+    ...    "Chưa có mạng" phải kèm số thay đổi chưa lên sổ chung, đếm theo txId (một đơn = một txId), so
+    ...    với chính bảng outbox. Mở màn Đối soát một lần khi còn mạng rồi chỉ điều hướng trong app (không
+    ...    Go To): dev server không có service worker, tải trang cứng lúc offline là trang lỗi của Chrome.
+    ...    Có mạng lại: hàng đợi xả, bấm KIỂM TRA LẠI thì về "✓ Khớp" — nhánh lỗi không tự hỏi lại, nút là
+    ...    đường ra; bọc retry vì Vite dev tải lại trang khi nối lại được websocket HMR.
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/doi-soat
+    Chờ Thấy Chữ    TỔNG TOÀN SỔ
+    Click    ${NAV_BAN}
+    Set Offline    ${True}
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${outbox}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+    Should Not Be Empty    ${outbox}
+    ${số_tx}=    Evaluate    len({row['txId'] for row in $outbox})
+    Click    css=a:has-text("Chi tiết")
+    Click    ${NAV_THEM}
+    Click    text=Cài đặt
+    Click    text=Đối soát
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("Chưa có mạng")    visible    timeout=25s
+    ${neo}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    Should Contain    ${neo}    ${số_tx} thay đổi trên máy này chưa lên sổ chung.
+
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Hai Bảng Phải Hội Tụ    payments
+    Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
+    # Các phép đọc chéo ở trên đổi page; quay về A tường minh trước khi chạm giao diện, như mọi ca khác.
+    Chọn Máy A
+    Wait Until Keyword Succeeds    8x    2s    Bấm Kiểm Tra Lại Rồi Phải Khớp
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
@@ -504,3 +537,12 @@ Hai Máy Phải Cùng lastSeq
     ${còn_nợ}=    Đọc Ô Số    CÒN NỢ
     ${tổng}=    Create Dictionary    doanh_thu=${doanh_thu}    đã_thu=${đã_thu}    chi_phí=${chi_phí}    còn_nợ=${còn_nợ}
     RETURN    ${tổng}
+
+Bấm Kiểm Tra Lại Rồi Phải Khớp
+    [Documentation]    Nhánh lỗi không tự hỏi lại sổ chung; nút là đường ra. Nếu Vite dev vừa tải lại
+    ...    trang khi nối mạng lại thì lượt mount mới đã hỏi rồi và neo đã khớp — khi đó không bấm.
+    ${neo}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    IF    not $neo.startswith('✓ Khớp sổ chung')
+        Click    css=button:has-text("Kiểm tra lại")
+        Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=5s
+    END

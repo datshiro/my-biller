@@ -82,7 +82,7 @@ export async function resolveUnallocatedPayment(
 ): Promise<void> {
   await syncTransaction(async () => {
     const payment = await db.payments.get(paymentId)
-    if (!payment || payment.allocatedOrderId !== 0 || (payment.unallocatedStatus ?? 'pending') !== 'pending') {
+    if (!payment || payment.allocatedOrderId !== 0 || !isCountedPayment(payment)) {
       throw new Error('Khoản thu này đã được xử lý ở nơi khác.')
     }
 

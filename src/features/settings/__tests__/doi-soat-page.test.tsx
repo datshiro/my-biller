@@ -172,6 +172,15 @@ describe('neo đồng bộ — 12 nhánh xét theo thứ tự', () => {
     expect(await screen.findByRole('button', NÚT)).toBeDefined()
   })
 
+  it('6b. mất mạng mà còn hàng đợi: câu neo vẫn nói số thay đổi chưa lên sổ chung', async () => {
+    syncMocks.listShopDevices.mockRejectedValue(new SyncApiError('Chưa có mạng.', 'network', 0))
+    await seed({ pendingTx: 2 })
+    renderPage()
+    await chờNeo(
+      'Chưa có mạng — số dưới đây là bản trên máy này. 2 thay đổi trên máy này chưa lên sổ chung.',
+    )
+  })
+
   it('7. Worker cũ trả 200 thiếu latestSeq: chưa hỗ trợ, không rơi vào nhánh khớp', async () => {
     syncMocks.listShopDevices.mockResolvedValue(server())
     await seed()
