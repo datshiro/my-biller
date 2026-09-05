@@ -12,6 +12,7 @@ Test Tags           hai-may    regression
 
 *** Variables ***
 ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
+${NEO_ĐỒNG_BỘ}      css=[role=status][aria-label="Neo đồng bộ"]
 
 *** Test Cases ***
 Đơn ở máy A hiện ở máy B mà không tải lại trang
@@ -393,6 +394,48 @@ Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
     ...    Ghi chú bị cắt trên đường qua sổ chung — máy B không thấy thứ máy A đã ghi.
     Should Be Equal    ${có_ghi_chú}[0][name]    Cà phê sữa
 
+Màn Đối soát của hai máy nói cùng một con số
+    [Documentation]    (a) Ca chỉ khoá TRẠNG THÁI CUỐI: hai máy cùng hiện "✓ Khớp sổ chung" với cùng số #,
+    ...    bốn tổng bằng nhau, bảng payments giống nhau. (b) Nhánh "Còn N thay đổi chưa về máy này" cố tình
+    ...    không assert ở đây vì nó phụ thuộc thời điểm quan sát: mở màn là một lần tải trang cứng, sau đó
+    ...    ownerId mới bị lease của phiên trước chặn tới ~15 giây (src/db/sync/leader.ts) rồi poll local 2
+    ...    giây mới claim được, nên "Còn N" khi tan ngay khi nán ~17 giây; nhánh đó đã có ca Vitest tất định
+    ...    ở doi-soat-page.test.tsx. (c) Tiền điều kiện lastSeq A == B (đọc deviceState) triệt nguồn chớp
+    ...    tắt đó: khi cả hai đã kéo hết thì "✓ Khớp" hiện sau một lượt GET /devices, không đợi lease.
+    ...    Budget 25 giây (lease 15 + poll 2 + RTT) chỉ là lưới an toàn; dùng Wait For Elements State với
+    ...    timeout tường minh chứ không bọc Chờ Thấy Chữ trong Wait Until Keyword Succeeds — Browser
+    ...    Timeout 15 giây làm mỗi lượt thử tự chờ 15 giây, 40 lượt là ~10 phút mới đỏ. (d) Phải đọc hết
+    ...    máy A TRƯỚC khi Chọn Máy B: Mở Màn Trên Máy đổi page, đọc A sau đó là đọc B rồi so B với chính B.
+    ...    Chờ trên đúng phần tử neo chứ không chờ chữ trần: dòng hướng dẫn cuối màn cũng in "✓ Khớp sổ chung".
+    Chọn Máy A
+    Click    ${NAV_BAN}
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
+
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/doi-soat
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=25s
+    ${neo_a}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    ${a}=    Đọc Bốn Tổng Đối Soát
+
+    Chọn Máy B
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/doi-soat
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=25s
+    ${neo_b}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    ${b}=    Đọc Bốn Tổng Đối Soát
+
+    Should Be Equal    ${neo_a}    ${neo_b}    Hai máy không đứng ở cùng một điểm của sổ chung.
+    Should Be Equal    ${a}    ${b}    Cùng seq mà bốn tổng của hai máy lệch nhau.
+    # Ghim một vế vào hằng: bộ mẫu 266.000/166.000 cộng đơn Trà đá 3.000 vừa bán tiền mặt.
+    Should Be Equal    ${a}[doanh_thu]    269.000 đ
+    Should Be Equal    ${a}[đã_thu]    169.000 đ
+    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
@@ -441,3 +484,23 @@ Phiếu Của Đơn Phải Có Trạng Thái
     Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
     Should Be Equal As Integers    ${found}[0][allocatedOrderId]    0
     Should Be Equal    ${found}[0][unallocatedStatus]    ${trạng_thái}
+
+Hai Máy Phải Cùng lastSeq
+    [Documentation]    Tiền điều kiện của ca Đối soát: cả hai máy đã kéo hết sổ chung. `Đọc Bảng` che
+    ...    token và deviceId của deviceState, `lastSeq` còn nguyên.
+    ${a}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    ${b}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${seq_a}=    Evaluate    [row for row in $a if row['key'] == 'sync'][0]['lastSeq']
+    ${seq_b}=    Evaluate    [row for row in $b if row['key'] == 'sync'][0]['lastSeq']
+    Should Be Equal As Integers    ${seq_a}    ${seq_b}    Hai máy chưa cùng lastSeq (A=${seq_a}, B=${seq_b}).
+
+Đọc Bốn Tổng Đối Soát
+    [Documentation]    Bốn tổng toàn sổ trên page đang đứng, dạng dict để so hai máy. Khối tổng chỉ
+    ...    render sau khi truy vấn 9 bảng xong nên chờ tiêu đề khối trước.
+    Chờ Thấy Chữ    TỔNG TOÀN SỔ
+    ${doanh_thu}=    Đọc Ô Số    DOANH THU
+    ${đã_thu}=    Đọc Ô Số    ĐÃ THU
+    ${chi_phí}=    Đọc Ô Số    CHI PHÍ
+    ${còn_nợ}=    Đọc Ô Số    CÒN NỢ
+    ${tổng}=    Create Dictionary    doanh_thu=${doanh_thu}    đã_thu=${đã_thu}    chi_phí=${chi_phí}    còn_nợ=${còn_nợ}
+    RETURN    ${tổng}
