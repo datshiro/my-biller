@@ -260,4 +260,44 @@ describe('AppUpdateSection', () => {
     expect(screen.getByRole('alert').textContent).toBe('Chưa xong sau 20 giây. Đóng hẳn app rồi mở lại.')
     expect(bịKhoá(nútKiểm())).toBe(false)
   })
+
+  it('trang chưa bị điều khiển mà worker mới còn chờ (tab khác bám bản cũ) thì chờ nó activate rồi mới tải lại', async () => {
+    const worker = new FakeWorker('installed')
+    const registration = fakeRegistration(async () => {})
+    registration.waiting = worker
+    gắnContainer(registration, null)
+    const reload = vi.fn()
+    render(<AppUpdateSection reload={reload} />)
+
+    await userEvent.click(nútKiểm())
+    await userEvent.click(await screen.findByRole('button', { name: 'TẢI LẠI NGAY' }))
+    expect(worker.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
+    expect(reload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      worker.chuyển('activated')
+    })
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('bấm TẢI LẠI NGAY mà 20 giây không đổi controller thì báo và mở nút lại', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: vi.advanceTimersByTime.bind(vi) })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const registration = fakeRegistration(async () => {})
+    registration.waiting = new FakeWorker('installed')
+    gắnContainer(registration)
+    const reload = vi.fn()
+    render(<AppUpdateSection reload={reload} />)
+
+    await user.click(nútKiểm())
+    await user.click(await screen.findByRole('button', { name: 'TẢI LẠI NGAY' }))
+    await act(async () => {
+      vi.advanceTimersByTime(20_000)
+    })
+
+    expect(screen.getByRole('alert').textContent).toBe('Chưa xong sau 20 giây. Đóng hẳn app rồi mở lại.')
+    expect(bịKhoá(nútKiểm())).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+  })
 })

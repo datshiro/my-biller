@@ -36,6 +36,10 @@ const NOTE: Partial<Record<Phase['kind'], string>> = {
  */
 function waitFor<T>(target: EventTarget, event: string, đọc: () => T | undefined, signal: AbortSignal): Promise<T | null> {
   return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(null)
+      return
+    }
     const done = (value: T | null) => {
       clearTimeout(timer)
       target.removeEventListener(event, onEvent)
@@ -120,7 +124,21 @@ export function AppUpdateSection({ reload = () => window.location.reload() }: { 
     // cũ — nên `waiting` cũng rỗng. Tải lại là đủ để trang nhận bản mới.
     if (!navigator.serviceWorker.controller) {
       setPhase({ kind: 'reloading' })
-      waiting?.postMessage({ type: 'SKIP_WAITING' })
+      if (waiting) {
+        // Còn tab khác bám bản cũ nên worker mới vẫn đứng ở `waiting`: chờ nó activate rồi mới tải
+        // lại, không thì cú điều hướng vẫn do worker cũ phục vụ và trang quay về bundle cũ.
+        const xong = waitFor(
+          waiting,
+          'statechange',
+          () => (waiting.state === 'activated' || waiting.state === 'redundant' ? true : undefined),
+          rời.current.signal,
+        )
+        waiting.postMessage({ type: 'SKIP_WAITING' })
+        if ((await xong) === null) {
+          if (!rời.current.signal.aborted) setPhase({ kind: 'failed', message: LỖI_TREO })
+          return
+        }
+      }
       reload()
       return
     }
@@ -154,14 +172,13 @@ export function AppUpdateSection({ reload = () => window.location.reload() }: { 
       >
         {LABEL[phase.kind]}
       </Button>
-      {note ? (
-        <p
-          aria-live="polite"
-          className={`mt-2 text-[13px] ${phase.kind === 'latest' ? 'font-semibold text-brand' : 'text-muted'}`}
-        >
-          {note}
-        </p>
-      ) : null}
+      {/* Vùng live phải có sẵn trước khi chữ đổi thì màn đọc mới đọc, nên không gỡ thẻ khi trống. */}
+      <p
+        aria-live="polite"
+        className={note ? `mt-2 text-[13px] ${phase.kind === 'latest' ? 'font-semibold text-brand' : 'text-muted'}` : 'sr-only'}
+      >
+        {note ?? ''}
+      </p>
       {phase.kind === 'failed' ? (
         <p role="alert" className="mt-3 rounded-btn bg-danger-tint px-3 py-2 text-[13px] font-semibold text-danger">
           {phase.message}
