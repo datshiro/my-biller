@@ -103,20 +103,7 @@ Khách lẻ xử lý khoản thu sau huỷ ngay tại chi tiết đơn
     [Documentation]    Lỗi cũ để khoản thu khách lẻ chờ vô hạn vì chỉ lịch sử khách mới có nút xử lý;
     ...    ca này xác nhận UI và đọc thẳng payment để khoá trạng thái hoàn tiền có ghi vết.
     [Tags]    regression
-    Bán Nhanh    Phở bò
-    ${đơn}=    Đơn Mới Nhất
-    Mở Chi Tiết Đơn Mới Nhất
-    Bấm Nút    Huỷ đơn
-    Chờ Hộp Xác Nhận    Huỷ đơn này?
-    Chờ Thấy Chữ    xử lý ngay tại chi tiết đơn
-    Xác Nhận Trong Hộp    Huỷ đơn
-
-    Chờ Thấy Chữ    Khoản thu chờ xử lý
-    Bấm Nút    Đã trả lại khách
-    Chờ Hộp Xác Nhận    Đã trả lại tiền cho khách?
-    Xác Nhận Trong Hộp    Xác nhận
-    Chờ Thấy Chữ    Đã trả lại khách
-    Không Được Thấy Chữ    Bỏ có ghi vết
+    ${đơn}=    Bán Nhanh Rồi Huỷ Và Trả Lại Tiền    Phở bò
 
     ${phiếu_thu}=    Đọc Bảng    payments
     ${của_đơn}=    Evaluate    [p for p in $phiếu_thu if p['orderId'] == $đơn['id']]
@@ -156,11 +143,6 @@ Từ chi tiết đơn mở thẳng được phiếu
 
 
 *** Keywords ***
-Mở Chi Tiết Đơn Mới Nhất
-    ${đơn}=    Đơn Mới Nhất
-    Mở Màn    /don/${đơn}[id]
-    Chờ Thấy Chữ    MẶT HÀNG
-
 Đọc Số Đơn Hôm Nay
     [Documentation]    Đi thẳng bằng URL: đây là phép đọc số, không phải ca kiểm thanh nav — và chỗ
     ...    gọi nó có khi đang đứng ở phiếu, nơi không có bottom nav.

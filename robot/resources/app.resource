@@ -194,3 +194,25 @@ Bỏ Qua Hộp Xác Nhận
     Should Not Be Empty    ${orders}    Chưa có đơn nào trong IndexedDB.
     ${cuối}=    Evaluate    max($orders, key=lambda row: row['id'])
     RETURN    ${cuối}
+
+Mở Chi Tiết Đơn Mới Nhất
+    ${đơn}=    Đơn Mới Nhất
+    Mở Màn    /don/${đơn}[id]
+    Chờ Thấy Chữ    MẶT HÀNG
+
+
+# --- Đọc con số trên màn ------------------------------------------------------------------
+
+Đọc Ô Số
+    [Documentation]    StatBox Báo cáo, khối lãi/lỗ, ô TỔNG NỢ Công nợ và bốn tổng Đối soát đều là
+    ...    <span> nhãn rồi <span> số ngay sau nó. Có thể truyền page của máy khác; keyword tự quay về
+    ...    page đang đứng.
+    [Arguments]    ${nhãn}    ${page}=${None}
+    IF    $page is not None
+        ${page_trước}=    Switch Page    ${page}    context=ALL    browser=ALL
+    END
+    ${số}=    Get Text    ${{ 'xpath=//span[normalize-space()="%s"]/following-sibling::span[1]' % $nhãn }}
+    IF    $page is not None
+        Switch Page    ${page_trước}    context=ALL    browser=ALL
+    END
+    RETURN    ${số}

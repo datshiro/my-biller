@@ -368,6 +368,12 @@ export function SettingsPage() {
           onClick={() => void navigate('/ghep-may')}
         />
         <ListRow
+          title="Đối soát"
+          subtitle="So sổ máy này với sổ chung và với máy khác"
+          right={<span className="text-[20px] text-muted">›</span>}
+          onClick={() => void navigate('/them/doi-soat')}
+        />
+        <ListRow
           title="Nhóm mặt hàng"
           subtitle="Gom món để lọc nhanh khi bán"
           right={<span className="text-[20px] text-muted">›</span>}

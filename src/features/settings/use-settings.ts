@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { getLedgerOverview, getSyncAnchor } from '@/db/doi-soat-snapshot'
 import { getAppState, getShop } from '@/db/repositories/settings'
 import {
   getDeviceConnection,
@@ -34,4 +35,13 @@ export function useDeviceConnectionSnapshot() {
 
 export function useDeviceNotice(): DeviceNotice | null | undefined {
   return useLiveQuery(async () => (await getDeviceNotice()) ?? null)
+}
+
+/** Neo đồng bộ cho màn Đối soát — rẻ, tách khỏi phần tổng để bão drain outbox không kéo theo 9 bảng. */
+export function useSyncAnchor() {
+  return useLiveQuery(() => getSyncAnchor())
+}
+
+export function useLedgerOverview() {
+  return useLiveQuery(() => getLedgerOverview())
 }

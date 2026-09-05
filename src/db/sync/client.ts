@@ -52,13 +52,17 @@ export async function jsonRequest<T>(url: string, init: RequestInit): Promise<T>
   let response: Response
   try {
     response = await fetch(url, init)
-  } catch {
+  } catch (caught) {
+    // Bị huỷ bởi chính caller (unmount, bấm lại, hết giờ) thì không phải mất mạng — trả nguyên lỗi.
+    if (init.signal?.aborted) throw caught
     throw new SyncApiError('Chưa có mạng. Kết nối Internet rồi thử lại.', 'network', 0)
   }
 
   const body = (await response.json().catch(() => null)) as
     | ({ error?: string; message?: string } & T)
     | null
+  // Huỷ giữa lúc đọc body bị `.catch` ở trên nuốt thành `null`; trả lỗi huỷ cho caller thay vì body rỗng.
+  if (init.signal?.aborted) throw init.signal.reason ?? new DOMException('Aborted', 'AbortError')
   if (!response.ok) {
     throw new SyncApiError(
       body?.message ?? 'Không kết nối được với sổ chung. Thử lại.',
@@ -107,9 +111,11 @@ export function createPairCode(
 /** `latestSeq` vắng khi Worker chưa lên bản có trường này — là trạng thái hợp lệ, không phải `0`. */
 export function listShopDevices(
   connection: DeviceConnection,
+  options: { signal?: AbortSignal } = {},
 ): Promise<{ devices: ShopDevice[]; latestSeq?: number }> {
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/devices`, {
     headers: authHeaders(connection),
+    signal: options.signal,
   })
 }
 
