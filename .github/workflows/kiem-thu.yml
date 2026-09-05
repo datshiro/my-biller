@@ -36,13 +36,15 @@ jobs:
       - name: Vitest (unit + component)
         run: npm test
 
+      # Ghi ra `dist-next` để vừa kiểm biên dịch staging, vừa làm "bản mới" cho ca cập nhật app
+      # trong e2e-recovery (artifact-server phục vụ nó ở mode `next`).
       - name: Build staging
-        run: npm run build:staging
+        run: npm run build:staging -- --outDir dist-next
 
       - name: Build recovery
         run: npm run build:recovery
 
-      # Build normal chạy cuối để `dist/` không giữ bundle staging.
+      # Build normal chạy cuối để `dist/` chắc chắn là bundle production.
       # `npm run build` chạy `tsc --noEmit` trước `vite build`, nên đây cũng là bước kiểm kiểu.
       - name: Build normal
         run: npm run build
