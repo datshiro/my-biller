@@ -23,7 +23,7 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-function forward(stub: DurableObjectStub, request: Request, pathname: string, body?: unknown): Promise<Response> {
+function forward(stub: DurableObjectStub, request: Request, path: string, body?: unknown): Promise<Response> {
   const headers = new Headers(request.headers)
   headers.delete('host')
   const init: RequestInit = { method: request.method, headers }
@@ -33,7 +33,7 @@ function forward(stub: DurableObjectStub, request: Request, pathname: string, bo
   } else if (request.method !== 'GET' && request.method !== 'HEAD') {
     init.body = request.body
   }
-  return stub.fetch(new Request(`https://shop.internal${pathname}`, init))
+  return stub.fetch(new Request(`https://shop.internal${path}`, init))
 }
 
 function shopStub(env: Env, shopId: string): DurableObjectStub {
@@ -103,7 +103,8 @@ const worker = {
         (request.method === 'POST' && /^\/devices\/[^/]+\/revoke$/.test(rest))
 
       response = safeShopId && allowed
-        ? await forward(shopStub(env, shopId), request, rest)
+        // Giữ query string: `/oplog?since=N` mà rơi `since` là mọi trang đều trở về seq 1..500.
+        ? await forward(shopStub(env, shopId), request, rest + url.search)
         : new Response('Not found', { status: 404 })
     }
 
