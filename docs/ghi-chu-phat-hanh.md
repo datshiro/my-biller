@@ -23,8 +23,9 @@
 ### Thay đổi vận hành
 
 - Máy có thêm chốt phòng thủ ở `pullAll`: sổ chung báo "còn nữa" mà trang vừa nhận không làm `lastSeq`
-  tiến thì dừng lượt kéo cho tick sau thử lại — lỗi máy chủ kiểu này không còn biến thành vòng lặp nóng
-  chặn cả đường ghi.
+  tiến thì dừng lượt kéo cho tick sau thử lại — lỗi máy chủ kiểu này không còn biến thành vòng lặp nóng.
+  Hàng đợi cố ý đứng chờ tới khi sổ chung trả trang đúng (băng "Đang đưa N thay đổi lên sổ chung…" vẫn
+  hiện), vì đẩy vào một sổ chung đang trả sai có thể bị từ chối và cuộn ngược dòng cục bộ.
 - Không có ca Robot cho hai sửa này: cần sổ từ 500 sự kiện, bộ mẫu hai máy chưa tới. Ca Worker mới đi
   đúng đường qua cổng (`since=N` phải trả đúng phần sau N); ca Vitest cho `pullAll` khoá chốt phòng thủ.
 

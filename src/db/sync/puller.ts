@@ -13,8 +13,9 @@ export async function pullAll(connection: DeviceConnection, leader: LeaderToken)
     pulled += batch.events.length
     if (!batch.hasMore) return pulled
     // Sổ chung báo còn trang mà lastSeq không tiến nghĩa là trang vừa nhận đã áp dụng rồi (máy chủ
-    // trả sai `since`). Dừng lượt này cho tick sau thử lại, thay vì quay vòng nóng kéo mãi một trang
-    // và chặn luôn bước đưa hàng đợi lên đứng sau.
+    // trả sai `since`). Dừng lượt này cho tick sau thử lại để hết vòng nóng kéo mãi một trang. Hàng
+    // đợi cố ý đứng chờ tới khi sổ chung trả trang đúng: đẩy vào một sổ chung đang trả sai có thể bị
+    // từ chối và cuộn ngược dòng cục bộ.
     if ((await getDeviceSyncState()).lastSeq <= before) {
       throw new Error(`Sổ chung trả lại trang đã áp dụng (seq ≤ ${before}); dừng lượt kéo này.`)
     }
