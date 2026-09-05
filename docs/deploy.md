@@ -276,7 +276,9 @@ Preview chỉ chứng minh bytes, route,
 manifest, service worker và cold-offline của artifact; vì khác origin, nó không chứng minh migration
 IndexedDB hoặc update service worker của người dùng production. Sau deploy vẫn phải canary trên
 production origin: thấy prompt cập nhật, nhận controller/service worker mới, đối chiếu số liệu rồi
-thử offline. Thiếu canary này thì release chưa hoàn tất vận hành.
+thử offline. Từ 2.4.0 canary thêm một bước: mở Cài đặt → Đối soát trên một máy đã ghép, phải thấy
+"✓ Khớp sổ chung" — thấy "cần cập nhật máy chủ" là Worker chưa lên bản mới. Thiếu canary này thì
+release chưa hoàn tất vận hành.
 
 Nếu fail trước Pages cutover, giữ Pages cũ và chỉ rollback Worker khi có version tương thích đã xác
 minh. Nếu fail sau khi schema v5 đã mở, không đưa frontend 1.x trở lại: dùng workflow
