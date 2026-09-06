@@ -97,7 +97,7 @@ robot/
 │   ├── don-hang.robot        danh sách đơn, ghi chú, huỷ đơn
 │   ├── mat-hang.robot        danh mục, ngừng bán, chặn xoá món đã bán
 │   ├── khach-hang.robot      khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
-│   ├── chi-phi.robot         ghi/sửa/xoá khoản chi, hai ô tổng
+│   ├── chi-phi.robot         ghi/sửa/xoá khoản chi, hai ô tổng, chốt xoá loại chi phí
 │   ├── cong-no.robot         thu nợ, chặn thu dư, phiếu thu ra đúng dòng
 │   ├── bao-cao.robot         lãi/lỗ, các kỳ, khoảng ngày tự chọn
 │   ├── phieu.robot           nội dung phiếu, chia trang, dựng ảnh PNG
