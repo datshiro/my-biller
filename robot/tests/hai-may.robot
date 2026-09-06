@@ -212,8 +212,13 @@ Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
     ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
+    # Hai phép chốt cuối cũng phải chờ được: thao tác bị từ chối ở trên đặt `resyncRequired`, nên sau
+    # lượt hội tụ đầu vẫn còn một nhịp `resetReadReplica` xoá sạch 9 bảng rồi `pullAll` đổ lại. Đọc trần
+    # rơi vào đúng khoảng trống đó thì thấy phiếu "biến mất" — đó là #33, không phải lỗi hội tụ.
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
 
 Đóng tab dẫn đầu thì tab còn lại tiếp quản và vẫn đẩy đơn
     [Documentation]    Lease không được mắc kẹt ở tab đã đóng; epoch mới phải tiếp tục đường ghi.
