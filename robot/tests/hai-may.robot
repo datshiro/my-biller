@@ -212,8 +212,13 @@ Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
     ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
+    # Hai phép chốt cuối cũng phải chờ được: thao tác bị từ chối ở trên đặt `resyncRequired`, nên sau
+    # lượt hội tụ đầu vẫn còn một nhịp `resetReadReplica` xoá sạch 9 bảng rồi `pullAll` đổ lại. Đọc trần
+    # rơi vào đúng khoảng trống đó thì thấy phiếu "biến mất" — đó là #33, không phải lỗi hội tụ.
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
 
 Đóng tab dẫn đầu thì tab còn lại tiếp quản và vẫn đẩy đơn
     [Documentation]    Lease không được mắc kẹt ở tab đã đóng; epoch mới phải tiếp tục đường ghi.
@@ -465,9 +470,21 @@ Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
     Hai Bảng Phải Hội Tụ    payments
     Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
-    # Các phép đọc chéo ở trên đổi page; quay về A tường minh trước khi chạm giao diện, như mọi ca khác.
     Chọn Máy A
     Wait Until Keyword Succeeds    8x    2s    Bấm Kiểm Tra Lại Rồi Phải Khớp
+
+Đọc hỏng ở máy khác vẫn trả page về máy đang đứng
+    [Tags]    regression
+    [Documentation]    `Đọc Bảng` và `Đọc Ô Số` từng chỉ trả page về chỗ cũ sau khi đọc **thành công**:
+    ...    lệnh `Switch Page` quay lại nằm sau phép đọc, không có TRY/FINALLY. Một phép đọc chéo hỏng
+    ...    vì vậy bỏ page đứng lại ở máy kia, rồi keyword sau đó chết ở chỗ chẳng liên quan — ca ngoại
+    ...    tuyến bên trên từng mất một lượt gỡ dài chỉ vì cái bẫy này. Đọc một bảng không tồn tại là
+    ...    cách làm hỏng nhanh nhất: IndexedDB ném ngay ở `transaction()`, không phải chờ hết giờ.
+    Chọn Máy A
+    ${trước}=    Switch Page    CURRENT
+    Run Keyword And Expect Error    *    Đọc Bảng    bảng_không_có_thật    ${MÁY_B_PAGE}
+    ${sau}=    Switch Page    CURRENT
+    Should Be Equal    ${sau}    ${trước}    Đọc hỏng bỏ page lại ở máy B.
 
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung

@@ -12,6 +12,8 @@ Test Tags           chi-phi
 *** Variables ***
 ${SHEET_CHI}    css=[role=dialog][aria-label="Ghi chi phí"]
 ${SHEET_SỬA}    css=[role=dialog][aria-label="Sửa khoản chi"]
+${SHEET_TÊN}    css=[role=dialog][aria-label="Sửa tên"]
+${SHEET_TÊN_MỚI}    css=[role=dialog][aria-label="Thêm mới"]
 
 
 *** Test Cases ***
@@ -84,6 +86,36 @@ Không ghi trước được khoản chi cho ngày mai
 
     Chờ Thấy Chữ    Chưa tới ngày đó, không ghi trước được
     Nút Phải Bị Khoá    LƯU
+
+Loại đang gánh khoản chi thì khoá nút xoá, loại chưa ai dùng thì xoá được
+    [Documentation]    Xoá một loại là gỡ nhãn khỏi mọi khoản chi cũ và không có đường lùi, nên màn
+    ...    chặn từ trước: nút Xoá khoá lại kèm câu nói phải làm gì. Bộ mẫu chỉ có "Nguyên liệu" và nó
+    ...    đang gánh khoản 1.200.000, nên muốn thử nhánh xoá được thì phải tự thêm một loại trống.
+    ...    Khoản chi cũ phải còn nguyên số tiền sau khi xoá loại khác — đối chiếu thẳng ở IndexedDB.
+    Mở Màn    /them/loai-chi-phi
+    # Dòng gợi ý của màn có sẵn chữ "Nguyên liệu" lẫn "Thuê mặt bằng", nên mọi phép chạm và phép
+    # vắng mặt ở ca này đều phải bám vào nút trong danh sách chứ không bắt chữ trần.
+    Click    css=ul button:has-text("Nguyên liệu")
+    Wait For Elements State    ${SHEET_TÊN} >> css=button:has-text("Xoá")    disabled
+    Chờ Thấy Chữ    Đang có 1 khoản chi thuộc loại này
+    Click    ${SHEET_TÊN} >> css=button[aria-label="Đóng"]
+
+    Click    css=button:has-text("Thêm loại")
+    Điền Ô    Tên    Thuê mặt bằng
+    Click    ${SHEET_TÊN_MỚI} >> css=button:has-text("LƯU")
+    Chờ Thấy Chữ    Chưa dùng
+
+    Click    css=ul button:has-text("Thuê mặt bằng")
+    Click    ${SHEET_TÊN} >> css=button:has-text("Xoá")
+    Xác Nhận Trong Hộp    Xoá
+    Wait For Elements State    css=ul button:has-text("Thuê mặt bằng")    detached
+
+    ${loại}=    Đọc Bảng    expenseCategories
+    ${tên}=    Evaluate    [row['name'] for row in $loại]
+    Should Be Equal    ${tên}    ${{ ['Nguyên liệu'] }}    Xoá loại trống mà đụng vào loại khác.
+    ${chi}=    Đọc Bảng    expenses
+    Length Should Be    ${chi}    1    Xoá loại không được đụng vào khoản chi.
+    Should Be Equal As Integers    ${chi}[0][amount]    1200000
 
 Lọc theo loại chi thì chỉ còn khoản của loại đó
     Mở Màn    /chi-phi
