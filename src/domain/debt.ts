@@ -38,6 +38,21 @@ export function showsDebtBlock(order: DebtOrder, totalDue: number): boolean {
 }
 
 /**
+ * Phiếu thu còn được tính vào tiền hay không.
+ *
+ * `refunded` là tiền đã trả lại khách, `discarded` là khoản ghi nhận sai đã có ghi vết. Cả hai vẫn
+ * nằm trong lịch sử (phiếu thu không xoá được) nhưng không còn là tiền của quán. Một chỗ duy nhất
+ * cho năm nơi hỏi cùng câu này — và hai trong năm không phải màn đọc: hàm này nằm trên đường in
+ * phiếu (`use-receipt.ts`) và trong cổng ghi của thu nợ (`payments.ts`, trong `syncTransaction`).
+ * Sửa nó là sửa cả tiền in ra giấy lẫn tiền ghi xuống sổ, không chỉ một con số trên màn hình.
+ */
+export function isCountedPayment(payment: {
+  unallocatedStatus?: 'pending' | 'refunded' | 'discarded'
+}): boolean {
+  return (payment.unallocatedStatus ?? 'pending') === 'pending'
+}
+
+/**
  * Đơn này không góp đồng nào vào nợ, nên "Nợ cũ" và "TỔNG PHẢI TRẢ" sẽ ra ĐÚNG một con số. Hai dòng
  * trùng nhau trên tờ giấy đưa tận tay khách đọc như lỗi in, nên gộp thành một dòng mang nhãn tự nói
  * ra đây là nợ của đơn TRƯỚC — bỏ trơn dòng "Nợ cũ" thì "TỔNG PHẢI TRẢ" đứng ngay dưới "Đã trả" lại

@@ -399,7 +399,10 @@ export class ShopDO extends DurableObject<Env> {
       revokedAt: device.revokedAt,
       current: device.id === current.id,
     }))
-    return json({ devices })
+    // `seq` là alias của rowid nên MAX là một lần seek, không quét bảng — cùng câu lệnh activateDevice dùng.
+    const latestSeq =
+      Number(first(this.sql.exec<{ seq: number }>('SELECT MAX(seq) AS seq FROM oplog'))?.seq) || 0
+    return json({ devices, latestSeq })
   }
 
   private async revokeDevice(request: Request, deviceId: string): Promise<Response> {

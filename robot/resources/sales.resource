@@ -101,6 +101,28 @@ Bán Nhanh
     Mở Sheet Thu Tiền
     Chốt Đơn
 
+Bán Nhanh Rồi Huỷ Và Trả Lại Tiền
+    [Documentation]    Bán tiền mặt cho khách lẻ, huỷ đơn ngay tại chi tiết đơn rồi bấm "Đã trả lại khách".
+    ...    Ba bước chờ giữa các hộp là bắt buộc — bỏ một bước là bấm vào hộp chưa mở. Trả về dict đơn
+    ...    vừa bán để ca gọi đối chiếu bảng payments.
+    [Arguments]    ${tên_món}
+    Bán Nhanh    ${tên_món}
+    ${đơn}=    Đơn Mới Nhất
+    Mở Chi Tiết Đơn Mới Nhất
+    Bấm Nút    Huỷ đơn
+    Chờ Hộp Xác Nhận    Huỷ đơn này?
+    Chờ Thấy Chữ    xử lý ngay tại chi tiết đơn
+    Xác Nhận Trong Hộp    Huỷ đơn
+    Chờ Thấy Chữ    Khoản thu chờ xử lý
+    Bấm Nút    Đã trả lại khách
+    Chờ Hộp Xác Nhận    Đã trả lại tiền cho khách?
+    Xác Nhận Trong Hộp    Xác nhận
+    # Nút "Đã trả lại khách" trùng chữ với nhãn trạng thái sau khi hoàn; phải chờ cặp nút biến mất mới
+    # chắc phiếu đã được ghi lại — chờ chữ trùng đó là chờ trống, và Go To ngay sau có thể cắt ngang ghi.
+    Không Được Thấy Chữ    Bỏ có ghi vết
+    Chờ Thấy Chữ    Đã trả lại khách
+    RETURN    ${đơn}
+
 Bán Nợ Cho Khách
     [Documentation]    Bán ghi nợ toàn bộ cho một khách đã có sẵn.
     [Arguments]    ${tên_món}    ${tên_khách}
