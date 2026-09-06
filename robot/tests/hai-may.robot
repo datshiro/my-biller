@@ -470,9 +470,21 @@ Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
     Hai Bảng Phải Hội Tụ    payments
     Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
-    # Các phép đọc chéo ở trên đổi page; quay về A tường minh trước khi chạm giao diện, như mọi ca khác.
     Chọn Máy A
     Wait Until Keyword Succeeds    8x    2s    Bấm Kiểm Tra Lại Rồi Phải Khớp
+
+Đọc hỏng ở máy khác vẫn trả page về máy đang đứng
+    [Tags]    regression
+    [Documentation]    `Đọc Bảng` và `Đọc Ô Số` từng chỉ trả page về chỗ cũ sau khi đọc **thành công**:
+    ...    lệnh `Switch Page` quay lại nằm sau phép đọc, không có TRY/FINALLY. Một phép đọc chéo hỏng
+    ...    vì vậy bỏ page đứng lại ở máy kia, rồi keyword sau đó chết ở chỗ chẳng liên quan — ca ngoại
+    ...    tuyến bên trên từng mất một lượt gỡ dài chỉ vì cái bẫy này. Đọc một bảng không tồn tại là
+    ...    cách làm hỏng nhanh nhất: IndexedDB ném ngay ở `transaction()`, không phải chờ hết giờ.
+    Chọn Máy A
+    ${trước}=    Switch Page    CURRENT
+    Run Keyword And Expect Error    *    Đọc Bảng    bảng_không_có_thật    ${MÁY_B_PAGE}
+    ${sau}=    Switch Page    CURRENT
+    Should Be Equal    ${sau}    ${trước}    Đọc hỏng bỏ page lại ở máy B.
 
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung

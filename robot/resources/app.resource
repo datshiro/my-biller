@@ -152,39 +152,45 @@ Bỏ Qua Hộp Xác Nhận
 
 Đọc Bảng
     [Documentation]    Toàn bộ bản ghi của một bảng trong IndexedDB thật, dạng list of dict.
-    ...    Có thể truyền page của máy khác; keyword tự quay về page đang đứng. `deviceState` luôn
-    ...    che token và deviceId trước khi giá trị có cơ hội đi vào output.xml/log.html.
+    ...    Có thể truyền page của máy khác; keyword trả page về chỗ đang đứng kể cả khi đọc hỏng.
+    ...    `Switch Page` trả về page *sau* lượt chuyển chứ không phải page cũ, nên chỗ đang đứng phải
+    ...    hỏi bằng `CURRENT` trước khi chuyển đi. `deviceState` luôn che token và deviceId trước khi
+    ...    giá trị có cơ hội đi vào output.xml/log.html.
     [Arguments]    ${tên_bảng}    ${page}=${None}
     IF    $page is not None
-        ${page_trước}=    Switch Page    ${page}    context=ALL    browser=ALL
+        ${page_trước}=    Switch Page    CURRENT
+        Switch Page    ${page}    context=ALL    browser=ALL
     END
-    ${rows}=    Evaluate JavaScript    ${None}
-    ...    async (store) => {
-    ...        const db = await new Promise((resolve, reject) => {
-    ...            const open = indexedDB.open('my-biller')
-    ...            open.onsuccess = () => resolve(open.result)
-    ...            open.onerror = () => reject(open.error)
-    ...        })
-    ...        const rows = await new Promise((resolve, reject) => {
-    ...            const request = db.transaction(store, 'readonly').objectStore(store).getAll()
-    ...            request.onsuccess = () => resolve(request.result)
-    ...            request.onerror = () => reject(request.error)
-    ...        })
-    ...        db.close()
-    ...        if (store !== 'deviceState') return rows
-    ...        return rows.map((row) => {
-    ...            const safe = { ...row }
-    ...            if ('token' in safe) {
-    ...                safe.hasToken = typeof safe.token === 'string' && safe.token.length > 0
-    ...                delete safe.token
-    ...            }
-    ...            delete safe.deviceId
-    ...            return safe
-    ...        })
-    ...    }
-    ...    arg=${tên_bảng}
-    IF    $page is not None
-        Switch Page    ${page_trước}    context=ALL    browser=ALL
+    TRY
+        ${rows}=    Evaluate JavaScript    ${None}
+        ...    async (store) => {
+        ...        const db = await new Promise((resolve, reject) => {
+        ...            const open = indexedDB.open('my-biller')
+        ...            open.onsuccess = () => resolve(open.result)
+        ...            open.onerror = () => reject(open.error)
+        ...        })
+        ...        const rows = await new Promise((resolve, reject) => {
+        ...            const request = db.transaction(store, 'readonly').objectStore(store).getAll()
+        ...            request.onsuccess = () => resolve(request.result)
+        ...            request.onerror = () => reject(request.error)
+        ...        })
+        ...        db.close()
+        ...        if (store !== 'deviceState') return rows
+        ...        return rows.map((row) => {
+        ...            const safe = { ...row }
+        ...            if ('token' in safe) {
+        ...                safe.hasToken = typeof safe.token === 'string' && safe.token.length > 0
+        ...                delete safe.token
+        ...            }
+        ...            delete safe.deviceId
+        ...            return safe
+        ...        })
+        ...    }
+        ...    arg=${tên_bảng}
+    FINALLY
+        IF    $page is not None
+            Switch Page    ${page_trước}    context=ALL    browser=ALL
+        END
     END
     RETURN    ${rows}
 
@@ -205,14 +211,18 @@ Mở Chi Tiết Đơn Mới Nhất
 
 Đọc Ô Số
     [Documentation]    StatBox Báo cáo, khối lãi/lỗ, ô TỔNG NỢ Công nợ và bốn tổng Đối soát đều là
-    ...    <span> nhãn rồi <span> số ngay sau nó. Có thể truyền page của máy khác; keyword tự quay về
-    ...    page đang đứng.
+    ...    <span> nhãn rồi <span> số ngay sau nó. Có thể truyền page của máy khác; keyword trả page về
+    ...    chỗ đang đứng kể cả khi đọc hỏng — xem ghi chú `Switch Page` ở `Đọc Bảng`.
     [Arguments]    ${nhãn}    ${page}=${None}
     IF    $page is not None
-        ${page_trước}=    Switch Page    ${page}    context=ALL    browser=ALL
+        ${page_trước}=    Switch Page    CURRENT
+        Switch Page    ${page}    context=ALL    browser=ALL
     END
-    ${số}=    Get Text    ${{ 'xpath=//span[normalize-space()="%s"]/following-sibling::span[1]' % $nhãn }}
-    IF    $page is not None
-        Switch Page    ${page_trước}    context=ALL    browser=ALL
+    TRY
+        ${số}=    Get Text    ${{ 'xpath=//span[normalize-space()="%s"]/following-sibling::span[1]' % $nhãn }}
+    FINALLY
+        IF    $page is not None
+            Switch Page    ${page_trước}    context=ALL    browser=ALL
+        END
     END
     RETURN    ${số}
