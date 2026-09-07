@@ -118,6 +118,15 @@ Nút Phải Bị Khoá
     [Arguments]    ${nhãn}
     Wait For Elements State    css=button:has-text("${nhãn}")    disabled
 
+Tải File Bằng Nút
+    [Documentation]    Bấm một nút tải rồi trả đường dẫn thật của file rơi xuống máy. Mẫu như
+    ...    `Sao Lưu Ra File` của sao-luu.robot — mỗi context có chỗ cất riêng nên không tự đặt tên.
+    [Arguments]    ${nhãn}
+    ${hứa}=    Promise To Wait For Download
+    Click    css=button:has-text("${nhãn}")
+    ${tải}=    Wait For    ${hứa}
+    RETURN    ${tải}[saveAs]
+
 # --- Chip chọn ----------------------------------------------------------------------------
 # `SelectChip` là nút duy nhất mang `aria-pressed`, nên bám theo đó là tách được khỏi các dòng
 # danh sách vốn cũng chứa cùng chữ (tên loại chi hiện lại ở phụ đề từng dòng).

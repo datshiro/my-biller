@@ -5,6 +5,10 @@ import { ReceiptView } from './receipt-view'
 import { receiptToText } from './receipt-text'
 import { canShareReceipt, downloadReceipt, renderReceiptPng, shareReceipt } from './share-receipt'
 import { receiptSignature, useReceipt } from './use-receipt'
+import { downloadBytes } from '../printer/download-bytes'
+import { buildReceiptJob } from '../printer/print-job'
+import { readPrinterConfig } from '../printer/printer-config'
+import { isNativeApp, nativeSink } from '../printer/printer-sink'
 import { paginateLines } from '@/domain/receipt-pages'
 import { Button } from '@/ui/button'
 import { EmptyState } from '@/ui/empty-state'
@@ -18,9 +22,15 @@ export function ReceiptPage() {
   const signature = receiptSignature(data)
 
   const captureRefs = useRef<(HTMLDivElement | null)[]>([])
+  const thermalRef = useRef<HTMLDivElement | null>(null)
   const [png, setPng] = useState<Png | null>(null)
   const [pngError, setPngError] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [inNhiet, setInNhiet] = useState<{ busy: boolean; message: string | null; error: boolean; needConfig?: boolean }>({
+    busy: false,
+    message: null,
+    error: false,
+  })
 
   // Nội dung phiếu đổi thì ảnh cũ hết giá trị — dọn ngay trong lúc render, không đợi effect,
   // để không có nhịp nào nút "Chia sẻ" cầm ảnh của phiếu cũ.
@@ -86,6 +96,40 @@ export function ReceiptPage() {
     }
   }
 
+  // Chụp LƯỜI khi chạm (D6): gọi plugin không phải điều hướng nên không cần href dựng sẵn. Bản nhiệt
+  // một dải nằm sẵn trong DOM ẩn — chỉ chụp thành byte lúc bấm.
+  const onPrintThermal = async () => {
+    const cfg = readPrinterConfig()
+    if (!cfg) {
+      setInNhiet({ busy: false, message: 'Chưa cài IP máy in.', error: true, needConfig: true })
+      return
+    }
+    const node = thermalRef.current
+    if (!node) return
+    setInNhiet({ busy: true, message: 'Đang chuẩn bị bản in…', error: false })
+    try {
+      const bytes = await buildReceiptJob(node)
+      await nativeSink(bytes, cfg)
+      setInNhiet({ busy: false, message: `Đã gửi tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+    } catch (error) {
+      setInNhiet({
+        busy: false,
+        message: error instanceof Error ? error.message : 'Không gửi được bản in.',
+        error: true,
+      })
+    }
+  }
+
+  const onDownloadBin = async () => {
+    const node = thermalRef.current
+    if (!node) return
+    try {
+      downloadBytes(await buildReceiptJob(node), `${order.code}.bin`)
+    } catch {
+      // Tiện ích chỉ có ở bản dev; nuốt lỗi chụp để không văng unhandled rejection lúc thử.
+    }
+  }
+
   const busy = png === null && !pngError
 
   return (
@@ -126,6 +170,13 @@ export function ReceiptPage() {
               />
             </div>
           ))}
+
+          {/* Bản nhiệt một dải cho máy in nhiệt: con CUỐI của .space-y-4, ẩn (bất biến #4). KHÔNG mang
+              .receipt-view — các ca đếm tấm gửi khách bằng class đó. `-mt-4` triệt margin space-y-4 qua
+              collapse (16 − 16 = 0); không đổi sang -mb-4. */}
+          <div className="no-print -mt-4 h-0 overflow-hidden" aria-hidden="true">
+            <ReceiptView {...data} lines={data.lines} thermal innerRef={thermalRef} />
+          </div>
         </div>
 
         {!shop.name ? (
@@ -166,6 +217,19 @@ export function ReceiptPage() {
             </Button>
           )}
 
+          {isNativeApp() ? (
+            <Button
+              size="cta"
+              variant="secondary"
+              data-tcp-print
+              disabled={inNhiet.busy}
+              onClick={() => void onPrintThermal()}
+              className="mb-3"
+            >
+              {inNhiet.busy ? 'Đang chuẩn bị bản in…' : '🖨 IN MÁY IN NHIỆT'}
+            </Button>
+          ) : null}
+
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" onClick={() => window.print()}>
               🖨 In / Lưu PDF
@@ -184,7 +248,30 @@ export function ReceiptPage() {
                 ⬇ Tải ảnh
               </Button>
             )}
+            {import.meta.env.DEV ? (
+              <Button variant="ghost" onClick={() => void onDownloadBin()}>
+                ⬇ .bin
+              </Button>
+            ) : null}
           </div>
+
+          {inNhiet.message ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`mt-3 rounded-btn px-3 py-2 text-[13px] ${inNhiet.error ? 'bg-danger-tint text-danger' : 'text-muted'}`}
+            >
+              {inNhiet.message}
+              {inNhiet.needConfig ? (
+                <>
+                  {' '}
+                  <Link to="/them/cai-dat" className="font-semibold underline">
+                    Vào Cài đặt › MÁY IN
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

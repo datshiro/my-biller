@@ -32,6 +32,7 @@ export function ReceiptView({
   debtAsOf,
   page = 1,
   pageCount = 1,
+  thermal = false,
   innerRef,
 }: {
   shop: ShopSettings
@@ -44,6 +45,8 @@ export function ReceiptView({
   debtAsOf: number | null
   page?: number
   pageCount?: number
+  /** Bản để in máy in nhiệt: đổi marker sang `.receipt-thermal` + `data-thermal` (bất biến #3). */
+  thermal?: boolean
   innerRef?: React.Ref<HTMLDivElement>
 }) {
   const hasShopHeader = Boolean(shop.name || shop.address || shop.phone)
@@ -59,7 +62,8 @@ export function ReceiptView({
   return (
     <div
       ref={innerRef}
-      className="receipt-view receipt-page mx-auto bg-white px-4 py-5 text-ink"
+      className={`${thermal ? 'receipt-thermal' : 'receipt-view'} receipt-page mx-auto bg-white px-4 py-5 text-ink`}
+      data-thermal={thermal ? '' : undefined}
       style={{ width: RECEIPT_WIDTH }}
     >
       {/* Lần chạy đầu chưa đặt tên quán: bỏ hẳn khối này, không in dòng trống lên phiếu của khách. */}

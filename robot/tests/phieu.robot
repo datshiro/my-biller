@@ -321,8 +321,83 @@ Bản in giữ khung 360px chứ không trải rộng theo màn hình
     Should Be True    abs(${bề_ngang} - 272.1) < 1
     ...    Phần mực trên giấy phải rộng đúng 72mm (272,1px); đo được ${bề_ngang}px.
 
+Phiếu có một bản nhiệt ẩn rộng 360px, không lẫn vào tấm gửi khách và không in ra giấy A4
+    [Documentation]    Node ẩn KHÔNG mang .receipt-view: e2e và các ca trên đếm tấm gửi khách bằng
+    ...    class đó. Wrapper là .no-print nên @media print giấu đi — không ra tờ A4 thừa. Nút TCP
+    ...    (data-tcp-print) chỉ hiện trong app native, trên web phải vắng.
+    [Teardown]    Trả Media Về Mặc Định
+    Bán Nhanh    Phở bò
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    ${n_nhiệt}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('[data-thermal]').length
+    Should Be Equal As Integers    ${n_nhiệt}    1
+    ${n_tấm}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('.receipt-view').length
+    Should Be Equal As Integers    ${n_tấm}    1
+    ${n_tcp}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('button[data-tcp-print]').length
+    Should Be Equal As Integers    ${n_tcp}    0
+    ${rộng}=    Evaluate JavaScript    css=[data-thermal]    (n) => n.offsetWidth
+    Should Be Equal As Integers    ${rộng}    360
+    Emulate Media    media=print
+    ${hiện}=    Evaluate JavaScript    css=[data-thermal]    (n) => getComputedStyle(n.parentElement).display
+    Should Be Equal    ${hiện}    none
+
+Luồng byte in nhiệt của phiếu 25 dòng là ESC/POS raster 576 chấm một dải và kết bằng lệnh cắt
+    [Documentation]    Bản dev có nút ⬇ .bin; đọc file thật để kiểm mở đầu 1B 40, có header GS v 0
+    ...    (1D 76 30 00 48 00 = 72 byte/hàng), kết 1D 56 42 05 (cắt). Robot KHÔNG mở TCP — đường gửi
+    ...    tới máy in đo bằng biên bản pha 5. Bỏ qua ở chế độ remote: Pages preview là bản production,
+    ...    không có nút .bin.
+    Skip If    '${BASE_URL}'.startswith('https')    Bản production không có nút .bin
+    Dựng Đơn Nhiều Dòng    25
+    ${dòng}=    Evaluate JavaScript    css=[data-thermal]    (n) => n.querySelectorAll('tbody tr').length
+    Should Be Equal As Integers    ${dòng}    25
+    ${file}=    Tải File Bằng Nút    ⬇ .bin
+    ${bytes}=    Get Binary File    ${file}
+    ${đầu}=    Evaluate    list($bytes[:2])
+    Should Be Equal    ${đầu}    ${{ [27, 64] }}    Luồng byte không mở đầu bằng ESC @.
+    ${cuối}=    Evaluate    list($bytes[-4:])
+    Should Be Equal    ${cuối}    ${{ [29, 86, 66, 5] }}    Luồng byte không kết bằng lệnh cắt GS V 66 5.
+    ${có_header}=    Evaluate    bytes([29, 118, 48, 0, 72, 0]) in $bytes
+    Should Be True    ${có_header}    Không thấy header GS v 0 (1D 76 30 00 48 00) — sai khổ 72 byte/hàng.
+
+Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng theo sổ
+    [Documentation]    Ca tiền: đối chiếu chữ trên [data-thermal] với sổ thật (Đọc Bảng), không chỉ
+    ...    tin con số trên màn. Giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất của app này.
+    Bán Nợ Cho Khách    Phở bò    Anh Hùng
+    Chờ Thấy Chữ    TỔNG PHẢI TRẢ
+    ${khách}=    Đọc Bảng    customers
+    ${hùng}=    Evaluate    [c for c in $khách if c['name'] == 'Anh Hùng'][0]
+    ${đơn}=    Đọc Bảng    orders
+    ${nợ}=    Evaluate
+    ...    sum(max(0, o['total'] - o['paidAmount']) for o in $đơn if o['customerId'] == ${hùng}[id] and o['status'] != 'void')
+    Should Be Equal As Integers    ${nợ}    155000
+    ...    Nợ trong sổ khác 155.000 — bộ mẫu đã đổi, sửa lại ca.
+    ${chữ}=    Evaluate JavaScript    css=[data-thermal]    (n) => n.textContent
+    Should Contain    ${chữ}    100.000 đ    Bản nhiệt thiếu dòng nợ cũ đúng số.
+    Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
+
 
 *** Keywords ***
+Dựng Đơn Nhiều Dòng
+    [Documentation]    Seed một đơn ${số_dòng} dòng qua repository (như e2e `buildReceiptWithLines`)
+    ...    rồi mở phiếu — nhanh hơn bấm tay từng món. Nút .bin và node bản nhiệt vẫn là UI thật.
+    [Arguments]    ${số_dòng}
+    ${id}=    Evaluate JavaScript    ${None}
+    ...    async (n) => {
+    ...        const orders = await import('/src/db/repositories/orders.ts')
+    ...        const { id } = await orders.createOrder({
+    ...            customerId: null, customerName: 'Khách lẻ',
+    ...            lines: Array.from({ length: n }, (_, i) => ({
+    ...                itemId: null, name: 'Món ' + (i + 1), unit: 'phần', unitPrice: 25000, costPrice: null, qty: 1,
+    ...            })),
+    ...            discount: 0, surcharge: 0, soldAt: Date.now(), note: '',
+    ...            payment: { amount: 25000 * n, method: 'cash', note: '' },
+    ...        })
+    ...        return id
+    ...    }
+    ...    arg=${số_dòng}
+    Mở Màn    /don/${id}/phieu
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+
+
 Thêm Nhanh Mặt Hàng
     [Arguments]    ${tên}    ${giá}
     Mở Màn    /them/mat-hang/moi

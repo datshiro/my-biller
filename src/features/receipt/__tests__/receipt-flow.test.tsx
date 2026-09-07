@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, configure, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,9 +35,42 @@ vi.mock('../share-receipt', async (importOriginal) => {
   }
 })
 
+// Node ẩn bản nhiệt nhân đôi mọi chữ của phiếu → getByText vấp strict-mode. Bỏ qua CON CHÁU của
+// [data-thermal] (không phải chính nó): các ca đếm đúng bản gửi khách, không lẫn bản nhiệt.
+configure({ defaultIgnore: 'script, style, [data-thermal] *' })
+
+// html-to-image cần canvas thật; jsdom không có. Chụp là lười (chỉ khi bấm nút TCP/`.bin`) nên hầu hết
+// ca không chạm tới — mock để nếu có chạm thì trả ảnh 576 chấm hợp lệ thay vì ném "getContext".
+vi.mock('../../printer/thermal-capture', () => ({
+  THERMAL_RATIO: 1.6,
+  captureThermal: vi.fn(async () => ({
+    width: 576,
+    height: 8,
+    data: new Uint8ClampedArray(576 * 8 * 4).fill(255),
+  })),
+}))
+
+// Nút in TCP và `nativeSink` là native-only, Robot không lái tới được. Bật/tắt native qua cờ hoisted
+// để kiểm cả nhánh web (0 nút) lẫn ba kết cục của onPrintThermal (thiếu IP / gửi xong / lỗi giữ câu thật).
+const sinkShim = vi.hoisted(() => ({
+  native: false,
+  sink: vi.fn<(bytes: Uint8Array, cfg: { host: string; port: number }) => Promise<void>>(async () => {}),
+}))
+vi.mock('../../printer/printer-sink', () => ({
+  isNativeApp: () => sinkShim.native,
+  nativeSink: sinkShim.sink,
+}))
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  sinkShim.native = false
+  sinkShim.sink.mockReset()
+  try {
+    localStorage.removeItem('may-in')
+  } catch {
+    /* jsdom */
+  }
 })
 
 beforeEach(async () => {
@@ -203,6 +236,16 @@ describe('màn phiếu', () => {
     renderReceipt(999)
 
     expect(await screen.findByText(/Không tìm thấy đơn/)).toBeDefined()
+  })
+
+  it('có đúng một bản nhiệt ẩn; trên web không render nút in TCP', async () => {
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await screen.findByText('PHIẾU BÁN HÀNG')
+    expect(document.querySelectorAll('[data-thermal]')).toHaveLength(1)
+    // isNativeApp() = false trong jsdom → nút TCP không render (pha 3 thêm a[data-rawbt] chỗ khác).
+    expect(document.querySelectorAll('button[data-tcp-print]')).toHaveLength(0)
   })
 })
 
@@ -428,5 +471,51 @@ describe('receiptSignature', () => {
     // (prior = max(0, totalDue − owingOf), mà đơn của `data()` đã trả đủ nên owingOf = 0).
     const đangNợ = { priorDebt: 100_000, totalDue: 100_000 }
     expect(receiptSignature(data(đangNợ))).not.toBe(receiptSignature(data({ ...đangNợ, debtAsOf: soldAt + 60_000 })))
+  })
+})
+
+// Đường in TCP thật là pha 4 (nativeSink còn ném) và chỉ đo được bằng biên bản pha 5 — Robot không mở
+// socket. Nhưng ba nhánh của onPrintThermal (thiếu IP / gửi xong / lỗi) là logic React lái được ở đây.
+describe('in máy in nhiệt trong app native', () => {
+  const nútIn = () => screen.findByRole('button', { name: /IN MÁY IN NHIỆT/ })
+
+  it('chưa cài IP → báo "Chưa cài IP máy in" kèm link vào Cài đặt, không gọi sink', async () => {
+    sinkShim.native = true
+    localStorage.removeItem('may-in')
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútIn())
+
+    expect(await screen.findByText(/Chưa cài IP máy in/)).toBeDefined()
+    expect(screen.getByRole('link', { name: /Vào Cài đặt/ })).toBeDefined()
+    expect(sinkShim.sink).not.toHaveBeenCalled()
+  })
+
+  it('đã cài IP → gửi byte thật của phiếu tới đúng máy và báo đã gửi', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockResolvedValueOnce(undefined)
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútIn())
+
+    await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
+    expect(sinkShim.sink.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array)
+    expect(sinkShim.sink.mock.calls[0]?.[1]).toEqual({ host: '192.168.1.50', port: 9100 })
+    expect(await screen.findByText('Đã gửi tới máy in 192.168.1.50:9100.')).toBeDefined()
+  })
+
+  it('máy in lỗi → giữ nguyên câu lỗi thật của sink, không nuốt thành câu chung', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockRejectedValueOnce(new Error('Không nối được máy in — máy tắt hoặc khác WiFi.'))
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútIn())
+
+    expect(await screen.findByText('Không nối được máy in — máy tắt hoặc khác WiFi.')).toBeDefined()
   })
 })
