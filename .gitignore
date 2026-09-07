@@ -29,3 +29,8 @@ journals/
 
 # ảnh chụp lúc kiểm thử — wireframe thật là docs/wireframe/index.html
 docs/wireframes/
+
+# Ký APK: keystore và mật khẩu ở NGOÀI repo (android/.gitignore lo build/, .gradle/, local.properties)
+*.jks
+*.keystore
+android/keystore.properties
