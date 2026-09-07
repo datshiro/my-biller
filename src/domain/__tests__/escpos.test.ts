@@ -81,6 +81,7 @@ describe('bất biến import của lớp thuần', () => {
   const files = [
     ...readdirSync(join(domainDir, 'escpos')).map((name) => join('escpos', name)),
     'base64.ts',
+    'rawbt-url.ts',
   ]
 
   it.each(files)('%s: import tương đối có đuôi .ts, không import node:*', (file) => {

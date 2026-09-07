@@ -14,6 +14,8 @@ ${HEADLESS}         True
 # Bề ngang máy Android phổ thông. Ca 320px đã có bộ Playwright lo, ở đây kiểm luồng nghiệp vụ.
 &{VIEWPORT}         width=390    height=844
 ${DOWNLOAD_DIR}     ${CURDIR}/../downloads
+# UA Android để `isAndroidWeb()` bật (hiện nút/khối RawBT). Chrome desktop mặc định không có "Android".
+${UA_ANDROID}       Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36
 
 # --- Locator dùng chung -------------------------------------------------------------------
 ${NAV_BAN}          css=nav a:has-text("Bán")
@@ -45,6 +47,18 @@ Mở Phiên Sạch
 Mở Phiên Có Dữ Liệu Mẫu
     [Documentation]    Phiên sạch rồi nạp bộ mẫu: 4 mặt hàng, 1 khách, 2 đơn, 1 khoản chi.
     Mở Phiên Sạch
+    Nạp Dữ Liệu Mẫu
+
+Mở Phiên Android
+    [Documentation]    Như `Mở Phiên Sạch` nhưng UA Android → `isAndroidWeb()` bật, hiện nút/khối RawBT.
+    ...    Ca dùng phiên này chỉ ĐỌC href `rawbt:`, KHÔNG bao giờ Click (CI không có handler `rawbt:`,
+    ...    Chrome treo ở hộp "mở ứng dụng").
+    New Context    viewport=${VIEWPORT}    acceptDownloads=${True}    userAgent=${UA_ANDROID}
+    New Page    ${BASE_URL}/
+
+Mở Phiên Android Có Dữ Liệu Mẫu
+    [Documentation]    Phiên Android rồi nạp bộ mẫu — cho ca RawBT cần bán từ mặt hàng mẫu.
+    Mở Phiên Android
     Nạp Dữ Liệu Mẫu
 
 Đóng Phiên

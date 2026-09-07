@@ -323,8 +323,9 @@ Bản in giữ khung 360px chứ không trải rộng theo màn hình
 
 Phiếu có một bản nhiệt ẩn rộng 360px, không lẫn vào tấm gửi khách và không in ra giấy A4
     [Documentation]    Node ẩn KHÔNG mang .receipt-view: e2e và các ca trên đếm tấm gửi khách bằng
-    ...    class đó. Wrapper là .no-print nên @media print giấu đi — không ra tờ A4 thừa. Nút TCP
-    ...    (data-tcp-print) chỉ hiện trong app native, trên web phải vắng.
+    ...    class đó. Wrapper là .no-print nên @media print giấu đi — không ra tờ A4 thừa. Phiên này
+    ...    là UA desktop (không Android): nút TCP (data-tcp-print, native) LẪN link RawBT (a[data-rawbt],
+    ...    web Android) đều phải vắng — web thường không in nhiệt được đường nào.
     [Teardown]    Trả Media Về Mặc Định
     Bán Nhanh    Phở bò
     Chờ Thấy Chữ    PHIẾU BÁN HÀNG
@@ -334,6 +335,8 @@ Phiếu có một bản nhiệt ẩn rộng 360px, không lẫn vào tấm gửi
     Should Be Equal As Integers    ${n_tấm}    1
     ${n_tcp}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('button[data-tcp-print]').length
     Should Be Equal As Integers    ${n_tcp}    0
+    ${n_rawbt}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('a[data-rawbt]').length
+    Should Be Equal As Integers    ${n_rawbt}    0
     ${rộng}=    Evaluate JavaScript    css=[data-thermal]    (n) => n.offsetWidth
     Should Be Equal As Integers    ${rộng}    360
     Emulate Media    media=print
@@ -357,6 +360,36 @@ Luồng byte in nhiệt của phiếu 25 dòng là ESC/POS raster 576 chấm m�
     Should Be Equal    ${cuối}    ${{ [29, 86, 66, 5] }}    Luồng byte không kết bằng lệnh cắt GS V 66 5.
     ${có_header}=    Evaluate    bytes([29, 118, 48, 0, 72, 0]) in $bytes
     Should Be True    ${có_header}    Không thấy header GS v 0 (1D 76 30 00 48 00) — sai khổ 72 byte/hàng.
+
+Nút in nhiệt trên web Android là link rawbt: ảnh PNG dựng sẵn, không bấm
+    [Documentation]    CI không có app RawBT: chỉ ĐỌC href, KHÔNG Click (Chrome treo ở hộp "mở ứng dụng").
+    ...    Tiền tố rawbt:data:image/png;base64, là hợp đồng với RawBT. Web Android hiện a[data-rawbt] chứ
+    ...    không nút TCP (data-tcp-print chỉ có trong app native).
+    [Setup]    Mở Phiên Android Có Dữ Liệu Mẫu
+    Bán Nhanh    Phở bò
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
+    ${href}=    Get Attribute    css=a[data-rawbt]    href
+    Should Start With    ${href}    rawbt:data:image/png;base64,
+    ${n_tcp}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('button[data-tcp-print]').length
+    Should Be Equal As Integers    ${n_tcp}    0
+
+Ảnh trong link rawbt của phiếu 25 dòng rộng đúng 576 chấm, chỉ hai mức và là một dải
+    [Documentation]    Giải mã href rawbt: → ảnh PNG 1-bit của encodePng1: rộng 576 (khổ máy in), chỉ hai
+    ...    mức (đen/trắng), cao hơn 576 (một dải dài, không ô vuông). KHÔNG Click link. Cần /src import để
+    ...    seed nhanh nên bỏ qua ở remote (Pages preview là bản production). Phiên có dữ liệu mẫu để đặt
+    ...    được danh tính máy — createOrder đòi nó.
+    [Setup]    Mở Phiên Android Có Dữ Liệu Mẫu
+    Skip If    '${BASE_URL}'.startswith('https')    Bản production không seed được qua /src import
+    Dựng Đơn Nhiều Dòng    25
+    Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
+    ${đo}=    Evaluate JavaScript    css=a[data-rawbt]
+    ...    async (a) => { const r = await fetch(a.getAttribute('href').slice('rawbt:'.length)); const bm = await createImageBitmap(await r.blob()); const c = new OffscreenCanvas(bm.width, bm.height); const x = c.getContext('2d'); x.drawImage(bm, 0, 0); const d = x.getImageData(0, 0, bm.width, bm.height).data; const levels = new Set(); for (let i = 0; i < d.length; i += 4) levels.add(d[i]); return { w: bm.width, h: bm.height, levels: levels.size }; }
+    Should Be Equal As Integers    ${đo}[w]    576
+    Should Be True    ${đo}[levels] <= 2
+    Should Be True    ${đo}[h] > 576
+    ${dòng}=    Evaluate JavaScript    css=[data-thermal]    (n) => n.querySelectorAll('tbody tr').length
+    Should Be Equal As Integers    ${dòng}    25
 
 Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng theo sổ
     [Documentation]    Ca tiền: đối chiếu chữ trên [data-thermal] với sổ thật (Đọc Bảng), không chỉ

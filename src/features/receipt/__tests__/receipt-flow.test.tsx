@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReceiptPage } from '../receipt-page'
+import { buildReceiptRawbtHref } from '../../printer/rawbt-href'
 import { db } from '@/db/db'
 import { createItem, updateItem } from '@/db/repositories/items'
 import { createOrder } from '@/db/repositories/orders'
@@ -50,21 +51,31 @@ vi.mock('../../printer/thermal-capture', () => ({
   })),
 }))
 
-// Nút in TCP và `nativeSink` là native-only, Robot không lái tới được. Bật/tắt native qua cờ hoisted
-// để kiểm cả nhánh web (0 nút) lẫn ba kết cục của onPrintThermal (thiếu IP / gửi xong / lỗi giữ câu thật).
+// Nút in TCP/`nativeSink` (native) và `<a data-rawbt>` (web Android) đều lệ thuộc nền tảng, Robot không
+// lái đủ nhánh trên web. Bật/tắt qua cờ hoisted để kiểm: web thường (0 nút), native (3 kết cục
+// onPrintThermal), web Android (1 <a data-rawbt> / guard quá dài).
 const sinkShim = vi.hoisted(() => ({
   native: false,
+  androidWeb: false,
   sink: vi.fn<(bytes: Uint8Array, cfg: { host: string; port: number }) => Promise<void>>(async () => {}),
 }))
 vi.mock('../../printer/printer-sink', () => ({
   isNativeApp: () => sinkShim.native,
+  isAndroidWeb: () => sinkShim.androidWeb,
   nativeSink: sinkShim.sink,
+}))
+
+// `buildReceiptRawbtHref` chạy `encodePng1`+`CompressionStream` trên canvas thật — jsdom không có. Mock
+// trả href hợp lệ; ca "quá dài" override bằng `mockResolvedValueOnce(null)`.
+vi.mock('../../printer/rawbt-href', () => ({
+  buildReceiptRawbtHref: vi.fn(async () => 'rawbt:data:image/png;base64,AAAA'),
 }))
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   sinkShim.native = false
+  sinkShim.androidWeb = false
   sinkShim.sink.mockReset()
   try {
     localStorage.removeItem('may-in')
@@ -244,8 +255,9 @@ describe('màn phiếu', () => {
 
     await screen.findByText('PHIẾU BÁN HÀNG')
     expect(document.querySelectorAll('[data-thermal]')).toHaveLength(1)
-    // isNativeApp() = false trong jsdom → nút TCP không render (pha 3 thêm a[data-rawbt] chỗ khác).
+    // Web thường (không native, không Android): không nút in nào — cả TCP lẫn RawBT.
     expect(document.querySelectorAll('button[data-tcp-print]')).toHaveLength(0)
+    expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(0)
   })
 })
 
@@ -517,5 +529,30 @@ describe('in máy in nhiệt trong app native', () => {
     await userEvent.click(await nútIn())
 
     expect(await screen.findByText('Không nối được máy in — máy tắt hoặc khác WiFi.')).toBeDefined()
+  })
+})
+
+// Web Android in qua RawBT: href `rawbt:` dựng sẵn trên `<a>` (không bấm ở test — Robot cũng không bấm).
+// Đo byte ảnh thật để e2e/Robot lo; ở đây chỉ chốt bộ chọn và guard cỡ URL.
+describe('in qua RawBT trên web Android', () => {
+  it('web Android → đúng 1 <a data-rawbt> href tiền tố rawbt:, và 0 nút TCP', async () => {
+    sinkShim.androidWeb = true
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    const link = await screen.findByRole('link', { name: /IN MÁY IN NHIỆT/ })
+    expect(link.getAttribute('href')?.startsWith('rawbt:data:image/png;base64,')).toBe(true)
+    expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(1)
+    expect(document.querySelectorAll('button[data-tcp-print]')).toHaveLength(0)
+  })
+
+  it('phiếu vượt guard cỡ URL (href null) → dòng "quá dài", không <a data-rawbt>', async () => {
+    sinkShim.androidWeb = true
+    vi.mocked(buildReceiptRawbtHref).mockResolvedValueOnce(null)
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    expect(await screen.findByText(/Phiếu quá dài cho RawBT/)).toBeDefined()
+    expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(0)
   })
 })

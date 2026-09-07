@@ -8,9 +8,11 @@ import { receiptSignature, useReceipt } from './use-receipt'
 import { downloadBytes } from '../printer/download-bytes'
 import { buildReceiptJob } from '../printer/print-job'
 import { readPrinterConfig } from '../printer/printer-config'
-import { isNativeApp, nativeSink } from '../printer/printer-sink'
+import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
+import { buildReceiptRawbtHref } from '../printer/rawbt-href'
 import { paginateLines } from '@/domain/receipt-pages'
 import { Button } from '@/ui/button'
+import { buttonClassName } from '@/ui/button-class'
 import { EmptyState } from '@/ui/empty-state'
 
 type Png = { blobs: Blob[]; canShare: boolean }
@@ -31,6 +33,11 @@ export function ReceiptPage() {
     message: null,
     error: false,
   })
+  // Web Android: href `rawbt:` dựng SẴN trên `<a>` trước khi chạm (không `await` giữa chạm và điều
+  // hướng — user gesture). `too-big` = qua guard cỡ URL; `failed` = lỗi chụp/nén.
+  const [rawbt, setRawbt] = useState<{ status: 'idle' | 'building' | 'ready' | 'too-big' | 'failed'; href?: string }>({
+    status: 'idle',
+  })
 
   // Nội dung phiếu đổi thì ảnh cũ hết giá trị — dọn ngay trong lúc render, không đợi effect,
   // để không có nhịp nào nút "Chia sẻ" cầm ảnh của phiếu cũ.
@@ -39,6 +46,7 @@ export function ReceiptPage() {
     setRenderedFor(signature)
     setPng(null)
     setPngError(false)
+    setRawbt({ status: 'idle' })
   }
 
   useEffect(() => {
@@ -63,6 +71,29 @@ export function ReceiptPage() {
       cancelled = true
     }
   }, [signature])
+
+  // Dựng href RawBT SAU khi ảnh chia sẻ xong (chờ `png`/`pngError`) — không chạy hai lượt html-to-image
+  // song song (cảnh báo ở effect trên). Chỉ web Android; native đi đường TCP, desktop/iOS `rawbt:` vô nghĩa.
+  useEffect(() => {
+    if (!isAndroidWeb()) return
+    if (png === null && !pngError) return
+    const node = thermalRef.current
+    if (!node) return
+    let cancelled = false
+    setRawbt({ status: 'building' })
+    void (async () => {
+      try {
+        const href = await buildReceiptRawbtHref(node)
+        if (cancelled) return
+        setRawbt(href ? { status: 'ready', href } : { status: 'too-big' })
+      } catch {
+        if (!cancelled) setRawbt({ status: 'failed' })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [png, pngError, signature])
 
   if (data === undefined) return <p className="p-6 text-center text-muted">Đang mở phiếu…</p>
   if (data === null) {
@@ -131,6 +162,10 @@ export function ReceiptPage() {
   }
 
   const busy = png === null && !pngError
+  // Mỗi nền tảng tối đa MỘT nút in: native → `<button data-tcp-print>` (TCP, pha 4); web Android →
+  // `<a data-rawbt>` (RawBT); web khác → không nút. Bộ chọn khác nhau nên test không đếm nhầm.
+  const native = isNativeApp()
+  const androidWeb = isAndroidWeb()
 
   return (
     <div className="receipt-screen flex h-dvh flex-col bg-surface">
@@ -217,7 +252,7 @@ export function ReceiptPage() {
             </Button>
           )}
 
-          {isNativeApp() ? (
+          {native ? (
             <Button
               size="cta"
               variant="secondary"
@@ -228,6 +263,32 @@ export function ReceiptPage() {
             >
               {inNhiet.busy ? 'Đang chuẩn bị bản in…' : '🖨 IN MÁY IN NHIỆT'}
             </Button>
+          ) : androidWeb ? (
+            <div className="mb-3">
+              {rawbt.status === 'ready' && rawbt.href ? (
+                <>
+                  {/* Href dựng SẴN trên `<a>`; không handler async, không `location.href` — giữ user gesture. */}
+                  <a data-rawbt href={rawbt.href} className={buttonClassName('secondary', 'cta')}>
+                    🖨 IN MÁY IN NHIỆT
+                  </a>
+                  <p className="mt-1 text-center text-[12px] text-muted">
+                    Cần app RawBT trên Android (bản miễn phí in thêm một dòng).
+                  </p>
+                </>
+              ) : rawbt.status === 'too-big' ? (
+                <p role="status" className="rounded-btn bg-warn-tint px-3 py-2 text-[13px] text-warn">
+                  Phiếu quá dài cho RawBT — dùng 📤 CHIA SẺ hoặc app Android.
+                </p>
+              ) : rawbt.status === 'failed' ? (
+                <p role="status" className="rounded-btn bg-danger-tint px-3 py-2 text-[13px] text-danger">
+                  Máy này chưa tạo được bản in cho RawBT — dùng 📤 CHIA SẺ.
+                </p>
+              ) : (
+                <Button size="cta" variant="secondary" disabled>
+                  Đang chuẩn bị bản in…
+                </Button>
+              )}
+            </div>
           ) : null}
 
           <div className="flex gap-3">

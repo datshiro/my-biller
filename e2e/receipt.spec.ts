@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
+import { RAWBT_URL_MAX_CHARS } from '../src/domain/rawbt-url.ts'
 
 /**
  * Những thứ jsdom không kiểm được: html-to-image cần canvas thật, và `@media print` cần trình
@@ -477,6 +478,31 @@ test('phiếu 40 dòng: nút .bin (dev) tải luồng byte ESC/POS 576 chấm, k
   expect(p).toBe(bytes.length - 4) // dừng đúng ngay trước lệnh cắt, không lệch
   expect(totalRows).toBeGreaterThan(0)
   expect(bytes.length).toBeLessThanOrEqual(220_000)
+})
+
+/**
+ * Web Android in qua RawBT: href `rawbt:` PNG 1-bit dựng SẴN trên `<a>` — KHÔNG bấm (Playwright/CI không
+ * có handler `rawbt:`, sẽ treo ở hộp "mở ứng dụng"). Chỉ đọc href, đo cỡ trong ngân sách `RAWBT_URL_MAX_CHARS`
+ * (cùng hằng với guard), và giải mã ảnh rộng đúng 576. Project `mobile-chrome` (Pixel 7) đã là UA Android
+ * nên `isAndroidWeb()` bật. Số đo `href.length` 40 dòng ghi trong commit.
+ */
+test('phiếu 40 dòng: link RawBT dựng sẵn, trong ngân sách, ảnh giải mã rộng 576', async ({ page }) => {
+  await buildReceiptWithLines(page, 40)
+
+  const link = page.locator('a[data-rawbt]')
+  await expect(link).toBeVisible({ timeout: 20_000 })
+  const href = await link.getAttribute('href')
+  expect(href).not.toBeNull()
+  expect(href!.startsWith('rawbt:data:image/png;base64,')).toBe(true)
+  // Đo thật: 40 dòng ≈ 17.4K ký tự (PNG 1-bit, dải gần như trắng nén rất chặt) — dưới xa ngân sách 220K.
+  expect(href!.length).toBeLessThanOrEqual(RAWBT_URL_MAX_CHARS)
+
+  const width = await page.evaluate(async (h) => {
+    const res = await fetch(h.slice('rawbt:'.length))
+    const bitmap = await createImageBitmap(await res.blob())
+    return bitmap.width
+  }, href!)
+  expect(width).toBe(576)
 })
 
 test('phiếu nhiều trang: khối tiền chỉ ở tấm cuối, mọi tấm đều có đầu phiếu', async ({ page }) => {
