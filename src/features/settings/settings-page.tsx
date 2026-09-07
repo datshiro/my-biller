@@ -12,6 +12,7 @@ import {
   type PreparedBackup,
 } from './backup'
 import { AppUpdateSection } from './app-update-section'
+import { PrinterSection } from './printer-section'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -349,6 +350,10 @@ export function SettingsPage() {
             </div>
           </>
         ) : null}
+      </Section>
+
+      <Section title="MÁY IN">
+        <PrinterSection />
       </Section>
 
       <Section title="CẬP NHẬT APP">

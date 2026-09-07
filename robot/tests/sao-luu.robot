@@ -235,6 +235,39 @@ Nút kiểm tra bản mới báo thẳng khi bản đang chạy chưa có chế 
     Chờ Thấy Chữ    Chưa có chế độ offline trên bản này
     Nút Không Được Khoá    KIỂM TRA BẢN MỚI
 
+Máy in: IP sai thì báo lỗi và không ghi vào sổ máy
+    [Documentation]    Cấu hình máy in sai còn tệ hơn không có — IN THỬ sẽ treo chờ một IP không tồn
+    ...    tại. Nên sai định dạng thì hiện lỗi và KHÔNG lưu localStorage.
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    999.1.1.1
+    Click    css=button:text-is("LƯU")
+    Chờ Thấy Chữ    không hợp lệ
+    ${lưu}=    Evaluate JavaScript    ${None}    () => localStorage.getItem('may-in')
+    Should Be Equal    ${lưu}    ${None}    IP sai mà vẫn ghi vào sổ máy.
+
+Máy in: lưu IP đúng thì ghi đúng JSON và còn sau khi tải lại
+    [Documentation]    IP hợp lệ → ghi localStorage 'may-in' đúng dạng và điền lại vào ô sau khi reload
+    ...    (WebView Android không dọn localStorage như iOS — D3).
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    192.168.1.50
+    Điền Ô    Cổng    9100
+    Click    css=button:text-is("LƯU")
+    Chờ Thấy Chữ    Đã lưu 192.168.1.50:9100
+    ${lưu}=    Evaluate JavaScript    ${None}    () => localStorage.getItem('may-in')
+    Should Be Equal    ${lưu}    {"host":"192.168.1.50","port":9100}
+    Reload
+    ${ô}=    Đọc Ô    Địa chỉ IP máy in
+    Should Be Equal    ${ô}    192.168.1.50    IP không còn trong ô sau khi tải lại.
+
+Máy in: trên web nút IN THỬ bị khoá và có dòng chú thích chỉ in được trong app
+    [Documentation]    Web không mở được TCP nên IN THỬ (đường TCP) phải khoá kể cả khi IP hợp lệ, kèm
+    ...    dòng giải thích. Đường in của web là RawBT (pha 3) / 📤 CHIA SẺ.
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    192.168.1.50
+    Click    css=button:text-is("LƯU")
+    Wait For Elements State    css=button:text-is("IN THỬ")    disabled
+    Chờ Thấy Chữ    Chỉ in được trong app Android
+
 
 *** Keywords ***
 Theo Dõi Yêu Cầu Tải

@@ -1,0 +1,103 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PrinterSection } from '../printer-section'
+import { PRINTER_CONFIG_KEY } from '../../printer/printer-config'
+
+// Chụp lười cần canvas thật; jsdom không có. Trả ảnh 576 chấm hợp lệ để `buildSampleJob` chạy thật tới sink.
+vi.mock('../../printer/thermal-capture', () => ({
+  THERMAL_RATIO: 1.6,
+  captureThermal: vi.fn(async () => ({ width: 576, height: 8, data: new Uint8ClampedArray(576 * 8 * 4).fill(255) })),
+}))
+
+// isNativeApp/nativeSink không lái được từ Robot trên web (native-only). Bật/tắt native qua cờ hoisted
+// để kiểm cả nhánh web (IN THỬ khoá) lẫn nhánh native (gửi tới đúng IP đang gõ).
+const shim = vi.hoisted(() => ({
+  native: false,
+  sink: vi.fn<(bytes: Uint8Array, cfg: { host: string; port: number }) => Promise<void>>(async () => {}),
+}))
+vi.mock('../../printer/printer-sink', () => ({
+  isNativeApp: () => shim.native,
+  nativeSink: shim.sink,
+}))
+
+afterEach(() => {
+  cleanup()
+  localStorage.clear()
+  shim.native = false
+  shim.sink.mockClear()
+})
+
+describe('mục MÁY IN trong Cài đặt', () => {
+  it('IP sai → hiện lỗi, không ghi localStorage', async () => {
+    render(<PrinterSection />)
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '999.1.1.1')
+    await userEvent.click(screen.getByRole('button', { name: 'LƯU' }))
+
+    expect(screen.getByRole('alert').textContent).toMatch(/không hợp lệ/)
+    expect(localStorage.getItem(PRINTER_CONFIG_KEY)).toBeNull()
+  })
+
+  it('IP đúng → ghi localStorage đúng JSON và báo đã lưu', async () => {
+    render(<PrinterSection />)
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '192.168.1.50')
+    await userEvent.click(screen.getByRole('button', { name: 'LƯU' }))
+
+    expect(JSON.parse(localStorage.getItem(PRINTER_CONFIG_KEY) as string)).toEqual({ host: '192.168.1.50', port: 9100 })
+    expect(screen.getByText('Đã lưu 192.168.1.50:9100')).toBeDefined()
+  })
+
+  it('gõ lại IP sau khi đã lưu → dòng "Đã lưu" biến mất, không khẳng định giá trị chưa lưu', async () => {
+    render(<PrinterSection />)
+    const ô = screen.getByLabelText(/Địa chỉ IP máy in/)
+    await userEvent.type(ô, '192.168.1.50')
+    await userEvent.click(screen.getByRole('button', { name: 'LƯU' }))
+    expect(screen.getByText('Đã lưu 192.168.1.50:9100')).toBeDefined()
+
+    await userEvent.type(ô, '9')
+    expect(screen.queryByText(/^Đã lưu/)).toBeNull()
+  })
+
+  it('trên web (không native): IN THỬ khoá và có dòng chú thích', () => {
+    render(<PrinterSection />)
+    expect(screen.getByRole('button', { name: 'IN THỬ' })).toHaveProperty('disabled', true)
+    expect(screen.getByText(/^Chỉ in được trong app Android/)).toBeDefined()
+  })
+
+  it('trong app native: IN THỬ lưu IP đang gõ rồi gửi tờ mẫu tới đúng host', async () => {
+    shim.native = true
+    render(<PrinterSection />)
+    await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
+    await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+
+    await waitFor(() => expect(shim.sink).toHaveBeenCalledOnce())
+    // Đích gửi là IP đang gõ, không phải giá trị cũ trong kho.
+    expect(shim.sink.mock.calls[0]?.[1]).toEqual({ host: '10.0.0.9', port: 9100 })
+    expect(await screen.findByText('Đã gửi tờ mẫu tới 10.0.0.9:9100')).toBeDefined()
+    // Một chạm = lưu + thử.
+    expect(JSON.parse(localStorage.getItem(PRINTER_CONFIG_KEY) as string)).toEqual({ host: '10.0.0.9', port: 9100 })
+  })
+
+  it('native: lỗi khi gửi giữ nguyên câu lỗi thật, không nuốt thành "kiểm tra WiFi"', async () => {
+    shim.native = true
+    shim.sink.mockRejectedValueOnce(new Error('Máy in từ chối kết nối cổng 9100.'))
+    render(<PrinterSection />)
+    await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
+    await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+
+    expect(await screen.findByText('Máy in từ chối kết nối cổng 9100.')).toBeDefined()
+  })
+
+  it('render đúng một tờ IN THỬ ẩn, rộng 360px, không nằm trong .receipt-view', () => {
+    const { container } = render(<PrinterSection />)
+    const sheets = container.querySelectorAll('[data-sample-sheet]')
+    expect(sheets).toHaveLength(1)
+    const sheet = sheets[0] as HTMLElement
+    expect(sheet.closest('.receipt-view')).toBeNull()
+    // Chốt chặn D14 tại chỗ: sheet phải rộng 360px thì chụp mới ra 576 chấm (buildSampleJob không lái từ web).
+    expect(sheet.style.width).toBe('360px')
+  })
+})
