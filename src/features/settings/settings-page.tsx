@@ -13,6 +13,7 @@ import {
 } from './backup'
 import { AppUpdateSection } from './app-update-section'
 import { PrinterSection } from './printer-section'
+import { isNativeApp } from '../printer/printer-sink'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
@@ -356,9 +357,12 @@ export function SettingsPage() {
         <PrinterSection />
       </Section>
 
-      <Section title="CẬP NHẬT APP">
-        <AppUpdateSection />
-      </Section>
+      {/* Trong APK "bản mới" của Service Worker là vô nghĩa — cập nhật app bằng cài đè APK (D15). */}
+      {isNativeApp() ? null : (
+        <Section title="CẬP NHẬT APP">
+          <AppUpdateSection />
+        </Section>
+      )}
 
       <div className="border-t border-line">
         <ListRow

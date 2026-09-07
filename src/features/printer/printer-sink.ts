@@ -1,20 +1,19 @@
+import { Capacitor, registerPlugin } from '@capacitor/core'
+import { toBase64 } from '@/domain/base64'
 import type { PrinterConfig } from './printer-config'
 
-declare global {
-  interface Window {
-    Capacitor?: { isNativePlatform?: () => boolean }
-  }
+type PrinterSocketPlugin = {
+  printRaw(options: { host: string; port: number; base64: string; timeoutMs: number }): Promise<{ sent: number }>
 }
 
-/** Đẩy byte tới máy in. Một hiện thực: `nativeSink` (plugin TCP, pha 4). Đường web không qua sink. */
+const PrinterSocket = registerPlugin<PrinterSocketPlugin>('PrinterSocket')
+
+/** Đẩy byte tới máy in. Một hiện thực: `nativeSink` (plugin TCP). Đường web (RawBT) không qua sink. */
 export type PrinterSink = (bytes: Uint8Array, cfg: PrinterConfig) => Promise<void>
 
-/**
- * Đang chạy trong vỏ native (APK) hay không. Pha 2 đọc cờ Capacitor gắn trên `window` mà không thêm
- * dependency; pha 4 đổi sang `Capacitor.isNativePlatform()` khi đã cài `@capacitor/core`.
- */
+/** Đang chạy trong vỏ native (APK) hay không. Capacitor trả `false` trên web nên nút TCP không render. */
 export function isNativeApp(): boolean {
-  return typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
+  return Capacitor.isNativePlatform()
 }
 
 /**
@@ -26,10 +25,34 @@ export function isAndroidWeb(): boolean {
   return !isNativeApp() && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
 }
 
+const TCP_TIMEOUT_MS = 3000
+
 /**
- * Pha 2: chưa có plugin TCP nên ném lỗi có chữ "APK" — trên web nút TCP không render nên hàm này chỉ
- * chạy khi ai đó gọi thẳng. Pha 4 thay thân hàm bằng `PrinterSocket.printRaw`.
+ * Gửi job tới máy in qua plugin `PrinterSocket` (chỉ chạy trong APK — trên web nút TCP không render).
+ * Mã lỗi của plugin đổi thành câu tiếng Việt cho người bán; RST-sau-khi-gửi đã được plugin coi là
+ * "đã gửi" nên tới đây chỉ còn lỗi nối/timeout thật.
  */
-export const nativeSink: PrinterSink = async () => {
-  throw new Error('Chỉ in được trong app Android cài từ file APK.')
+export const nativeSink: PrinterSink = async (bytes, cfg) => {
+  try {
+    await PrinterSocket.printRaw({
+      host: cfg.host,
+      port: cfg.port,
+      base64: toBase64(bytes),
+      timeoutMs: TCP_TIMEOUT_MS,
+    })
+  } catch (caught) {
+    throw new Error(printerErrorMessage(caught, cfg), { cause: caught })
+  }
+}
+
+function printerErrorMessage(caught: unknown, cfg: PrinterConfig): string {
+  const code = (caught as { code?: unknown }).code
+  switch (code) {
+    case 'ETIMEDOUT':
+      return 'Máy in không trả lời sau 3 giây.'
+    case 'ECONNREFUSED':
+      return `Máy in từ chối kết nối ở cổng ${cfg.port}.`
+    default:
+      return `Không nối được máy in ${cfg.host}:${cfg.port} — kiểm tra máy in đã bật và cùng WiFi.`
+  }
 }
