@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { buildSampleJob } from '../printer/print-job'
 import {
   DEFAULT_PORT,
@@ -7,9 +7,12 @@ import {
   savePrinterConfig,
   type PrinterConfig,
 } from '../printer/printer-config'
-import { isNativeApp, nativeSink } from '../printer/printer-sink'
+import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
+import { buildSampleRawbtHref } from '../printer/rawbt-href'
 import { SampleSheet } from '../printer/sample-sheet'
+import { RAWBT_PLAY_URL } from '@/domain/rawbt-url'
 import { Button } from '@/ui/button'
+import { buttonClassName } from '@/ui/button-class'
 
 type State =
   | { kind: 'idle' }
@@ -35,7 +38,32 @@ export function PrinterSection() {
   const ipId = useId()
   const portId = useId()
   const native = isNativeApp()
+  const androidWeb = isAndroidWeb()
   const cfgValid = parsePrinterConfig(host, port).ok
+
+  // Web Android: dựng SẴN href tờ mẫu RawBT lúc mount (bitmap 576×~200 → PNG vài KB). Native/desktop bỏ qua.
+  // `failed` tách khỏi `building` để lỗi (WebView cũ thiếu CompressionStream) không kẹt mãi ở "Đang chuẩn
+  // bị" — như dòng lỗi RawBT ở màn phiếu.
+  const [rawbtSample, setRawbtSample] = useState<{ status: 'building' | 'ready' | 'failed'; href?: string }>({
+    status: 'building',
+  })
+  useEffect(() => {
+    if (!androidWeb) return
+    const node = sampleRef.current
+    if (!node) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const href = await buildSampleRawbtHref(node)
+        if (!cancelled) setRawbtSample({ status: 'ready', href })
+      } catch {
+        if (!cancelled) setRawbtSample({ status: 'failed' })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [androidWeb])
 
   // Gõ lại thì thông báo "Đã lưu"/"Đã gửi"/lỗi cũ hết đúng — về idle để không khẳng định một giá trị
   // chưa lưu. Giữ nguyên khi đang in. Trả `prev` khi đã idle để React bỏ qua render thừa.
@@ -95,6 +123,37 @@ export function PrinterSection() {
 
   return (
     <>
+      {/* Web Android: khối IN QUA RAWBT đặt TRÊN khối IP — đường web không cấu hình gì (IP nằm trong RawBT). */}
+      {androidWeb ? (
+        <div className="mb-4 rounded-btn border border-line bg-surface px-3 py-3">
+          <p className="text-[13px] font-semibold">IN QUA RAWBT</p>
+          <p className="mt-1 text-[13px] text-muted">
+            Trên web, phiếu in qua ứng dụng RawBT; địa chỉ máy in cài trong RawBT (WiFi › IP máy in, cổng 9100).
+          </p>
+          <a
+            href={RAWBT_PLAY_URL}
+            target="_blank"
+            rel="noopener"
+            className="mt-1 inline-block text-[13px] font-semibold text-brand underline"
+          >
+            Cài RawBT
+          </a>
+          {rawbtSample.status === 'ready' && rawbtSample.href ? (
+            <a data-rawbt href={rawbtSample.href} className={buttonClassName('secondary', 'cta', 'mt-3')}>
+              IN THỬ QUA RAWBT
+            </a>
+          ) : rawbtSample.status === 'failed' ? (
+            <p role="status" className="mt-3 rounded-btn bg-danger-tint px-3 py-2 text-[13px] text-danger">
+              Máy này chưa tạo được tờ mẫu cho RawBT — dùng 📤 CHIA SẺ.
+            </p>
+          ) : (
+            <Button size="cta" variant="secondary" className="mt-3" disabled>
+              Đang chuẩn bị tờ mẫu…
+            </Button>
+          )}
+        </div>
+      ) : null}
+
       {/* Nhãn và ô là hai phần tử anh em (không lồng nhau): `Ô Theo Nhãn` của Robot bám
           `//label[...]/following::input[1]`, và `htmlFor` nối để màn đọc/`getByLabelText` khớp. */}
       <label htmlFor={ipId} className="block text-[13px] font-semibold text-muted">
@@ -140,10 +199,13 @@ export function PrinterSection() {
         </Button>
       </div>
 
-      {/* Ghi chú cố định trên web: giải thích vì sao IN THỬ khoá. Robot bám tiền tố câu này. */}
+      {/* Ghi chú cố định trên web: giải thích vì sao IN THỬ khoá. Robot bám tiền TỐ "Chỉ in được trong
+          app Android" (không đổi); phần đuôi dẫn tới khối RawBT ở trên khi web Android, còn desktop/iOS
+          (không mở được `rawbt:`) dẫn về 📤 CHIA SẺ. */}
       {!native ? (
         <p className="mt-2 text-[13px] text-muted">
-          Chỉ in được trong app Android cài từ file APK. Trên web dùng 📤 CHIA SẺ.
+          Chỉ in được trong app Android cài từ file APK.{' '}
+          {androidWeb ? 'Trên web dùng khối IN QUA RAWBT ở trên.' : 'Trên web dùng 📤 CHIA SẺ.'}
         </p>
       ) : null}
 

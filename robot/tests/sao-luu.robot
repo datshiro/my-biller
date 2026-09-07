@@ -268,6 +268,25 @@ Máy in: trên web nút IN THỬ bị khoá và có dòng chú thích chỉ in �
     Wait For Elements State    css=button:text-is("IN THỬ")    disabled
     Chờ Thấy Chữ    Chỉ in được trong app Android
 
+Máy in: web Android có khối IN QUA RAWBT với link Play và nút IN THỬ QUA RAWBT
+    [Documentation]    Web Android in qua RawBT: khối IN QUA RAWBT trên khối IP có link cài RawBT (Play,
+    ...    mở tab mới) và <a data-rawbt> IN THỬ = ảnh PNG dựng sẵn. KHÔNG Click link rawbt (CI treo ở hộp
+    ...    "mở ứng dụng"). Giải mã ảnh tờ mẫu: rộng 576, cao hơn 180 (thước sampleBitmap + phần chữ SampleSheet).
+    [Setup]    Mở Phiên Android
+    Mở Màn    /them/cai-dat
+    Chờ Thấy Chữ    IN QUA RAWBT
+    ${play}=    Get Attribute    css=a:has-text("Cài RawBT")    href
+    Should Contain    ${play}    ru.a402d.rawbtprinter
+    ${target}=    Get Attribute    css=a:has-text("Cài RawBT")    target
+    Should Be Equal    ${target}    _blank
+    Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
+    ${href}=    Get Attribute    css=a[data-rawbt]    href
+    Should Start With    ${href}    rawbt:data:image/png;base64,
+    ${đo}=    Evaluate JavaScript    css=a[data-rawbt]
+    ...    async (a) => { const r = await fetch(a.getAttribute('href').slice('rawbt:'.length)); const bm = await createImageBitmap(await r.blob()); return { w: bm.width, h: bm.height }; }
+    Should Be Equal As Integers    ${đo}[w]    576
+    Should Be True    ${đo}[h] > 180
+
 
 *** Keywords ***
 Theo Dõi Yêu Cầu Tải
