@@ -80,28 +80,45 @@ describe('mục MÁY IN trong Cài đặt', () => {
     await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
     await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
     await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+    await userEvent.click(screen.getByRole('button', { name: 'In thử' }))
 
     await waitFor(() => expect(shim.sink).toHaveBeenCalledOnce())
     // Đích gửi là IP đang gõ, không phải giá trị cũ trong kho.
     expect(shim.sink.mock.calls[0]?.[1]).toEqual({ host: '10.0.0.9', port: 9100 })
     expect(await screen.findByText('Đã gửi tờ mẫu tới 10.0.0.9:9100')).toBeDefined()
-    // Một chạm = lưu + thử.
+    // Xác nhận = lưu + thử.
     expect(JSON.parse(localStorage.getItem(PRINTER_CONFIG_KEY) as string)).toEqual({ host: '10.0.0.9', port: 9100 })
   })
 
-  it('native: bấm-đúp IN THỬ → chỉ MỘT tờ mẫu gửi đi (khoá ref chống bấm-đúp)', async () => {
+  it('IN THỬ chỉ MỞ hộp xác nhận, chưa gửi; huỷ thì vẫn không gửi', async () => {
+    shim.native = true
+    render(<PrinterSection />)
+    await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
+    await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+
+    expect(screen.getByRole('alertdialog', { name: /In thử ra máy in nhiệt/ })).toBeDefined()
+    expect(shim.sink).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(shim.sink).not.toHaveBeenCalled()
+  })
+
+  it('native: bấm-đúp nút "In thử" trong hộp → chỉ MỘT tờ mẫu gửi đi (khoá ref chống bấm-đúp)', async () => {
     shim.native = true
     shim.sink.mockResolvedValue(undefined)
     render(<PrinterSection />)
     await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
     await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
-    const btn = screen.getByRole('button', { name: 'IN THỬ' })
+    await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+    const inBtn = screen.getByRole('button', { name: 'In thử' })
 
-    // Hai cú chạm NỐI nhau trong một act: React chưa render lại nên `disabled` còn false ở cú thứ hai —
-    // đúng nhịp bấm-đúp đã in HAI tờ trên SPR02 thật. Chỉ khoá ref đồng bộ chặn được cú thứ hai.
+    // Hai cú chạm NỐI nhau vào nút "In thử" trong hộp: hộp chưa kịp đóng (React chưa render lại) — chỉ
+    // khoá ref đồng bộ trong onTest chặn được cú thứ hai (bấm-đúp đã in HAI tờ trên SPR02 thật).
     await act(async () => {
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await waitFor(() => expect(shim.sink).toHaveBeenCalledOnce())
@@ -115,6 +132,7 @@ describe('mục MÁY IN trong Cài đặt', () => {
     await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
     await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
     await userEvent.click(screen.getByRole('button', { name: 'IN THỬ' }))
+    await userEvent.click(screen.getByRole('button', { name: 'In thử' }))
 
     expect(await screen.findByText('Máy in từ chối kết nối cổng 9100.')).toBeDefined()
   })

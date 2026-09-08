@@ -361,18 +361,40 @@ Luồng byte in nhiệt của phiếu 25 dòng là ESC/POS raster 576 chấm m�
     ${có_header}=    Evaluate    bytes([29, 118, 48, 0, 72, 0]) in $bytes
     Should Be True    ${có_header}    Không thấy header GS v 0 (1D 76 30 00 48 00) — sai khổ 72 byte/hàng.
 
-Nút in nhiệt trên web Android là link rawbt: ảnh PNG dựng sẵn, không bấm
-    [Documentation]    CI không có app RawBT: chỉ ĐỌC href, KHÔNG Click (Chrome treo ở hộp "mở ứng dụng").
-    ...    Tiền tố rawbt:data:image/png;base64, là hợp đồng với RawBT. Web Android hiện a[data-rawbt] chứ
-    ...    không nút TCP (data-tcp-print chỉ có trong app native).
+Nút in nhiệt web Android hỏi xác nhận trước; nút In trong hộp là link rawbt: dựng sẵn, không bấm
+    [Documentation]    CI không có app RawBT: chỉ ĐỌC href nút "In", KHÔNG Click (Chrome treo ở hộp "mở ứng
+    ...    dụng"). Bấm IN MÁY IN NHIỆT chỉ MỞ hộp xác nhận (chống bấm nhầm); nút "In" là a[data-rawbt] tiền tố
+    ...    rawbt:data:image/png;base64,. Web Android không có nút TCP (data-tcp-print chỉ có trong app native).
     [Setup]    Mở Phiên Android Có Dữ Liệu Mẫu
     Bán Nhanh    Phở bò
     Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Wait For Elements State    css=button:has-text("IN MÁY IN NHIỆT")    visible    timeout=20s
+    Bấm Nút    IN MÁY IN NHIỆT
+    Chờ Hộp Xác Nhận    In phiếu ra máy in nhiệt?
     Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
     ${href}=    Get Attribute    css=a[data-rawbt]    href
     Should Start With    ${href}    rawbt:data:image/png;base64,
     ${n_tcp}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('button[data-tcp-print]').length
     Should Be Equal As Integers    ${n_tcp}    0
+
+Nút IN MÁY IN NHIỆT chỉ mở hộp xác nhận; Huỷ đóng hộp, không dựng link rawbt
+    [Documentation]    Nút xác nhận chặn cú bấm nhầm in phí giấy. Trước khi bấm chưa có a[data-rawbt]; bấm
+    ...    IN MÁY IN NHIỆT mở hộp và dựng đúng một a[data-rawbt]; Huỷ đóng hộp và gỡ luôn anchor (không điều
+    ...    hướng rawbt:). KHÔNG bấm nút "In".
+    [Setup]    Mở Phiên Android Có Dữ Liệu Mẫu
+    Bán Nhanh    Phở bò
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Wait For Elements State    css=button:has-text("IN MÁY IN NHIỆT")    visible    timeout=20s
+    ${n0}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('a[data-rawbt]').length
+    Should Be Equal As Integers    ${n0}    0
+    Bấm Nút    IN MÁY IN NHIỆT
+    Chờ Hộp Xác Nhận    In phiếu ra máy in nhiệt?
+    ${n1}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('a[data-rawbt]').length
+    Should Be Equal As Integers    ${n1}    1
+    Bỏ Qua Hộp Xác Nhận
+    Wait For Elements State    css=[role=alertdialog]    hidden    timeout=5s
+    ${n2}=    Evaluate JavaScript    ${None}    () => document.querySelectorAll('a[data-rawbt]').length
+    Should Be Equal As Integers    ${n2}    0
 
 Ảnh trong link rawbt của phiếu 25 dòng rộng đúng 576 chấm, chỉ hai mức và là một dải
     [Documentation]    Giải mã href rawbt: → ảnh PNG 1-bit của encodePng1: rộng 576 (khổ máy in), chỉ hai
@@ -382,6 +404,9 @@ Nút in nhiệt trên web Android là link rawbt: ảnh PNG dựng sẵn, không
     [Setup]    Mở Phiên Android Có Dữ Liệu Mẫu
     Skip If    '${BASE_URL}'.startswith('https')    Bản production không seed được qua /src import
     Dựng Đơn Nhiều Dòng    25
+    Wait For Elements State    css=button:has-text("IN MÁY IN NHIỆT")    visible    timeout=20s
+    Bấm Nút    IN MÁY IN NHIỆT
+    Chờ Hộp Xác Nhận    In phiếu ra máy in nhiệt?
     Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
     ${đo}=    Evaluate JavaScript    css=a[data-rawbt]
     ...    async (a) => { const r = await fetch(a.getAttribute('href').slice('rawbt:'.length)); const bm = await createImageBitmap(await r.blob()); const c = new OffscreenCanvas(bm.width, bm.height); const x = c.getContext('2d'); x.drawImage(bm, 0, 0); const d = x.getImageData(0, 0, bm.width, bm.height).data; const levels = new Set(); for (let i = 0; i < d.length; i += 4) levels.add(d[i]); return { w: bm.width, h: bm.height, levels: levels.size }; }

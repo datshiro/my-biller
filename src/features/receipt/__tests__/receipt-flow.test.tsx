@@ -490,21 +490,35 @@ describe('receiptSignature', () => {
 // socket. Nhưng ba nhánh của onPrintThermal (thiếu IP / gửi xong / lỗi) là logic React lái được ở đây.
 describe('in máy in nhiệt trong app native', () => {
   const nútIn = () => screen.findByRole('button', { name: /IN MÁY IN NHIỆT/ })
+  const xacNhan = () => userEvent.click(screen.getByRole('button', { name: 'In' }))
 
-  it('chưa cài IP → báo "Chưa cài IP máy in" kèm link vào Cài đặt, không gọi sink', async () => {
+  it('bấm IN MÁY IN NHIỆT chỉ MỞ hộp xác nhận, chưa gửi gì (chống bấm nhầm)', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútIn())
+
+    expect(screen.getByRole('alertdialog', { name: /In phiếu ra máy in nhiệt/ })).toBeDefined()
+    expect(sinkShim.sink).not.toHaveBeenCalled()
+  })
+
+  it('chưa cài IP → xác nhận rồi báo "Chưa cài IP máy in" kèm link vào Cài đặt, không gọi sink', async () => {
     sinkShim.native = true
     localStorage.removeItem('may-in')
     const { id } = await seedOrder()
     renderReceipt(id)
 
     await userEvent.click(await nútIn())
+    await xacNhan()
 
     expect(await screen.findByText(/Chưa cài IP máy in/)).toBeDefined()
     expect(screen.getByRole('link', { name: /Vào Cài đặt/ })).toBeDefined()
     expect(sinkShim.sink).not.toHaveBeenCalled()
   })
 
-  it('đã cài IP → gửi byte thật của phiếu tới đúng máy và báo đã gửi', async () => {
+  it('đã cài IP → xác nhận gửi byte thật của phiếu tới đúng máy và báo đã gửi', async () => {
     sinkShim.native = true
     sinkShim.sink.mockResolvedValueOnce(undefined)
     localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
@@ -512,11 +526,25 @@ describe('in máy in nhiệt trong app native', () => {
     renderReceipt(id)
 
     await userEvent.click(await nútIn())
+    await xacNhan()
 
     await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
     expect(sinkShim.sink.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array)
     expect(sinkShim.sink.mock.calls[0]?.[1]).toEqual({ host: '192.168.1.50', port: 9100 })
     expect(await screen.findByText('Đã gửi tới máy in 192.168.1.50:9100.')).toBeDefined()
+  })
+
+  it('huỷ hộp xác nhận → không gửi gì', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútIn())
+    await userEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
+
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(sinkShim.sink).not.toHaveBeenCalled()
   })
 
   it('máy in lỗi → giữ nguyên câu lỗi thật của sink, không nuốt thành câu chung', async () => {
@@ -527,23 +555,25 @@ describe('in máy in nhiệt trong app native', () => {
     renderReceipt(id)
 
     await userEvent.click(await nútIn())
+    await xacNhan()
 
     expect(await screen.findByText('Không nối được máy in — máy tắt hoặc khác WiFi.')).toBeDefined()
   })
 
-  it('bấm-đúp → chỉ MỘT phiếu gửi đi (khoá ref chống bấm-đúp)', async () => {
+  it('bấm-đúp nút "In" trong hộp → chỉ MỘT phiếu gửi đi (khoá ref chống bấm-đúp)', async () => {
     sinkShim.native = true
     sinkShim.sink.mockResolvedValue(undefined)
     localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
     const { id } = await seedOrder()
     renderReceipt(id)
-    const btn = await nútIn()
+    await userEvent.click(await nútIn())
+    const inBtn = screen.getByRole('button', { name: 'In' })
 
-    // Hai cú chạm NỐI nhau trong một act: React chưa render lại nên `disabled={busy}` còn false ở cú thứ
-    // hai — đúng nhịp bấm-đúp đã in HAI tờ trên SPR02 thật. Chỉ khoá ref đồng bộ chặn được cú thứ hai.
+    // Hai cú chạm NỐI nhau trong một act vào nút "In": hộp chưa kịp đóng (React chưa render lại) — đúng
+    // nhịp bấm-đúp đã in HAI tờ trên SPR02 thật. Chỉ khoá ref đồng bộ trong onPrintThermal chặn cú thứ hai.
     await act(async () => {
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
@@ -551,21 +581,27 @@ describe('in máy in nhiệt trong app native', () => {
   })
 })
 
-// Web Android in qua RawBT: href `rawbt:` dựng sẵn trên `<a>` (không bấm ở test — Robot cũng không bấm).
-// Đo byte ảnh thật để e2e/Robot lo; ở đây chỉ chốt bộ chọn và guard cỡ URL.
+// Web Android in qua RawBT: nút mở hộp xác nhận; href `rawbt:` dựng sẵn nằm trên nút "In" của hộp (không
+// bấm ở test — Robot cũng không bấm). Đo byte ảnh thật để e2e/Robot lo; ở đây chỉ chốt bộ chọn + guard cỡ URL.
 describe('in qua RawBT trên web Android', () => {
-  it('web Android → đúng 1 <a data-rawbt> href tiền tố rawbt:, và 0 nút TCP', async () => {
+  it('web Android → nút mở hộp; xác nhận là 1 <a data-rawbt> tiền tố rawbt:, và 0 nút TCP', async () => {
     sinkShim.androidWeb = true
     const { id } = await seedOrder()
     renderReceipt(id)
 
-    const link = await screen.findByRole('link', { name: /IN MÁY IN NHIỆT/ })
+    const openBtn = await screen.findByRole('button', { name: /IN MÁY IN NHIỆT/ })
+    expect(document.querySelectorAll('button[data-tcp-print]')).toHaveLength(0)
+    // Chưa mở hộp thì chưa dựng anchor rawbt — tránh điều hướng ngoài ý muốn.
+    expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(0)
+
+    await userEvent.click(openBtn)
+
+    const link = screen.getByRole('link', { name: 'In' })
     expect(link.getAttribute('href')?.startsWith('rawbt:data:image/png;base64,')).toBe(true)
     expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(1)
-    expect(document.querySelectorAll('button[data-tcp-print]')).toHaveLength(0)
   })
 
-  it('phiếu vượt guard cỡ URL (href null) → dòng "quá dài", không <a data-rawbt>', async () => {
+  it('phiếu vượt guard cỡ URL (href null) → dòng "quá dài", không nút in, không <a data-rawbt>', async () => {
     sinkShim.androidWeb = true
     vi.mocked(buildReceiptRawbtHref).mockResolvedValueOnce(null)
     const { id } = await seedOrder()

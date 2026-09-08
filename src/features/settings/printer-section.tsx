@@ -13,6 +13,7 @@ import { SampleSheet } from '../printer/sample-sheet'
 import { RAWBT_PLAY_URL } from '@/domain/rawbt-url'
 import { Button } from '@/ui/button'
 import { buttonClassName } from '@/ui/button-class'
+import { ConfirmDialog } from '@/ui/confirm-dialog'
 
 type State =
   | { kind: 'idle' }
@@ -38,6 +39,7 @@ export function PrinterSection() {
   // Khoá đồng bộ chống bấm-đúp: `disabled` theo state chỉ khoá sau render lại, hai chạm cùng nhịp lọt cả
   // hai → hai tờ mẫu (như nút in phiếu trên SPR02 thật). Ref chặn cú thứ hai ngay.
   const testLock = useRef(false)
+  const [askTest, setAskTest] = useState(false)
   const ipId = useId()
   const portId = useId()
   const native = isNativeApp()
@@ -200,7 +202,7 @@ export function PrinterSection() {
           variant="secondary"
           className="flex-1"
           disabled={!native || !cfgValid || state.kind === 'printing'}
-          onClick={() => void onTest()}
+          onClick={() => setAskTest(true)}
         >
           {state.kind === 'printing' ? 'Đang gửi…' : 'IN THỬ'}
         </Button>
@@ -235,6 +237,21 @@ export function PrinterSection() {
           <SampleSheet innerRef={sampleRef} />
         </div>
       </div>
+
+      {/* Hỏi xác nhận trước khi gửi tờ mẫu — chặn bấm nhầm. onTest vẫn giữ khoá chống bấm-đúp bên trong. */}
+      {askTest ? (
+        <ConfirmDialog
+          title="In thử ra máy in nhiệt?"
+          message={`Gửi tờ mẫu tới máy in ${host}:${port}.`}
+          confirmLabel="In thử"
+          confirmVariant="primary"
+          onConfirm={() => {
+            setAskTest(false)
+            void onTest()
+          }}
+          onCancel={() => setAskTest(false)}
+        />
+      ) : null}
     </>
   )
 }

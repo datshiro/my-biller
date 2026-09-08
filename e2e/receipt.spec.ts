@@ -481,13 +481,16 @@ test('phiếu 40 dòng: nút .bin (dev) tải luồng byte ESC/POS 576 chấm, k
 })
 
 /**
- * Web Android in qua RawBT: href `rawbt:` PNG 1-bit dựng SẴN trên `<a>` — KHÔNG bấm (Playwright/CI không
- * có handler `rawbt:`, sẽ treo ở hộp "mở ứng dụng"). Chỉ đọc href, đo cỡ trong ngân sách `RAWBT_URL_MAX_CHARS`
- * (cùng hằng với guard), và giải mã ảnh rộng đúng 576. Project `mobile-chrome` (Pixel 7) đã là UA Android
- * nên `isAndroidWeb()` bật. Số đo `href.length` 40 dòng ghi trong commit.
+ * Web Android in qua RawBT: nút 🖨 mở hộp xác nhận; href `rawbt:` PNG 1-bit dựng SẴN nằm trên nút "In"
+ * của hộp — KHÔNG bấm nút "In" (Playwright/CI không có handler `rawbt:`, sẽ treo ở hộp "mở ứng dụng").
+ * Chỉ đọc href, đo cỡ trong ngân sách `RAWBT_URL_MAX_CHARS` (cùng hằng với guard), và giải mã ảnh rộng đúng
+ * 576. Project `mobile-chrome` (Pixel 7) đã là UA Android nên `isAndroidWeb()` bật. Số đo `href.length` ghi ở commit.
  */
-test('phiếu 40 dòng: link RawBT dựng sẵn, trong ngân sách, ảnh giải mã rộng 576', async ({ page }) => {
+test('phiếu 40 dòng: link RawBT trong hộp xác nhận, trong ngân sách, ảnh giải mã rộng 576', async ({ page }) => {
   await buildReceiptWithLines(page, 40)
+
+  // Nút "Đang chuẩn bị…" đổi thành 🖨 IN MÁY IN NHIỆT khi href dựng xong; bấm để mở hộp (không bấm "In").
+  await page.getByRole('button', { name: /IN MÁY IN NHIỆT/ }).click()
 
   const link = page.locator('a[data-rawbt]')
   await expect(link).toBeVisible({ timeout: 20_000 })

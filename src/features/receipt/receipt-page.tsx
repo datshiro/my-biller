@@ -12,7 +12,7 @@ import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
 import { buildReceiptRawbtHref } from '../printer/rawbt-href'
 import { paginateLines } from '@/domain/receipt-pages'
 import { Button } from '@/ui/button'
-import { buttonClassName } from '@/ui/button-class'
+import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { EmptyState } from '@/ui/empty-state'
 
 type Png = { blobs: Blob[]; canShare: boolean }
@@ -28,6 +28,7 @@ export function ReceiptPage() {
   // Khoá đồng bộ chống bấm-đúp: `disabled={busy}` chỉ khoá sau khi React render lại, nên hai cú chạm
   // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
   const printLock = useRef(false)
+  const [askPrint, setAskPrint] = useState(false)
   const [png, setPng] = useState<Png | null>(null)
   const [pngError, setPngError] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -173,6 +174,8 @@ export function ReceiptPage() {
   // `<a data-rawbt>` (RawBT); web khác → không nút. Bộ chọn khác nhau nên test không đếm nhầm.
   const native = isNativeApp()
   const androidWeb = isAndroidWeb()
+  // IP để hiện trong hộp xác nhận; onPrintThermal vẫn đọc lại lúc gửi (nguồn sự thật).
+  const printerCfg = native ? readPrinterConfig() : null
 
   return (
     <div className="receipt-screen flex h-dvh flex-col bg-surface">
@@ -265,7 +268,7 @@ export function ReceiptPage() {
               variant="secondary"
               data-tcp-print
               disabled={inNhiet.busy}
-              onClick={() => void onPrintThermal()}
+              onClick={() => setAskPrint(true)}
               className="mb-3"
             >
               {inNhiet.busy ? 'Đang chuẩn bị bản in…' : '🖨 IN MÁY IN NHIỆT'}
@@ -274,10 +277,11 @@ export function ReceiptPage() {
             <div className="mb-3">
               {rawbt.status === 'ready' && rawbt.href ? (
                 <>
-                  {/* Href dựng SẴN trên `<a>`; không handler async, không `location.href` — giữ user gesture. */}
-                  <a data-rawbt href={rawbt.href} className={buttonClassName('secondary', 'cta')}>
+                  {/* Nút mở hộp xác nhận; href `rawbt:` dựng sẵn nằm TRÊN nút "In" trong hộp — cú chạm
+                      "In" là user gesture thật, không `await` giữa chạm và điều hướng. */}
+                  <Button size="cta" variant="secondary" className="w-full" onClick={() => setAskPrint(true)}>
                     🖨 IN MÁY IN NHIỆT
-                  </a>
+                  </Button>
                   <p className="mt-1 text-center text-[12px] text-muted">
                     Cần app RawBT trên Android (bản miễn phí in thêm một dòng).
                   </p>
@@ -339,6 +343,37 @@ export function ReceiptPage() {
                 </>
               ) : null}
             </p>
+          ) : null}
+
+          {/* Hỏi xác nhận trước khi in để chặn cú bấm nhầm (giấy in phí). Native → nút "In" gọi thẳng
+              onPrintThermal (còn khoá chống bấm-đúp bên trong). Web Android → nút "In" là `<a data-rawbt>`
+              để giữ user gesture khi mở RawBT. */}
+          {askPrint && native ? (
+            <ConfirmDialog
+              title="In phiếu ra máy in nhiệt?"
+              message={
+                printerCfg
+                  ? `Gửi phiếu tới máy in ${printerCfg.host}:${printerCfg.port}.`
+                  : 'Gửi phiếu tới máy in nhiệt.'
+              }
+              confirmLabel="In"
+              confirmVariant="primary"
+              onConfirm={() => {
+                setAskPrint(false)
+                void onPrintThermal()
+              }}
+              onCancel={() => setAskPrint(false)}
+            />
+          ) : askPrint && androidWeb && rawbt.status === 'ready' && rawbt.href ? (
+            <ConfirmDialog
+              title="In phiếu ra máy in nhiệt?"
+              message="Phiếu sẽ mở trong app RawBT để in."
+              confirmLabel="In"
+              confirmVariant="primary"
+              confirmHref={rawbt.href}
+              onConfirm={() => setAskPrint(false)}
+              onCancel={() => setAskPrint(false)}
+            />
           ) : null}
         </div>
       </div>
