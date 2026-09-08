@@ -25,6 +25,9 @@ export function ReceiptPage() {
 
   const captureRefs = useRef<(HTMLDivElement | null)[]>([])
   const thermalRef = useRef<HTMLDivElement | null>(null)
+  // Khoá đồng bộ chống bấm-đúp: `disabled={busy}` chỉ khoá sau khi React render lại, nên hai cú chạm
+  // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
+  const printLock = useRef(false)
   const [png, setPng] = useState<Png | null>(null)
   const [pngError, setPngError] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -130,6 +133,7 @@ export function ReceiptPage() {
   // Chụp LƯỜI khi chạm (D6): gọi plugin không phải điều hướng nên không cần href dựng sẵn. Bản nhiệt
   // một dải nằm sẵn trong DOM ẩn — chỉ chụp thành byte lúc bấm.
   const onPrintThermal = async () => {
+    if (printLock.current) return
     const cfg = readPrinterConfig()
     if (!cfg) {
       setInNhiet({ busy: false, message: 'Chưa cài IP máy in.', error: true, needConfig: true })
@@ -137,6 +141,7 @@ export function ReceiptPage() {
     }
     const node = thermalRef.current
     if (!node) return
+    printLock.current = true
     setInNhiet({ busy: true, message: 'Đang chuẩn bị bản in…', error: false })
     try {
       const bytes = await buildReceiptJob(node)
@@ -148,6 +153,8 @@ export function ReceiptPage() {
         message: error instanceof Error ? error.message : 'Không gửi được bản in.',
         error: true,
       })
+    } finally {
+      printLock.current = false
     }
   }
 

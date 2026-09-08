@@ -35,6 +35,9 @@ export function PrinterSection() {
   const [port, setPort] = useState(String(existing?.port ?? DEFAULT_PORT))
   const [state, setState] = useState<State>(existing ? { kind: 'saved', cfg: existing } : { kind: 'idle' })
   const sampleRef = useRef<HTMLDivElement | null>(null)
+  // Khoá đồng bộ chống bấm-đúp: `disabled` theo state chỉ khoá sau render lại, hai chạm cùng nhịp lọt cả
+  // hai → hai tờ mẫu (như nút in phiếu trên SPR02 thật). Ref chặn cú thứ hai ngay.
+  const testLock = useRef(false)
   const ipId = useId()
   const portId = useId()
   const native = isNativeApp()
@@ -93,6 +96,7 @@ export function PrinterSection() {
   // Một chạm = lưu + gửi tờ mẫu. Đọc THẲNG ô nhập (không đọc kho) nên đích gửi và thông điệp không lệch
   // nhau: gửi tới đúng IP đang hiện, và báo đúng IP đó.
   const onTest = async () => {
+    if (testLock.current) return
     const parsed = parsePrinterConfig(host, port)
     if (!parsed.ok) {
       setState({ kind: 'invalid', message: parsed.error })
@@ -100,6 +104,7 @@ export function PrinterSection() {
     }
     const node = sampleRef.current
     if (!node) return
+    testLock.current = true
     savePrinterConfig(parsed.value)
     setState({ kind: 'printing' })
     try {
@@ -115,6 +120,8 @@ export function PrinterSection() {
             ? error.message
             : `Không nối được máy in ${parsed.value.host}:${parsed.value.port} — kiểm tra máy in đã bật và cùng WiFi.`,
       })
+    } finally {
+      testLock.current = false
     }
   }
 

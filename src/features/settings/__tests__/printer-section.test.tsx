@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PrinterSection } from '../printer-section'
@@ -87,6 +87,25 @@ describe('mục MÁY IN trong Cài đặt', () => {
     expect(await screen.findByText('Đã gửi tờ mẫu tới 10.0.0.9:9100')).toBeDefined()
     // Một chạm = lưu + thử.
     expect(JSON.parse(localStorage.getItem(PRINTER_CONFIG_KEY) as string)).toEqual({ host: '10.0.0.9', port: 9100 })
+  })
+
+  it('native: bấm-đúp IN THỬ → chỉ MỘT tờ mẫu gửi đi (khoá ref chống bấm-đúp)', async () => {
+    shim.native = true
+    shim.sink.mockResolvedValue(undefined)
+    render(<PrinterSection />)
+    await userEvent.clear(screen.getByLabelText(/Địa chỉ IP máy in/))
+    await userEvent.type(screen.getByLabelText(/Địa chỉ IP máy in/), '10.0.0.9')
+    const btn = screen.getByRole('button', { name: 'IN THỬ' })
+
+    // Hai cú chạm NỐI nhau trong một act: React chưa render lại nên `disabled` còn false ở cú thứ hai —
+    // đúng nhịp bấm-đúp đã in HAI tờ trên SPR02 thật. Chỉ khoá ref đồng bộ chặn được cú thứ hai.
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await waitFor(() => expect(shim.sink).toHaveBeenCalledOnce())
+    expect(shim.sink).toHaveBeenCalledOnce()
   })
 
   it('native: lỗi khi gửi giữ nguyên câu lỗi thật, không nuốt thành "kiểm tra WiFi"', async () => {

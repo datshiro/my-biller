@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { cleanup, configure, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, configure, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -529,6 +529,25 @@ describe('in máy in nhiệt trong app native', () => {
     await userEvent.click(await nútIn())
 
     expect(await screen.findByText('Không nối được máy in — máy tắt hoặc khác WiFi.')).toBeDefined()
+  })
+
+  it('bấm-đúp → chỉ MỘT phiếu gửi đi (khoá ref chống bấm-đúp)', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockResolvedValue(undefined)
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+    const btn = await nútIn()
+
+    // Hai cú chạm NỐI nhau trong một act: React chưa render lại nên `disabled={busy}` còn false ở cú thứ
+    // hai — đúng nhịp bấm-đúp đã in HAI tờ trên SPR02 thật. Chỉ khoá ref đồng bộ chặn được cú thứ hai.
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
+    expect(sinkShim.sink).toHaveBeenCalledOnce()
   })
 })
 
