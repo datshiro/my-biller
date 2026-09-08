@@ -268,10 +268,11 @@ Máy in: trên web nút IN THỬ bị khoá và có dòng chú thích chỉ in �
     Wait For Elements State    css=button:text-is("IN THỬ")    disabled
     Chờ Thấy Chữ    Chỉ in được trong app Android
 
-Máy in: web Android có khối IN QUA RAWBT với link Play và nút IN THỬ QUA RAWBT
-    [Documentation]    Web Android in qua RawBT: khối IN QUA RAWBT trên khối IP có link cài RawBT (Play,
-    ...    mở tab mới) và <a data-rawbt> IN THỬ = ảnh PNG dựng sẵn. KHÔNG Click link rawbt (CI treo ở hộp
-    ...    "mở ứng dụng"). Giải mã ảnh tờ mẫu: rộng 576, cao hơn 180 (thước sampleBitmap + phần chữ SampleSheet).
+Máy in web Android: IN THỬ QUA RAWBT hỏi xác nhận; nút In thử là link rawbt: dựng sẵn, không bấm
+    [Documentation]    Web Android in qua RawBT: khối IN QUA RAWBT trên khối IP có link cài RawBT (Play, mở
+    ...    tab mới). Bấm IN THỬ QUA RAWBT chỉ MỞ hộp xác nhận (chặn bấm nhầm); nút "In thử" trong hộp là
+    ...    <a data-rawbt> ảnh PNG dựng sẵn. KHÔNG Click nút In thử (CI treo ở hộp "mở ứng dụng"). Giải mã ảnh
+    ...    tờ mẫu: rộng 576, cao hơn 180 (thước sampleBitmap + phần chữ SampleSheet).
     [Setup]    Mở Phiên Android
     Mở Màn    /them/cai-dat
     Chờ Thấy Chữ    IN QUA RAWBT
@@ -279,6 +280,9 @@ Máy in: web Android có khối IN QUA RAWBT với link Play và nút IN THỬ Q
     Should Contain    ${play}    ru.a402d.rawbtprinter
     ${target}=    Get Attribute    css=a:has-text("Cài RawBT")    target
     Should Be Equal    ${target}    _blank
+    Wait For Elements State    css=button:has-text("IN THỬ QUA RAWBT")    visible    timeout=20s
+    Bấm Nút    IN THỬ QUA RAWBT
+    Chờ Hộp Xác Nhận    In thử qua RawBT?
     Wait For Elements State    css=a[data-rawbt]    visible    timeout=20s
     ${href}=    Get Attribute    css=a[data-rawbt]    href
     Should Start With    ${href}    rawbt:data:image/png;base64,

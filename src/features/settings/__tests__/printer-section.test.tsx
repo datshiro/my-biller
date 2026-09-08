@@ -137,11 +137,16 @@ describe('mục MÁY IN trong Cài đặt', () => {
     expect(await screen.findByText('Máy in từ chối kết nối cổng 9100.')).toBeDefined()
   })
 
-  it('web Android: hiện khối IN QUA RAWBT với link Play và <a data-rawbt> IN THỬ', async () => {
+  it('web Android: khối IN QUA RAWBT có link Play; IN THỬ QUA RAWBT mở hộp, xác nhận là <a data-rawbt>', async () => {
     shim.androidWeb = true
     render(<PrinterSection />)
     expect(screen.getByRole('link', { name: 'Cài RawBT' }).getAttribute('href')).toContain('ru.a402d.rawbtprinter')
-    const inThu = await screen.findByRole('link', { name: 'IN THỬ QUA RAWBT' })
+    // Chưa mở hộp thì chưa dựng anchor rawbt — tránh điều hướng ngoài ý muốn.
+    expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(0)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'IN THỬ QUA RAWBT' }))
+
+    const inThu = screen.getByRole('link', { name: 'In thử' })
     expect(inThu.getAttribute('href')?.startsWith('rawbt:data:image/png;base64,')).toBe(true)
     expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(1)
   })

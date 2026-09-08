@@ -12,7 +12,6 @@ import { buildSampleRawbtHref } from '../printer/rawbt-href'
 import { SampleSheet } from '../printer/sample-sheet'
 import { RAWBT_PLAY_URL } from '@/domain/rawbt-url'
 import { Button } from '@/ui/button'
-import { buttonClassName } from '@/ui/button-class'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 
 type State =
@@ -148,9 +147,9 @@ export function PrinterSection() {
             Cài RawBT
           </a>
           {rawbtSample.status === 'ready' && rawbtSample.href ? (
-            <a data-rawbt href={rawbtSample.href} className={buttonClassName('secondary', 'cta', 'mt-3')}>
+            <Button size="cta" variant="secondary" className="mt-3" onClick={() => setAskTest(true)}>
               IN THỬ QUA RAWBT
-            </a>
+            </Button>
           ) : rawbtSample.status === 'failed' ? (
             <p role="status" className="mt-3 rounded-btn bg-danger-tint px-3 py-2 text-[13px] text-danger">
               Máy này chưa tạo được tờ mẫu cho RawBT — dùng 📤 CHIA SẺ.
@@ -238,8 +237,9 @@ export function PrinterSection() {
         </div>
       </div>
 
-      {/* Hỏi xác nhận trước khi gửi tờ mẫu — chặn bấm nhầm. onTest vẫn giữ khoá chống bấm-đúp bên trong. */}
-      {askTest ? (
+      {/* Hỏi xác nhận trước khi gửi tờ mẫu — chặn bấm nhầm. Native → onTest (còn khoá chống bấm-đúp bên
+          trong). Web Android → nút "In thử" là `<a data-rawbt>` để giữ user gesture khi mở RawBT. */}
+      {askTest && native ? (
         <ConfirmDialog
           title="In thử ra máy in nhiệt?"
           message={`Gửi tờ mẫu tới máy in ${host}:${port}.`}
@@ -249,6 +249,16 @@ export function PrinterSection() {
             setAskTest(false)
             void onTest()
           }}
+          onCancel={() => setAskTest(false)}
+        />
+      ) : askTest && androidWeb && rawbtSample.status === 'ready' && rawbtSample.href ? (
+        <ConfirmDialog
+          title="In thử qua RawBT?"
+          message="Tờ mẫu sẽ mở trong app RawBT để in."
+          confirmLabel="In thử"
+          confirmVariant="primary"
+          confirmHref={rawbtSample.href}
+          onConfirm={() => setAskTest(false)}
           onCancel={() => setAskTest(false)}
         />
       ) : null}
