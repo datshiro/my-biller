@@ -4,7 +4,7 @@ Bộ này lái **app thật trên Chrome thật**: bấm nút thật, tải file
 Nó không thay Vitest hay Playwright mà bổ sung một lớp đọc được cho người không đọc code —
 mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra file HTML xem được ngoài trình duyệt.
 Danh sách suite và số ca luôn sống trong `robot/tests/*.robot`; guide này chỉ giữ đường chạy và
-điểm vào để tìm coverage. Riêng `hai-may.robot` có 11 ca chạy hai Browser Context cùng trỏ vào một
+điểm vào để tìm coverage. Riêng `hai-may.robot` có 19 ca chạy hai Browser Context cùng trỏ vào một
 Durable Object cục bộ thật.
 
 | Lớp | Chạy bằng | Trả lời câu hỏi |
@@ -97,12 +97,13 @@ robot/
 │   ├── don-hang.robot        danh sách đơn, ghi chú, huỷ đơn
 │   ├── mat-hang.robot        danh mục, ngừng bán, chặn xoá món đã bán
 │   ├── khach-hang.robot      khách, công nợ có chủ, thêm khách lúc bán, bảng giá sỉ
-│   ├── chi-phi.robot         ghi/sửa/xoá khoản chi, hai ô tổng
+│   ├── chi-phi.robot         ghi/sửa/xoá khoản chi, hai ô tổng, chốt xoá loại chi phí
 │   ├── cong-no.robot         thu nợ, chặn thu dư, phiếu thu ra đúng dòng
 │   ├── bao-cao.robot         lãi/lỗ, các kỳ, khoảng ngày tự chọn
 │   ├── phieu.robot           nội dung phiếu, chia trang, dựng ảnh PNG
 │   ├── sao-luu.robot         sao lưu, chia sẻ, nhập lại, xoá sạch, cảnh báo bản sao trống
-│   └── hai-may.robot         11 ca · đồng bộ, rollback, thu hồi, resync, lease/epoch
+│   ├── doi-soat.robot        neo đồng bộ, bốn tổng toàn sổ, phiếu hoàn tiền
+│   └── hai-may.robot         19 ca · đồng bộ, rollback, thu hồi, resync, lease/epoch, đối soát
 └── results/
     ├── output.xml            kết quả máy đọc
     ├── report.html           tóm tắt

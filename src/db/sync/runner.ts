@@ -26,6 +26,9 @@ const REMOTE_POLL_MS = isLocalRuntime ? LOCAL_POLL_MS : 30_000
 
 let started = false
 
+/** Màn nào cần số mới ngay (Đối soát) thì dispatch sự kiện này; không dispatch `online` giả. */
+export const SYNC_WAKE_EVENT = 'my-biller:sync-wake'
+
 export function startSyncRunner(): () => void {
   if (started || typeof window === 'undefined') return () => undefined
   started = true
@@ -102,8 +105,10 @@ export function startSyncRunner(): () => void {
   }
   const onOnline = () => void tick()
   const onOutboxChanged = () => void tick()
+  const onWake = () => void tick()
   window.addEventListener('online', onOnline)
   window.addEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged)
+  window.addEventListener(SYNC_WAKE_EVENT, onWake)
   document.addEventListener('visibilitychange', onVisible)
   void tick()
 
@@ -114,6 +119,7 @@ export function startSyncRunner(): () => void {
     window.clearInterval(remotePollTimer)
     window.removeEventListener('online', onOnline)
     window.removeEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged)
+    window.removeEventListener(SYNC_WAKE_EVENT, onWake)
     document.removeEventListener('visibilitychange', onVisible)
     socket?.close()
   }

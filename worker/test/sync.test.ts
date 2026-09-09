@@ -725,3 +725,52 @@ describe('oplog đồng bộ', () => {
     expect(pulled[0]).toMatchObject({ table: 'customers', entityKey: canonicalGid })
   })
 })
+
+describe('seq mới nhất của sổ chung', () => {
+  const listDevices = () =>
+    SELF.fetch(`https://example.com/shop/${shopId}/devices`, { headers: auth() })
+
+  it('trả latestSeq bằng 0 khi oplog còn rỗng', async () => {
+    const response = await listDevices()
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ latestSeq: 0 })
+  })
+
+  it('latestSeq bằng đúng seq của sự kiện cuối mà máy kéo về', async () => {
+    const customerGid = crypto.randomUUID()
+    const orderGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+    const order = orderRow(orderGid, customerGid)
+    expect((await push(event('orders', orderGid, order.after, order.refs))).status).toBe(201)
+
+    const pulled = await pullAll()
+    const body = await (await listDevices()).json<{ latestSeq: number }>()
+    expect(body.latestSeq).toBeGreaterThan(0)
+    expect(body.latestSeq).toBe(pulled.at(-1)?.seq)
+  })
+})
+
+describe('kéo oplog theo trang', () => {
+  const pull = (since: number) =>
+    SELF.fetch(`https://example.com/shop/${shopId}/oplog?since=${since}`, { headers: auth() })
+
+  it('tôn trọng since: trang sau bắt đầu ngay sau seq đã có, không trả lại từ đầu', async () => {
+    // Gateway từng dựng URL nội bộ chỉ từ pathname nên `?since=` rơi mất: mọi trang đều là seq 1..500,
+    // máy có sổ từ 500 sự kiện kẹt ở seq 500 và quay vòng kéo mãi. Ca này khoá đúng đường đi qua gateway.
+    const gids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()]
+    for (const gid of gids) {
+      expect((await push(event('customers', gid, customerRow(gid)))).status).toBe(201)
+    }
+    const all = await pullAll()
+    expect(all.map((row) => row.entityKey)).toEqual(gids)
+    const secondSeq = all[1]!.seq
+
+    const tail = await (await pull(secondSeq)).json<{ events: Array<{ seq: number; entityKey: string }>; hasMore: boolean }>()
+    expect(tail.events.map((row) => row.entityKey)).toEqual([gids[2]])
+    expect(tail.events[0]!.seq).toBe(secondSeq + 1)
+    expect(tail.hasMore).toBe(false)
+
+    const empty = await (await pull(all.at(-1)!.seq)).json<{ events: unknown[]; hasMore: boolean }>()
+    expect(empty).toEqual({ events: [], hasMore: false })
+  })
+})

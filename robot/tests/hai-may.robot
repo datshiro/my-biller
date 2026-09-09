@@ -12,6 +12,7 @@ Test Tags           hai-may    regression
 
 *** Variables ***
 ${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
+${NEO_ĐỒNG_BỘ}      css=[role=status][aria-label="Neo đồng bộ"]
 
 *** Test Cases ***
 Đơn ở máy A hiện ở máy B mà không tải lại trang
@@ -211,8 +212,13 @@ Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Wait Until Keyword Succeeds    80x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
     ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
-    Phiếu Của Đơn Phải Có Trạng Thái    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
+    # Hai phép chốt cuối cũng phải chờ được: thao tác bị từ chối ở trên đặt `resyncRequired`, nên sau
+    # lượt hội tụ đầu vẫn còn một nhịp `resetReadReplica` xoá sạch 9 bảng rồi `pullAll` đổ lại. Đọc trần
+    # rơi vào đúng khoảng trống đó thì thấy phiếu "biến mất" — đó là #33, không phải lỗi hội tụ.
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Phiếu Của Đơn Phải Có Trạng Thái
+    ...    ${order_a}[gid]    refunded    ${MÁY_B_PAGE}
 
 Đóng tab dẫn đầu thì tab còn lại tiếp quản và vẫn đẩy đơn
     [Documentation]    Lease không được mắc kẹt ở tab đã đóng; epoch mới phải tiếp tục đường ghi.
@@ -393,6 +399,93 @@ Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
     ...    Ghi chú bị cắt trên đường qua sổ chung — máy B không thấy thứ máy A đã ghi.
     Should Be Equal    ${có_ghi_chú}[0][name]    Cà phê sữa
 
+Màn Đối soát của hai máy nói cùng một con số
+    [Documentation]    (a) Ca chỉ khoá TRẠNG THÁI CUỐI: hai máy cùng hiện "✓ Khớp sổ chung" với cùng số #,
+    ...    bốn tổng bằng nhau, bảng payments giống nhau. (b) Nhánh "Còn N thay đổi chưa về máy này" cố tình
+    ...    không assert ở đây vì nó phụ thuộc thời điểm quan sát: mở màn là một lần tải trang cứng, sau đó
+    ...    ownerId mới bị lease của phiên trước chặn tới ~15 giây (src/db/sync/leader.ts) rồi poll local 2
+    ...    giây mới claim được, nên "Còn N" khi tan ngay khi nán ~17 giây; nhánh đó đã có ca Vitest tất định
+    ...    ở doi-soat-page.test.tsx. (c) Tiền điều kiện lastSeq A == B (đọc deviceState) triệt nguồn chớp
+    ...    tắt đó: khi cả hai đã kéo hết thì "✓ Khớp" hiện sau một lượt GET /devices, không đợi lease.
+    ...    Budget 25 giây (lease 15 + poll 2 + RTT) chỉ là lưới an toàn; dùng Wait For Elements State với
+    ...    timeout tường minh chứ không bọc Chờ Thấy Chữ trong Wait Until Keyword Succeeds — Browser
+    ...    Timeout 15 giây làm mỗi lượt thử tự chờ 15 giây, 40 lượt là ~10 phút mới đỏ. (d) Phải đọc hết
+    ...    máy A TRƯỚC khi Chọn Máy B: Mở Màn Trên Máy đổi page, đọc A sau đó là đọc B rồi so B với chính B.
+    ...    Chờ trên đúng phần tử neo chứ không chờ chữ trần: dòng hướng dẫn cuối màn cũng in "✓ Khớp sổ chung".
+    Chọn Máy A
+    Click    ${NAV_BAN}
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
+
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/doi-soat
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=25s
+    ${neo_a}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    ${a}=    Đọc Bốn Tổng Đối Soát
+
+    Chọn Máy B
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/doi-soat
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=25s
+    ${neo_b}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    ${b}=    Đọc Bốn Tổng Đối Soát
+
+    Should Be Equal    ${neo_a}    ${neo_b}    Hai máy không đứng ở cùng một điểm của sổ chung.
+    Should Be Equal    ${a}    ${b}    Cùng seq mà bốn tổng của hai máy lệch nhau.
+    # Ghim một vế vào hằng: bộ mẫu 266.000/166.000 cộng đơn Trà đá 3.000 vừa bán tiền mặt.
+    Should Be Equal    ${a}[doanh_thu]    269.000 đ
+    Should Be Equal    ${a}[đã_thu]    169.000 đ
+    Hai Bảng Phải Cùng Gid Và Nội Dung    payments
+
+Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
+    [Documentation]    Mất mạng là lúc hàng đợi dài nhất, và số hàng đợi đọc cục bộ nên luôn có: câu neo
+    ...    "Chưa có mạng" phải kèm số thay đổi chưa lên sổ chung, đếm theo txId (một đơn = một txId), so
+    ...    với chính bảng outbox. Mở màn Đối soát một lần khi còn mạng rồi chỉ điều hướng trong app (không
+    ...    Go To): dev server không có service worker, tải trang cứng lúc offline là trang lỗi của Chrome.
+    ...    Có mạng lại: hàng đợi xả, bấm KIỂM TRA LẠI thì về "✓ Khớp" — nhánh lỗi không tự hỏi lại, nút là
+    ...    đường ra; bọc retry vì Vite dev tải lại trang khi nối lại được websocket HMR.
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/doi-soat
+    Chờ Thấy Chữ    TỔNG TOÀN SỔ
+    Click    ${NAV_BAN}
+    Set Offline    ${True}
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${outbox}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+    Should Not Be Empty    ${outbox}
+    ${số_tx}=    Evaluate    len({row['txId'] for row in $outbox})
+    Click    css=a:has-text("Chi tiết")
+    Click    ${NAV_THEM}
+    Click    text=Cài đặt
+    Click    text=Đối soát
+    Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("Chưa có mạng")    visible    timeout=25s
+    ${neo}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    Should Contain    ${neo}    ${số_tx} thay đổi trên máy này chưa lên sổ chung.
+
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Hai Bảng Phải Hội Tụ    payments
+    Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
+    Chọn Máy A
+    Wait Until Keyword Succeeds    8x    2s    Bấm Kiểm Tra Lại Rồi Phải Khớp
+
+Đọc hỏng ở máy khác vẫn trả page về máy đang đứng
+    [Tags]    regression
+    [Documentation]    `Đọc Bảng` và `Đọc Ô Số` từng chỉ trả page về chỗ cũ sau khi đọc **thành công**:
+    ...    lệnh `Switch Page` quay lại nằm sau phép đọc, không có TRY/FINALLY. Một phép đọc chéo hỏng
+    ...    vì vậy bỏ page đứng lại ở máy kia, rồi keyword sau đó chết ở chỗ chẳng liên quan — ca ngoại
+    ...    tuyến bên trên từng mất một lượt gỡ dài chỉ vì cái bẫy này. Đọc một bảng không tồn tại là
+    ...    cách làm hỏng nhanh nhất: IndexedDB ném ngay ở `transaction()`, không phải chờ hết giờ.
+    Chọn Máy A
+    ${trước}=    Switch Page    CURRENT
+    Run Keyword And Expect Error    *    Đọc Bảng    bảng_không_có_thật    ${MÁY_B_PAGE}
+    ${sau}=    Switch Page    CURRENT
+    Should Be Equal    ${sau}    ${trước}    Đọc hỏng bỏ page lại ở máy B.
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
@@ -441,3 +534,32 @@ Phiếu Của Đơn Phải Có Trạng Thái
     Length Should Be    ${found}    1    Phiếu thu của đơn đã biến mất.
     Should Be Equal As Integers    ${found}[0][allocatedOrderId]    0
     Should Be Equal    ${found}[0][unallocatedStatus]    ${trạng_thái}
+
+Hai Máy Phải Cùng lastSeq
+    [Documentation]    Tiền điều kiện của ca Đối soát: cả hai máy đã kéo hết sổ chung. `Đọc Bảng` che
+    ...    token và deviceId của deviceState, `lastSeq` còn nguyên.
+    ${a}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    ${b}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${seq_a}=    Evaluate    [row for row in $a if row['key'] == 'sync'][0]['lastSeq']
+    ${seq_b}=    Evaluate    [row for row in $b if row['key'] == 'sync'][0]['lastSeq']
+    Should Be Equal As Integers    ${seq_a}    ${seq_b}    Hai máy chưa cùng lastSeq (A=${seq_a}, B=${seq_b}).
+
+Đọc Bốn Tổng Đối Soát
+    [Documentation]    Bốn tổng toàn sổ trên page đang đứng, dạng dict để so hai máy. Khối tổng chỉ
+    ...    render sau khi truy vấn 9 bảng xong nên chờ tiêu đề khối trước.
+    Chờ Thấy Chữ    TỔNG TOÀN SỔ
+    ${doanh_thu}=    Đọc Ô Số    DOANH THU
+    ${đã_thu}=    Đọc Ô Số    ĐÃ THU
+    ${chi_phí}=    Đọc Ô Số    CHI PHÍ
+    ${còn_nợ}=    Đọc Ô Số    CÒN NỢ
+    ${tổng}=    Create Dictionary    doanh_thu=${doanh_thu}    đã_thu=${đã_thu}    chi_phí=${chi_phí}    còn_nợ=${còn_nợ}
+    RETURN    ${tổng}
+
+Bấm Kiểm Tra Lại Rồi Phải Khớp
+    [Documentation]    Nhánh lỗi không tự hỏi lại sổ chung; nút là đường ra. Nếu Vite dev vừa tải lại
+    ...    trang khi nối mạng lại thì lượt mount mới đã hỏi rồi và neo đã khớp — khi đó không bấm.
+    ${neo}=    Get Text    ${NEO_ĐỒNG_BỘ}
+    IF    not $neo.startswith('✓ Khớp sổ chung')
+        Click    css=button:has-text("Kiểm tra lại")
+        Wait For Elements State    ${NEO_ĐỒNG_BỘ}:has-text("✓ Khớp sổ chung")    visible    timeout=5s
+    END

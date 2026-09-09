@@ -3,7 +3,7 @@ import { db } from '../db'
 import { requireDeviceIdentity } from './device-state'
 import { syncTransaction } from '../sync/outbox'
 import { listUnallocatedPayments, unallocatedByCustomer } from './payments'
-import { groupDebts, totalDebt } from '@/domain/debt'
+import { groupDebts, isCountedPayment, totalDebt } from '@/domain/debt'
 import { newGid } from '@/domain/gid'
 import { buildOrderCode, nextSeqOfDay } from '@/domain/order-code'
 import { deriveStatus } from '@/domain/order-status'
@@ -142,7 +142,7 @@ export function listPaymentsBetween(from: number, to: number): Promise<Payment[]
   return db.payments
     .where('paidAt')
     .between(from, to, true, true)
-    .filter((payment) => !['refunded', 'discarded'].includes(payment.unallocatedStatus ?? 'pending'))
+    .filter(isCountedPayment)
     .toArray()
 }
 

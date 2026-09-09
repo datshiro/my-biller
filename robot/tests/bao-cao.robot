@@ -151,9 +151,3 @@ Mở Báo Cáo Kỳ
     # Chip đổi ngay nhưng con số đi qua truy vấn bất đồng bộ, nên một lúc sau khi bấm màn vẫn hiện số
     # của kỳ mặc định (Tháng). Nhãn LỢI NHUẬN/LỖ đổi cùng lượt render với con số: chờ nó rồi mới đọc.
     Wait For Elements State    ${{ 'xpath=//span[contains(normalize-space(), "%s")]' % $NHÃN_KỲ[$kỳ] }}    visible
-
-Đọc Ô Số
-    [Documentation]    Cả StatBox lẫn khối lãi/lỗ đều là <span> nhãn rồi <span> số ngay sau nó.
-    [Arguments]    ${nhãn}
-    ${số}=    Get Text    ${{ 'xpath=//span[normalize-space()="%s"]/following-sibling::span[1]' % $nhãn }}
-    RETURN    ${số}
