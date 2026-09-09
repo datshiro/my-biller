@@ -112,6 +112,17 @@ robot/
     └── wrangler.log          log Worker local do runner dựng
 ```
 
+## In máy in nhiệt: Robot lái tới đâu
+
+Đường **APK/TCP** (Capacitor Android nối thẳng cổng 9100 qua plugin `PrinterSocket`) là mã native, Robot
+không có cách lái tới — không có Chrome/Playwright nào chạy được vỏ Android đó. Cổng cho đường này là
+biên bản đo trên máy thật (xem `docs/deploy.md#dựng-apk-android-capacitor`) kèm máy in ảo
+`scripts/may-in-ao.mjs` để thử tại bàn.
+
+Đường **RawBT** (web/PWA) dựng một `<a data-rawbt href="rawbt:...">` — Robot **chỉ đọc** href bằng
+`Get Attribute href` để kiểm URL/giải mã ảnh, **không bao giờ `Click`** anchor đó. CI không cài RawBT nên
+một cú Click sẽ treo Chrome ở hộp "mở ứng dụng ngoài".
+
 ## Viết thêm ca mới
 
 > **Quy ước bắt buộc của repo:** thêm hoặc sửa một tính năng / một hàm là **phải** có ca ở đây ngay

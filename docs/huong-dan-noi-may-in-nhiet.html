@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In phiếu ra máy in nhiệt SAPO SPR02</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f8; --border: #dce1e7;
+    --text: #14181d; --muted: #5a6673;
+    --brand: #0b7a42; --brand-tint: #e6f4ec;
+    --warn: #a85b00; --warn-tint: #fdf1e1;
+    --danger: #c0271a; --danger-tint: #fbeae8;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 400 16px/1.5 "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 16px 16px 64px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 8px 0 4px; }
+  h2 { font-size: 18px; line-height: 1.35; margin: 0; }
+  h3 { font-size: 15px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  p, li { margin: 6px 0; }
+  .lead { color: var(--muted); margin-bottom: 16px; }
+  .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: 14px; }
+  .chain span { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: 600; }
+  .chain i { color: var(--muted); font-style: normal; }
+  .step { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 14px 0; background: var(--bg); }
+  .step header { display: flex; align-items: flex-start; gap: 12px; }
+  .num {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--brand); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px;
+  }
+  .step.done { background: var(--brand-tint); border-color: var(--brand); }
+  .step.done .num { background: var(--brand); }
+  label.check { display: flex; gap: 10px; align-items: center; margin-top: 12px; font-weight: 600; cursor: pointer; }
+  label.check input { width: 22px; height: 22px; accent-color: var(--brand); }
+  .note { background: var(--warn-tint); border-left: 4px solid var(--warn); padding: 10px 12px; border-radius: 8px; margin: 12px 0; }
+  .stop { background: var(--danger-tint); border-left: 4px solid var(--danger); padding: 10px 12px; border-radius: 8px; margin: 12px 0; }
+  .ok { background: var(--brand-tint); border-left: 4px solid var(--brand); padding: 10px 12px; border-radius: 8px; margin: 12px 0; }
+  code, kbd { font-family: var(--mono); font-size: 14px; background: var(--surface); padding: 1px 6px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .wrap { overflow-x: auto; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 32px; border-top: 1px solid var(--border); padding-top: 12px; }
+  @media print { .num { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>In phiếu ra máy in nhiệt SAPO SPR02</h1>
+  <p class="lead">Hai cách độc lập để gửi phiếu bán hàng tới máy in nhiệt của quán. Từng bước, làm ngay
+    tại quán; tích ô ở mỗi bước khi xong, trang nhớ tiến độ trên máy này.</p>
+
+  <p>Ba điều cần hiểu trước:</p>
+  <ul>
+    <li>Máy in <b>không có WiFi</b>, chỉ có cổng dây LAN — điện thoại và máy in phải cùng một router.</li>
+    <li>Có <b>hai đường</b> gửi phiếu tới máy in, chọn một hoặc dùng cả hai tuỳ máy: qua app <b>RawBT</b>
+      (chạy trên bản web/PWA của app tính tiền) hoặc qua <b>APK</b> cài tay (nối thẳng tới máy in, không
+      cần app trung gian).</li>
+    <li>Nút <b>📤 CHIA SẺ QUA ZALO</b> ở màn phiếu luôn còn đó — dùng khi cả hai đường in không sẵn sàng.</li>
+  </ul>
+
+  <div class="chain" aria-label="Sơ đồ đường RawBT">
+    <span>Máy in SPR02</span><i>— dây LAN —</i><span>Router quán</span><i>— WiFi —</i>
+    <span>Điện thoại (web/PWA)</span><i>→</i><span>RawBT</span><i>→ in</i>
+  </div>
+  <div class="chain" aria-label="Sơ đồ đường APK">
+    <span>Máy in SPR02</span><i>— dây LAN —</i><span>Router quán</span><i>— WiFi —</i>
+    <span>Điện thoại (APK)</span><i>— TCP 9100 →</i><span>in thẳng</span>
+  </div>
+
+  <section class="step">
+    <header><div class="num">1</div><h2>Hai cách in — chọn đường nào</h2></header>
+    <div class="wrap"><table>
+      <tr><th>So sánh</th><th>PWA + RawBT</th><th>APK</th></tr>
+      <tr><td>Cài thêm gì</td><td>Cài thêm app <b>RawBT</b> từ Play Store</td>
+          <td>Cài file <b>APK</b> tải về máy (không qua Play)</td></tr>
+      <tr><td>IP máy in cấu hình ở đâu</td><td>Trong RawBT (WiFi › IP máy in)</td>
+          <td>Trong app, <b>Cài đặt › MÁY IN</b></td></tr>
+      <tr><td>Hộp xác nhận trước khi in</td><td colspan="2">Cả hai đường đều hỏi lại — bấm <b>In</b> mới thật
+          sự gửi, tránh bấm nhầm tốn giấy</td></tr>
+      <tr><td>Bản miễn phí</td><td>RawBT in thêm <b>một dòng quảng cáo</b> dưới phiếu</td>
+          <td>Không có quảng cáo</td></tr>
+      <tr><td>Có phải Ghép máy vào sổ chung</td>
+          <td><b>Không</b> — chạy ngay trên máy/PWA đang đứng, không đổi "máy" nào trong sổ</td>
+          <td><b>Có</b> — bản APK là một lượt cài mới nên là một "máy" mới; phải <b>Ghép máy</b> thì mới
+              chung sổ với các máy khác của quán</td></tr>
+    </table></div>
+    <label class="check"><input type="checkbox"> Đã biết chọn đường nào cho máy này</label>
+  </section>
+
+  <section class="step">
+    <header><div class="num">2</div><h2>Chuẩn bị chung cho cả hai đường</h2></header>
+    <ol>
+      <li>Cắm dây LAN từ máy in vào một cổng <b>LAN</b> trống của router quán (không phải cổng WAN/Internet).
+        Bật máy in, đèn cổng LAN phải sáng hoặc nhấp nháy. Điện thoại nối WiFi của <b>chính router đó</b>.</li>
+      <li>Lấy IP của máy in: tắt máy in, giữ nút <kbd>FEED</kbd>, bật máy, giữ tới khi máy bắt đầu in rồi thả
+        — tờ self-test có dòng <code>IP Address</code>. Không có tờ thì mở trang quản trị router xem danh
+        sách thiết bị, hoặc dùng app <b>Fing</b> quét mạng tìm thiết bị có cổng <code>9100</code>.</li>
+      <li><b>Đặt DHCP reservation cho máy in trên router</b> — vào trang quản trị router, gán cố định IP vừa
+        lấy được theo địa chỉ MAC của máy in. Cả RawBT lẫn app đều lưu một IP tĩnh; router cấp IP khác sau
+        mỗi lần khởi động lại thì cả hai nơi cấu hình phải sửa lại tay. Đặt reservation một lần là hết cảnh đó.</li>
+    </ol>
+    <p class="note">IP kiểu <code>192.168.x.x</code> hay <code>10.x.x.x</code> là đúng. Tờ self-test ghi
+      <code>0.0.0.0</code> hoặc <code>169.254.x.x</code> nghĩa là máy in chưa lấy được IP từ router — kiểm
+      lại dây LAN.</p>
+    <label class="check"><input type="checkbox"> Đã có IP cố định (đã đặt reservation)</label>
+  </section>
+
+  <section class="step">
+    <header><div class="num">3</div><h2>Đường RawBT (dùng trên web)</h2></header>
+    <ol>
+      <li>Cài <b>RawBT print service</b> từ Play Store (tên gói <code>ru.a402d.rawbtprinter</code>) — hoặc
+        bấm <b>Cài RawBT</b> ở khối <b>IN QUA RAWBT</b> trong Cài đặt › MÁY IN của app.</li>
+      <li>Mở RawBT → <b>Cài đặt</b> → mục Kết nối/Máy in, điền bốn ô:</li>
+    </ol>
+    <div class="wrap"><table>
+      <tr><th>Ô</th><th>Điền</th></tr>
+      <tr><td>Kiểu kết nối</td><td><b>WiFi / LAN</b> (AppSocket, JetDirect, TCP/IP) — không chọn Bluetooth/USB</td></tr>
+      <tr><td>Địa chỉ IP</td><td>IP máy in đã lấy ở mục 2</td></tr>
+      <tr><td>Cổng (port)</td><td><code>9100</code></td></tr>
+      <tr><td>Khổ giấy</td><td><b>80 mm</b> (K80, 576 chấm) — chọn nhầm 58 mm thì phiếu bị co nhỏ, chữ vỡ</td></tr>
+    </table></div>
+    <ol start="3">
+      <li>Trong app tính tiền: <b>Cài đặt › MÁY IN</b> → khối <b>IN QUA RAWBT</b> → bấm <b>IN THỬ QUA RAWBT</b>
+        → hộp xác nhận hiện, bấm <b>In</b> → RawBT nhận và in tờ mẫu.</li>
+      <li>In phiếu thật: mở một đơn → <b>Xem phiếu</b> → bấm <b>🖨 IN MÁY IN NHIỆT</b> → hộp xác nhận → <b>In</b>.</li>
+    </ol>
+    <p class="note">Phiếu quá nhiều dòng thì nút <b>🖨 IN MÁY IN NHIỆT</b> tự ẩn và app gợi ý dùng
+      <b>📤 CHIA SẺ</b> hoặc đường APK — dữ liệu ảnh gửi cho RawBT có giới hạn kích thước.</p>
+    <p class="stop"><b>Chưa xác nhận trên máy in thật:</b> RawBT có tự cắt giấy sau khi in hay không, ảnh có
+      bị RawBT resample làm mờ/lệch hay không, phiếu rất dài có gửi trọn qua RawBT được không, và bản miễn
+      phí tốn thêm mấy chạm (hộp xác nhận/quảng cáo riêng của RawBT) — bốn điều này chỉ máy in thật ở quán
+      mới trả lời được và sẽ cập nhật tài liệu này sau khi đo tại quán. Đừng coi các mô tả trên là đã kiểm
+      chứng phần cứng.</p>
+    <label class="check"><input type="checkbox"> Đã cấu hình RawBT và IN THỬ QUA RAWBT ra giấy</label>
+  </section>
+
+  <section class="step">
+    <header><div class="num">4</div><h2>Đường APK</h2></header>
+    <ol>
+      <li>Trên điện thoại Android: bật <b>Cài đặt → Bảo mật</b> (tên mục tuỳ máy) → cho phép <b>cài ứng dụng
+        từ nguồn không xác định</b> cho trình duyệt/app dùng để mở file APK.</li>
+      <li>Cài file APK do người quản trị gửi (không qua Play Store), rồi mở app.</li>
+      <li>Nếu máy này chưa dùng chung sổ với các máy khác của quán: vào <b>Cài đặt › Máy bán hàng</b> →
+        <b>Ghép máy</b> → dán mã ghép lấy từ một máy đã có sổ (mã dùng một lần, hết hạn sau 5 phút).</li>
+      <li><b>Cài đặt › MÁY IN</b> → điền <b>Địa chỉ IP máy in</b> và <b>Cổng</b> (mặc định <code>9100</code>)
+        → <b>LƯU</b> → <b>IN THỬ</b> → hộp xác nhận → <b>In</b>.</li>
+      <li>In phiếu thật: mở một đơn → <b>Xem phiếu</b> → <b>🖨 IN MÁY IN NHIỆT</b> → hộp xác nhận → <b>In</b>.</li>
+    </ol>
+    <p class="ok">Đường này đã in thử và in phiếu thật thành công trên máy SPR02 tại quán, kể cả đường lỗi
+      (máy tắt/sai IP báo trong vòng vài giây) và giấy tự cắt sau khi in.</p>
+    <label class="check"><input type="checkbox"> Đã Ghép máy (nếu cần) và IN THỬ ra giấy</label>
+  </section>
+
+  <section class="step">
+    <header><div class="num">5</div><h2>Giới hạn chung của cả hai đường</h2></header>
+    <p><b>Gửi xong không phải là in xong.</b> Cả hai đường chỉ biết máy in đã <i>nhận</i> dữ liệu qua mạng;
+      app không đọc được máy in còn giấy hay không, kẹt giấy hay không, mực đậm nhạt ra sao. "Đã gửi" trên
+      màn hình không thay được việc nhìn tờ giấy thật ra khỏi máy.</p>
+  </section>
+
+  <section class="step">
+    <header><div class="num">6</div><h2>Sự cố</h2></header>
+    <h3>Đường RawBT</h3>
+    <div class="wrap"><table>
+      <tr><th>Kiểm</th><th>Cách</th></tr>
+      <tr><td>Bấm IN THỬ/In mà RawBT không mở</td><td>Kiểm đã cài RawBT chưa; mở tay RawBT → In thử/Test print
+        xem có ra giấy không, tách khỏi app tính tiền để khoanh vùng.</td></tr>
+      <tr><td>Nút in ẩn, báo "phiếu quá dài"</td><td>Đây là chốt chủ ý (giới hạn kích thước dữ liệu gửi qua
+        RawBT), không phải lỗi — dùng 📤 CHIA SẺ hoặc đường APK cho đơn dài.</td></tr>
+      <tr><td>Không cắt giấy / ảnh mờ, lệch / tốn nhiều chạm hơn mong đợi</td><td>Chưa có câu trả lời chắc
+        chắn cho SPR02 — xem cảnh báo ở mục 3, cập nhật sau khi đo tại quán.</td></tr>
+    </table></div>
+    <h3>Đường APK</h3>
+    <div class="wrap"><table>
+      <tr><th>Kiểm</th><th>Cách</th></tr>
+      <tr><td>Không nối được máy in</td><td>Điện thoại có đang dùng 4G không — tắt dữ liệu di động, chỉ để
+        WiFi quán; IP có thể đã đổi (bật lại tờ self-test so từng số, kiểm reservation ở mục 2); máy in đã
+        bật và đèn LAN sáng chưa.</td></tr>
+      <tr><td>In nhạt, đứt dòng</td><td>In lại tờ IN THỬ; nếu vẫn nhạt/đứt thì kiểm đầu in và mực của máy —
+        không phải lỗi của app.</td></tr>
+    </table></div>
+  </section>
+
+  <section class="step">
+    <header><div class="num">7</div><h2>Cập nhật APK</h2></header>
+    <p>Bản APK mới do người quản trị dựng và ký bằng <b>đúng keystore</b> của bản đang cài, rồi gửi file mới
+      để cài đè. Nếu máy đang có bản cài thử (debug) từ lúc dựng thử thì phải <b>gỡ bản debug trước</b> —
+      bản debug và bản chính thức khác chữ ký, cài đè trực tiếp sẽ báo lỗi và bị chặn.</p>
+  </section>
+
+  <footer>
+    <p>Tên các mục trong menu RawBT viết theo hiểu biết, có thể khác chút theo phiên bản RawBT trên máy.
+      Bốn ô cần điền ở mục 3 và các nhãn/nút trong app tính tiền ở mục 3–4 thì đã đối chiếu với giao diện
+      hiện có.</p>
+  </footer>
+</main>
+<script>
+  (() => {
+    const KEY = 'huong-dan-noi-may-in-nhiet-v2'
+    let state = {}
+    try { state = JSON.parse(localStorage.getItem(KEY) || '{}') } catch { state = {} }
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)) } catch {} }
+
+    document.querySelectorAll('.step').forEach((step, i) => {
+      const box = step.querySelector('label.check input')
+      if (!box) return
+      const k = 'step' + i
+      box.checked = Boolean(state[k]); step.classList.toggle('done', box.checked)
+      box.addEventListener('change', () => { state[k] = box.checked; step.classList.toggle('done', box.checked); save() })
+    })
+  })()
+</script>
+</body>
+</html>
