@@ -1,5 +1,45 @@
 # Ghi chú phát hành
 
+## 2.5.0 — in máy in nhiệt: PWA qua RawBT, APK Android nối thẳng IP:9100 (9/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5), không có bước di trú, không cần deploy Worker: thay đổi chỉ nằm
+> ở frontend và ở một hình thái cài đặt mới (APK). Hành vi bán hàng/đồng bộ hiện có giữ nguyên.
+
+### Người bán thấy gì
+
+- **Màn phiếu có thêm nút 🖨 IN MÁY IN NHIỆT.** Bấm mở hộp xác nhận (In/Huỷ) trước khi gửi, tránh in
+  nhầm tốn giấy. 📤 CHIA SẺ QUA ZALO vẫn còn nguyên như cũ.
+- **Cài đặt có thêm mục MÁY IN.** Trên web/PWA Android là khối IN QUA RAWBT (cài app RawBT, IP máy in
+  cấu hình trong RawBT, IN THỬ QUA RAWBT). Trên APK là ô nhập Địa chỉ IP + Cổng của máy in, nút LƯU và
+  IN THỬ.
+- **Kênh mới: APK Android cài tay.** Đây là một hình thái cài đặt song song với web/PWA hiện có, không
+  qua Play, do người quản trị dựng và gửi file — chỉ bản này mới nối thẳng TCP tới máy in mà không cần
+  app trung gian. Hướng dẫn nối máy và chọn đường in ở
+  [`docs/huong-dan-noi-may-in-nhiet.html`](huong-dan-noi-may-in-nhiet.html).
+
+### Vì sao cần
+
+- Máy in nhiệt SAPO SPR02 của quán (80mm, LAN, RAW cổng 9100, có dao cắt) trước đây chỉ nhận lệnh in từ
+  app Sapo. Hai đường mới cho phép in phiếu của app tính tiền thẳng ra cùng máy đó, không cần đổi thiết
+  bị hay chuyển máy in.
+
+### Thay đổi vận hành
+
+- Không đụng `shared/ledger-schemas.ts` hay `worker/` — toàn bộ nằm ở `src/domain/escpos`,
+  `src/features/printer` và vỏ Capacitor Android (`android/`, ngoài phạm vi build web/Pages). Xem
+  [`docs/tech-stack.md`](tech-stack.md) mục kiến trúc và
+  [`docs/deploy.md`](deploy.md#dựng-apk-android-capacitor) để dựng/ký APK.
+- **Đường APK/TCP đã nghiệm trên máy in SPR02 thật:** in tờ mẫu, in bill đúng nội dung và tiền, đường
+  lỗi (máy tắt/sai IP) báo trong vài giây, giấy tự cắt sau khi in.
+- **Đường RawBT mới verify phần mềm, chưa gửi tới máy in thật lần nào** — Robot/e2e xác nhận URL
+  `rawbt:` dựng đúng, giải mã ra đúng ảnh 576 chấm, và chốt giới hạn kích thước URL cho phiếu dài; còn
+  RawBT có tự cắt giấy, có resample ảnh, phiếu rất dài có gửi trọn được không, và tốn thêm mấy chạm ở
+  bản miễn phí thì chưa đo được trên phần cứng. Rủi ro đã được chấp nhận có ý thức; tài liệu nối máy in
+  sẽ cập nhật lại sau khi đo tại quán.
+- Robot: `phieu.robot` chỉ đọc href của anchor `a[data-rawbt]` bằng `Get Attribute`, không bao giờ
+  `Click` (CI không có RawBT để xử lý link). Đường APK/TCP không có ca Robot vì Robot không lái được mã
+  native — cổng là biên bản đo trên máy thật, xem [`docs/kiem-thu-live.md`](kiem-thu-live.md).
+
 ## 2.4.0 — màn Đối soát xem tổng thể sổ chung (5/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không có bước di trú. **Bắt buộc deploy Worker

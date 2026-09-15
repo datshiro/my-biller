@@ -18,6 +18,8 @@ export default tseslint.config(
       'coverage',
       'node_modules',
       'worker/.wrangler',
+      // Vỏ Capacitor: mã Java + Gradle do `cap add` sinh, không phải mã app; Capacitor CLI tự lo.
+      'android',
       '.agentkit',
       '.claude',
       '.grok',

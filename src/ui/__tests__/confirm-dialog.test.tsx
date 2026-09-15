@@ -104,4 +104,30 @@ describe('ConfirmDialog', () => {
     expect(onConfirm).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(confirm)
   })
+
+  it('confirmHref → nút xác nhận là <a data-rawbt href> thật, bấm vẫn gọi onConfirm', async () => {
+    const onConfirm = vi.fn()
+    render(
+      <ConfirmDialog
+        title="In phiếu"
+        message="Nội dung"
+        confirmLabel="In"
+        confirmVariant="primary"
+        confirmHref="rawbt:data:image/png;base64,AAAA"
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />,
+    )
+
+    const link = screen.getByRole('link', { name: 'In' })
+    expect(link.getAttribute('href')).toBe('rawbt:data:image/png;base64,AAAA')
+    expect(link.hasAttribute('data-rawbt')).toBe(true)
+    // Không đồng thời render nút xác nhận dạng <button>.
+    expect(screen.queryByRole('button', { name: 'In' })).toBeNull()
+
+    // Chặn điều hướng thật của jsdom; React onClick vẫn chạy (preventDefault không dừng lan truyền).
+    link.addEventListener('click', (event) => event.preventDefault())
+    await userEvent.click(link)
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
 })

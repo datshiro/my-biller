@@ -62,7 +62,7 @@ test('một đơn sỉ trọn vòng: chỉ món có bảng giá xuống giá, ph
   await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
-  const rows = page.locator('table tbody tr')
+  const rows = page.locator('.receipt-view table tbody tr')
   await expect(rows.filter({ hasText: 'Phở bò đặc biệt' })).toContainText('45.000')
   await expect(rows.filter({ hasText: 'Trà đá' })).toContainText('3.000')
   await expect(page.getByText('48.000 đ').first()).toBeVisible()
@@ -126,7 +126,7 @@ test('giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt S�
   await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
-  const rows = page.locator('table tbody tr')
+  const rows = page.locator('.receipt-view table tbody tr')
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(0)).toContainText('45.000')
   await expect(rows.nth(1)).toContainText('55.000')

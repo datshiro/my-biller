@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
+import { RAWBT_URL_MAX_CHARS } from '../src/domain/rawbt-url.ts'
 
 /**
  * Những thứ jsdom không kiểm được: html-to-image cần canvas thật, và `@media print` cần trình
@@ -222,7 +224,8 @@ test('bán 2 món → phiếu mở ra và tải được ảnh PNG thật', asyn
   await sellTwoItems(page)
 
   await expect(receiptTitle(page)).toBeVisible()
-  await expect(page.getByText(/Số: PBH-/)).toBeVisible()
+  // `.first()`: bản nhiệt ẩn cũng có "Số: PBH-…". `aria-hidden` cứu getByRole nhưng KHÔNG cứu getByText.
+  await expect(page.getByText(/Số: PBH-/).first()).toBeVisible()
   await receiptReady(page)
 
   const images = await captureDownloadedImages(page)
@@ -439,6 +442,70 @@ test('phiếu 40 dòng → chia 4 tấm đều nhau, không tấm nào vượt 3
     expect(image.size).toBeLessThanOrEqual(300 * 1024)
     expect(image.ratio).toBe(2)
   }
+})
+
+/**
+ * Đường TCP không lái được bằng Robot (không mở socket trong CI). Cổng máy đo cho luồng byte là nút
+ * `⬇ .bin` chỉ có ở bản dev: đọc file thật để chắc app dựng đúng ESC/POS raster 576 chấm một dải.
+ * KHÔNG dùng `openReceiptWithLines` — nó vá `HTMLAnchorElement.prototype.click` nuốt mọi `<a download>`
+ * nên `waitForEvent('download')` không bao giờ bắn. Bản in một dải nên chỉ một khối `GS v 0`… hoặc vài
+ * khối nếu > 128 hàng, kiểm cả trường hợp chia khối.
+ */
+test('phiếu 40 dòng: nút .bin (dev) tải luồng byte ESC/POS 576 chấm, kết bằng lệnh cắt', async ({ page }) => {
+  await buildReceiptWithLines(page, 40)
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '⬇ .bin' }).click(),
+  ])
+  const filePath = await download.path()
+  const bytes = new Uint8Array(await readFile(filePath))
+
+  // ESC @ mở đầu; GS V 66 05 (cắt) kết thúc.
+  expect([...bytes.slice(0, 2)]).toEqual([0x1b, 0x40])
+  expect([...bytes.slice(-4)]).toEqual([0x1d, 0x56, 0x42, 0x05])
+
+  // Duyệt từng khối GS v 0: xL=0x48 (72 byte/hàng), xH=0; data = 72 × tổng hàng; không byte lạ giữa khối.
+  let p = 2
+  let totalRows = 0
+  while (p < bytes.length - 4) {
+    expect([...bytes.slice(p, p + 6)]).toEqual([0x1d, 0x76, 0x30, 0x00, 0x48, 0x00])
+    const rows = (bytes[p + 6] as number) + (bytes[p + 7] as number) * 256
+    expect(rows).toBeGreaterThan(0)
+    totalRows += rows
+    p += 8 + rows * 72
+  }
+  expect(p).toBe(bytes.length - 4) // dừng đúng ngay trước lệnh cắt, không lệch
+  expect(totalRows).toBeGreaterThan(0)
+  expect(bytes.length).toBeLessThanOrEqual(220_000)
+})
+
+/**
+ * Web Android in qua RawBT: nút 🖨 mở hộp xác nhận; href `rawbt:` PNG 1-bit dựng SẴN nằm trên nút "In"
+ * của hộp — KHÔNG bấm nút "In" (Playwright/CI không có handler `rawbt:`, sẽ treo ở hộp "mở ứng dụng").
+ * Chỉ đọc href, đo cỡ trong ngân sách `RAWBT_URL_MAX_CHARS` (cùng hằng với guard), và giải mã ảnh rộng đúng
+ * 576. Project `mobile-chrome` (Pixel 7) đã là UA Android nên `isAndroidWeb()` bật. Số đo `href.length` ghi ở commit.
+ */
+test('phiếu 40 dòng: link RawBT trong hộp xác nhận, trong ngân sách, ảnh giải mã rộng 576', async ({ page }) => {
+  await buildReceiptWithLines(page, 40)
+
+  // Nút "Đang chuẩn bị…" đổi thành 🖨 IN MÁY IN NHIỆT khi href dựng xong; bấm để mở hộp (không bấm "In").
+  await page.getByRole('button', { name: /IN MÁY IN NHIỆT/ }).click()
+
+  const link = page.locator('a[data-rawbt]')
+  await expect(link).toBeVisible({ timeout: 20_000 })
+  const href = await link.getAttribute('href')
+  expect(href).not.toBeNull()
+  expect(href!.startsWith('rawbt:data:image/png;base64,')).toBe(true)
+  // Đo thật: 40 dòng ≈ 17.4K ký tự (PNG 1-bit, dải gần như trắng nén rất chặt) — dưới xa ngân sách 220K.
+  expect(href!.length).toBeLessThanOrEqual(RAWBT_URL_MAX_CHARS)
+
+  const width = await page.evaluate(async (h) => {
+    const res = await fetch(h.slice('rawbt:'.length))
+    const bitmap = await createImageBitmap(await res.blob())
+    return bitmap.width
+  }, href!)
+  expect(width).toBe(576)
 })
 
 test('phiếu nhiều trang: khối tiền chỉ ở tấm cuối, mọi tấm đều có đầu phiếu', async ({ page }) => {

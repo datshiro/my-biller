@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, type RefObject } from 'react'
 import { Button } from './button'
+import { buttonClassName, type ButtonVariant } from './button-class'
 
 export function ConfirmDialog({
   title,
@@ -9,6 +10,8 @@ export function ConfirmDialog({
   onCancel,
   returnFocusRef,
   pending = false,
+  confirmVariant = 'danger',
+  confirmHref,
 }: {
   title: string
   message: string
@@ -17,6 +20,10 @@ export function ConfirmDialog({
   onCancel: () => void
   returnFocusRef?: RefObject<HTMLElement | null>
   pending?: boolean
+  confirmVariant?: ButtonVariant
+  // Khi có: nút xác nhận là `<a data-rawbt href>` thật (không phải `<button>`) — để mở `rawbt:` trong
+  // đúng cú chạm (Chrome Android chỉ mở intent trong user gesture). Chỉ đường in RawBT dùng tới.
+  confirmHref?: string
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -91,16 +98,29 @@ export function ConfirmDialog({
           >
             Huỷ
           </Button>
-          <Button
-            variant="danger"
-            className="flex-1"
-            aria-disabled={pending || undefined}
-            onClick={() => {
-              if (!pending) onConfirm()
-            }}
-          >
-            {confirmLabel}
-          </Button>
+          {confirmHref !== undefined ? (
+            <a
+              href={confirmHref}
+              data-rawbt
+              className={buttonClassName(confirmVariant, 'md', 'flex-1')}
+              onClick={() => {
+                if (!pending) onConfirm()
+              }}
+            >
+              {confirmLabel}
+            </a>
+          ) : (
+            <Button
+              variant={confirmVariant}
+              className="flex-1"
+              aria-disabled={pending || undefined}
+              onClick={() => {
+                if (!pending) onConfirm()
+              }}
+            >
+              {confirmLabel}
+            </Button>
+          )}
         </div>
       </div>
     </div>

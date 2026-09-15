@@ -1,7 +1,7 @@
 {
   "name": "my-biller",
   "private": true,
-  "version": "2.4.0",
+  "version": "2.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,6 +29,8 @@
     "pages:smoke": "node scripts/verify-pages-deployment.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
@@ -39,6 +41,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@cloudflare/vitest-pool-workers": "^0.20.3",
     "@cloudflare/workers-types": "^5.20260809.1",
     "@eslint/js": "^10.0.1",

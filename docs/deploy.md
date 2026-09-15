@@ -234,10 +234,14 @@ build lại Pages hay Worker.
 Trước lần phát hành đầu tiên, operator phải hoàn tất các cấu hình và đọc lại chúng trên GitHub:
 
 1. Bật **immutable releases** cho repository; tag của release đã publish không được di chuyển/xoá.
-2. Tạo environment `production`, `production-bootstrap` và `production-recovery`, có required
-   reviewer không phải tác giả/người chạy workflow, bật prevent self-review và tắt admin bypass.
-   `production` chỉ nhận tag `v*.*.*`; hai workflow dispatch chỉ chạy từ nhánh production mặc định
-   và tự ràng buộc input vào main SHA đã qua CI hoặc immutable tag đã kiểm.
+2. Tạo environment `production`, `production-bootstrap` và `production-recovery`. `production` chỉ
+   nhận tag `v*.*.*` (branch policy); hai workflow dispatch chỉ chạy từ nhánh production mặc định và
+   tự ràng buộc input vào main SHA đã qua CI hoặc immutable tag đã kiểm.
+   **Quyết định vận hành 5/9/2026: `production` KHÔNG đặt required reviewer.** Đẩy một tag `v*.*.*`
+   (trỏ HEAD main đã qua CI) là deploy thẳng lên production, không có cổng duyệt tay. Cổng bảo vệ còn
+   lại là branch policy + hai job CI bắt buộc trên đúng SHA + chuỗi smoke trong chính workflow (preview,
+   Worker, Pages đối chiếu bytes). Ai muốn siết lại thì thêm required reviewer + prevent self-review
+   cho environment; hiện team chấp nhận không có.
 3. Environment `production` giữ `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_WORKERS_API_TOKEN` và
    `CLOUDFLARE_PAGES_API_TOKEN`; `production-bootstrap` giữ account ID và Worker token;
    `production-recovery` chỉ giữ account ID và Pages token. Có thể cùng giá trị nhưng phải đặt riêng
@@ -247,9 +251,10 @@ Trước lần phát hành đầu tiên, operator phải hoàn tất các cấu 
    Object read/write và WebSocket trước khi chạm Pages.
 5. `ADMIN_SECRET` không nằm trong GitHub. Khởi tạo/xoay secret là thao tác riêng được duyệt; deploy
    Worker giữ secret hiện có.
-6. Trước khi approve environment, xác nhận đã sao lưu từng container production đang có dữ liệu và
-   PR đã được một người không phải tác giả review/approve. Việc bỏ các gate trên iPhone vật lý
-   (native share và 4G) không bỏ hai cổng này.
+6. Vì không có cổng duyệt environment để dừng lại (điểm 2), hai việc này phải làm **trước khi đẩy tag**
+   `v*.*.*`: xác nhận đã sao lưu từng container production đang có dữ liệu, và PR đã được một người
+   không phải tác giả review/approve. Đẩy tag là điểm không quay lại — deploy chạy ngay. Việc bỏ các
+   gate trên iPhone vật lý (native share và 4G) không bỏ hai điều kiện này.
 
 ### Bootstrap lần đầu từ Worker health-only
 
@@ -364,6 +369,71 @@ sau khi server đổi bản vẫn không tải `sw.js`). Hai cách lấy bản m
   thật (`dist` và `dist-next`).
 - **Đóng hẳn app rồi mở lại.** Lần mở mới sẽ kiểm `sw.js`. Nếu bản mới đã được tải về từ trước (đã
   thấy thanh mà bấm "Để sau") thì nó tự kích hoạt, không cần bấm gì.
+
+## Dựng APK Android (Capacitor)
+
+App còn một hình thái thứ hai: **APK Android** bọc chính `dist/` bằng Capacitor 8, cài tay (không qua
+Play). Chỉ bản APK mới in thẳng tới máy in nhiệt qua **TCP cổng 9100** (plugin cục bộ `PrinterSocket`);
+bản web-Android in qua RawBT. `appId` là `dev.datshiro.mybiller` — **đổi sau khi đã cài thành một app
+khác** trên máy, đừng đổi.
+
+CI **không** dựng Android (quyết định): pipeline chỉ lo Pages/Worker. APK dựng tay trên máy có toolchain
+rồi gửi file cho chủ quán.
+
+### Toolchain (một lần)
+
+Bộ số của Capacitor 8.5.1: compileSdk/targetSdk **36**, minSdk 24, AGP **8.13.0**, Gradle **8.14.3**
+(wrapper tự tải), **JDK 21**, Node ≥ 22.
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home   # brew openjdk@21
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+sdkmanager --sdk_root="$ANDROID_HOME" --licenses                                  # nhận hết license
+sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+```
+
+Cho hai dòng `export` vào `~/.zshrc` để giữ. Gradle tìm SDK qua `ANDROID_HOME` hoặc
+`android/local.properties` (`sdk.dir=…`, file này đã ignored). `adb` đi kèm `platform-tools`.
+
+### APK debug + thử vòng kín (không cần máy in thật)
+
+```bash
+npm run build            # web → dist/
+npx cap sync android     # chép dist vào project Android
+cd android && ./gradlew assembleDebug     # → app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Thử ngay tại bàn bằng **máy in ảo** trên laptop, chưa cần SPR02:
+
+1. Laptop: `node scripts/may-in-ao.mjs` (nghe cổng 9100, ghi PNG ra `may-in-ao-out/`). Lấy IP LAN:
+   `ipconfig getifaddr en0` (thử `en1` nếu trống).
+2. Điện thoại cùng WiFi, bật USB debugging (`adb devices` thấy máy) → mở app → Cài đặt › MÁY IN → IP
+   laptop, cổng 9100 → LƯU → **IN THỬ** → laptop ghi PNG mẫu. Tạo vài đơn (hoặc ghép sổ chung / nhập
+   file sao lưu) → mở phiếu → **🖨 IN MÁY IN NHIỆT** → PNG bill.
+3. Đường lỗi: tắt máy in ảo → in → báo lỗi ≤ 3s; IP chết `10.255.255.1` → "không trả lời sau 3 giây".
+4. Hai điểm phải **mắt thấy** (lớp Java không có gate tự động): (a) in thành công **không** hiện dòng
+   đỏ giả — máy in nhận xong có thể RST mà app vẫn phải coi là "đã gửi"; (b) bấm nhanh hai lần nút in
+   chỉ ra **một** phiếu, không phải hai.
+
+### APK release (ký ngoài repo)
+
+```bash
+keytool -genkeypair -v -keystore ~/.keys/mybiller-release.jks -alias mybiller \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Đường dẫn/alias/mật khẩu đặt trong `android/keystore.properties` (**đã .gitignore**, không bao giờ
+commit); `app/build.gradle` đọc file đó nếu tồn tại. `./gradlew assembleRelease` →
+`app/build/outputs/apk/release/app-release.apk`.
+
+Bản debug và bản release **khác chữ ký**: cài đè giữa hai bản báo `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+— gỡ bản cũ trước. Cập nhật về sau = cài đè bản release mới lên bản release cũ.
+
+### Cập nhật app trong APK
+
+Khác web: trong APK "bản mới" của service worker vô nghĩa, nên mục **CẬP NHẬT APP** ẩn khi chạy native.
+Muốn lên bản mới thì dựng APK release mới rồi cài đè.
 
 ## Giới hạn đã biết
 

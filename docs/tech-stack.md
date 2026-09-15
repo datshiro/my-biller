@@ -76,14 +76,21 @@ src/
   app/         routing, layout, providers, service-worker registration
   db/          dexie schema + migrations, backup, outbox, pull/push/applier/leader
   domain/      logic thuần, không import React: money, order totals,
-               debt balance, report aggregate, parse-order-text
-  features/    sales · items · customers · expenses · debts · reports · settings
+               debt balance, report aggregate, parse-order-text, escpos (mã hoá lệnh máy in nhiệt)
+  features/    sales · items · customers · expenses · debts · reports · settings · printer
   ui/          component dùng chung (Button, Sheet, NumberPad, Money…)
   lib/         format tiền/ngày, share, print, storage-persist
 shared/        schema sự kiện đồng bộ dùng chung
 worker/        Worker routes + ShopDO SQLite
 ```
 `domain/` không được import từ `db/` hay React → test bằng Vitest không cần DOM.
+
+**8. In nhiệt qua hai đường, không qua thư viện in.**
+`src/domain/escpos` dựng bitmap/lệnh ESC-POS thuần (không phụ thuộc React/DOM); `src/features/printer`
+lắp ráp job in và chọn đường gửi theo nền tảng. Web/PWA Android gửi qua app **RawBT** (`rawbt:` URL chứa
+PNG 1-bit); vỏ **Capacitor Android** (thư mục `android/`, ngoài phạm vi build web) nối thẳng TCP cổng 9100
+tới máy in qua plugin cục bộ `PrinterSocket`. Chi tiết dựng/ký APK ở
+[`deploy.md`](./deploy.md#dựng-apk-android-capacitor).
 
 **7. Giá riêng của khách — bảng mềm, hai tầng, không có "giá sỉ chung".**
 
@@ -135,5 +142,6 @@ kết nối và chặn màn, vì giữ kết nối là mọi lệnh ghi hỏng t
 
 ## Non-goals (bản 1)
 
-Hóa đơn điện tử CQT/chữ ký số · tồn kho · in bluetooth 58/80mm · tài khoản người dùng và phân quyền
-chủ/nhân viên · voice-AI nhập đơn · VietQR trên phiếu · cổng thanh toán.
+Hóa đơn điện tử CQT/chữ ký số · tồn kho · in bluetooth (SPR02 chỉ hỗ trợ USB/LAN — in nhiệt 80mm qua
+TCP và qua RawBT giờ đã làm, xem mục 8 ở trên) · tài khoản người dùng và phân quyền chủ/nhân viên ·
+voice-AI nhập đơn · VietQR trên phiếu · cổng thanh toán.

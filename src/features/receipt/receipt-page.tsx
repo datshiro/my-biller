@@ -5,8 +5,14 @@ import { ReceiptView } from './receipt-view'
 import { receiptToText } from './receipt-text'
 import { canShareReceipt, downloadReceipt, renderReceiptPng, shareReceipt } from './share-receipt'
 import { receiptSignature, useReceipt } from './use-receipt'
+import { downloadBytes } from '../printer/download-bytes'
+import { buildReceiptJob } from '../printer/print-job'
+import { readPrinterConfig } from '../printer/printer-config'
+import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
+import { buildReceiptRawbtHref } from '../printer/rawbt-href'
 import { paginateLines } from '@/domain/receipt-pages'
 import { Button } from '@/ui/button'
+import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { EmptyState } from '@/ui/empty-state'
 
 type Png = { blobs: Blob[]; canShare: boolean }
@@ -18,9 +24,24 @@ export function ReceiptPage() {
   const signature = receiptSignature(data)
 
   const captureRefs = useRef<(HTMLDivElement | null)[]>([])
+  const thermalRef = useRef<HTMLDivElement | null>(null)
+  // Khoá đồng bộ chống bấm-đúp: `disabled={busy}` chỉ khoá sau khi React render lại, nên hai cú chạm
+  // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
+  const printLock = useRef(false)
+  const [askPrint, setAskPrint] = useState(false)
   const [png, setPng] = useState<Png | null>(null)
   const [pngError, setPngError] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [inNhiet, setInNhiet] = useState<{ busy: boolean; message: string | null; error: boolean; needConfig?: boolean }>({
+    busy: false,
+    message: null,
+    error: false,
+  })
+  // Web Android: href `rawbt:` dựng SẴN trên `<a>` trước khi chạm (không `await` giữa chạm và điều
+  // hướng — user gesture). `too-big` = qua guard cỡ URL; `failed` = lỗi chụp/nén.
+  const [rawbt, setRawbt] = useState<{ status: 'idle' | 'building' | 'ready' | 'too-big' | 'failed'; href?: string }>({
+    status: 'idle',
+  })
 
   // Nội dung phiếu đổi thì ảnh cũ hết giá trị — dọn ngay trong lúc render, không đợi effect,
   // để không có nhịp nào nút "Chia sẻ" cầm ảnh của phiếu cũ.
@@ -29,6 +50,7 @@ export function ReceiptPage() {
     setRenderedFor(signature)
     setPng(null)
     setPngError(false)
+    setRawbt({ status: 'idle' })
   }
 
   useEffect(() => {
@@ -53,6 +75,29 @@ export function ReceiptPage() {
       cancelled = true
     }
   }, [signature])
+
+  // Dựng href RawBT SAU khi ảnh chia sẻ xong (chờ `png`/`pngError`) — không chạy hai lượt html-to-image
+  // song song (cảnh báo ở effect trên). Chỉ web Android; native đi đường TCP, desktop/iOS `rawbt:` vô nghĩa.
+  useEffect(() => {
+    if (!isAndroidWeb()) return
+    if (png === null && !pngError) return
+    const node = thermalRef.current
+    if (!node) return
+    let cancelled = false
+    setRawbt({ status: 'building' })
+    void (async () => {
+      try {
+        const href = await buildReceiptRawbtHref(node)
+        if (cancelled) return
+        setRawbt(href ? { status: 'ready', href } : { status: 'too-big' })
+      } catch {
+        if (!cancelled) setRawbt({ status: 'failed' })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [png, pngError, signature])
 
   if (data === undefined) return <p className="p-6 text-center text-muted">Đang mở phiếu…</p>
   if (data === null) {
@@ -86,7 +131,51 @@ export function ReceiptPage() {
     }
   }
 
+  // Chụp LƯỜI khi chạm (D6): gọi plugin không phải điều hướng nên không cần href dựng sẵn. Bản nhiệt
+  // một dải nằm sẵn trong DOM ẩn — chỉ chụp thành byte lúc bấm.
+  const onPrintThermal = async () => {
+    if (printLock.current) return
+    const cfg = readPrinterConfig()
+    if (!cfg) {
+      setInNhiet({ busy: false, message: 'Chưa cài IP máy in.', error: true, needConfig: true })
+      return
+    }
+    const node = thermalRef.current
+    if (!node) return
+    printLock.current = true
+    setInNhiet({ busy: true, message: 'Đang chuẩn bị bản in…', error: false })
+    try {
+      const bytes = await buildReceiptJob(node)
+      await nativeSink(bytes, cfg)
+      setInNhiet({ busy: false, message: `Đã gửi tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+    } catch (error) {
+      setInNhiet({
+        busy: false,
+        message: error instanceof Error ? error.message : 'Không gửi được bản in.',
+        error: true,
+      })
+    } finally {
+      printLock.current = false
+    }
+  }
+
+  const onDownloadBin = async () => {
+    const node = thermalRef.current
+    if (!node) return
+    try {
+      downloadBytes(await buildReceiptJob(node), `${order.code}.bin`)
+    } catch {
+      // Tiện ích chỉ có ở bản dev; nuốt lỗi chụp để không văng unhandled rejection lúc thử.
+    }
+  }
+
   const busy = png === null && !pngError
+  // Mỗi nền tảng tối đa MỘT nút in: native → `<button data-tcp-print>` (TCP, pha 4); web Android →
+  // `<a data-rawbt>` (RawBT); web khác → không nút. Bộ chọn khác nhau nên test không đếm nhầm.
+  const native = isNativeApp()
+  const androidWeb = isAndroidWeb()
+  // IP để hiện trong hộp xác nhận; onPrintThermal vẫn đọc lại lúc gửi (nguồn sự thật).
+  const printerCfg = native ? readPrinterConfig() : null
 
   return (
     <div className="receipt-screen flex h-dvh flex-col bg-surface">
@@ -126,6 +215,13 @@ export function ReceiptPage() {
               />
             </div>
           ))}
+
+          {/* Bản nhiệt một dải cho máy in nhiệt: con CUỐI của .space-y-4, ẩn (bất biến #4). KHÔNG mang
+              .receipt-view — các ca đếm tấm gửi khách bằng class đó. `-mt-4` triệt margin space-y-4 qua
+              collapse (16 − 16 = 0); không đổi sang -mb-4. */}
+          <div className="no-print -mt-4 h-0 overflow-hidden" aria-hidden="true">
+            <ReceiptView {...data} lines={data.lines} thermal innerRef={thermalRef} />
+          </div>
         </div>
 
         {!shop.name ? (
@@ -166,6 +262,46 @@ export function ReceiptPage() {
             </Button>
           )}
 
+          {native ? (
+            <Button
+              size="cta"
+              variant="secondary"
+              data-tcp-print
+              disabled={inNhiet.busy}
+              onClick={() => setAskPrint(true)}
+              className="mb-3"
+            >
+              {inNhiet.busy ? 'Đang chuẩn bị bản in…' : '🖨 IN MÁY IN NHIỆT'}
+            </Button>
+          ) : androidWeb ? (
+            <div className="mb-3">
+              {rawbt.status === 'ready' && rawbt.href ? (
+                <>
+                  {/* Nút mở hộp xác nhận; href `rawbt:` dựng sẵn nằm TRÊN nút "In" trong hộp — cú chạm
+                      "In" là user gesture thật, không `await` giữa chạm và điều hướng. */}
+                  <Button size="cta" variant="secondary" className="w-full" onClick={() => setAskPrint(true)}>
+                    🖨 IN MÁY IN NHIỆT
+                  </Button>
+                  <p className="mt-1 text-center text-[12px] text-muted">
+                    Cần app RawBT trên Android (bản miễn phí in thêm một dòng).
+                  </p>
+                </>
+              ) : rawbt.status === 'too-big' ? (
+                <p role="status" className="rounded-btn bg-warn-tint px-3 py-2 text-[13px] text-warn">
+                  Phiếu quá dài cho RawBT — dùng 📤 CHIA SẺ hoặc app Android.
+                </p>
+              ) : rawbt.status === 'failed' ? (
+                <p role="status" className="rounded-btn bg-danger-tint px-3 py-2 text-[13px] text-danger">
+                  Máy này chưa tạo được bản in cho RawBT — dùng 📤 CHIA SẺ.
+                </p>
+              ) : (
+                <Button size="cta" variant="secondary" disabled>
+                  Đang chuẩn bị bản in…
+                </Button>
+              )}
+            </div>
+          ) : null}
+
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" onClick={() => window.print()}>
               🖨 In / Lưu PDF
@@ -184,7 +320,61 @@ export function ReceiptPage() {
                 ⬇ Tải ảnh
               </Button>
             )}
+            {import.meta.env.DEV ? (
+              <Button variant="ghost" onClick={() => void onDownloadBin()}>
+                ⬇ .bin
+              </Button>
+            ) : null}
           </div>
+
+          {inNhiet.message ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`mt-3 rounded-btn px-3 py-2 text-[13px] ${inNhiet.error ? 'bg-danger-tint text-danger' : 'text-muted'}`}
+            >
+              {inNhiet.message}
+              {inNhiet.needConfig ? (
+                <>
+                  {' '}
+                  <Link to="/them/cai-dat" className="font-semibold underline">
+                    Vào Cài đặt › MÁY IN
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {/* Hỏi xác nhận trước khi in để chặn cú bấm nhầm (giấy in phí). Native → nút "In" gọi thẳng
+              onPrintThermal (còn khoá chống bấm-đúp bên trong). Web Android → nút "In" là `<a data-rawbt>`
+              để giữ user gesture khi mở RawBT. */}
+          {askPrint && native ? (
+            <ConfirmDialog
+              title="In phiếu ra máy in nhiệt?"
+              message={
+                printerCfg
+                  ? `Gửi phiếu tới máy in ${printerCfg.host}:${printerCfg.port}.`
+                  : 'Gửi phiếu tới máy in nhiệt.'
+              }
+              confirmLabel="In"
+              confirmVariant="primary"
+              onConfirm={() => {
+                setAskPrint(false)
+                void onPrintThermal()
+              }}
+              onCancel={() => setAskPrint(false)}
+            />
+          ) : askPrint && androidWeb && rawbt.status === 'ready' && rawbt.href ? (
+            <ConfirmDialog
+              title="In phiếu ra máy in nhiệt?"
+              message="Phiếu sẽ mở trong app RawBT để in."
+              confirmLabel="In"
+              confirmVariant="primary"
+              confirmHref={rawbt.href}
+              onConfirm={() => setAskPrint(false)}
+              onCancel={() => setAskPrint(false)}
+            />
+          ) : null}
         </div>
       </div>
     </div>

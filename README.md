@@ -70,7 +70,8 @@ Chi tiết lựa chọn công nghệ: [`docs/tech-stack.md`](docs/tech-stack.md)
 giao diện: [`docs/design-guidelines.md`](docs/design-guidelines.md) ·
 deploy: [`docs/deploy.md`](docs/deploy.md) ·
 kiểm thử live: [`docs/kiem-thu-live.md`](docs/kiem-thu-live.md) ·
-ghi chú phát hành: [`docs/ghi-chu-phat-hanh.md`](docs/ghi-chu-phat-hanh.md).
+ghi chú phát hành: [`docs/ghi-chu-phat-hanh.md`](docs/ghi-chu-phat-hanh.md) ·
+nối máy in nhiệt: [`docs/huong-dan-noi-may-in-nhiet.html`](docs/huong-dan-noi-may-in-nhiet.html).
 
 Artifact phục hồi là ứng dụng riêng, chỉ đọc và tải file sao lưu; nó không có màn bán hàng, ghép máy
 hay runner đồng bộ. Vì IndexedDB bị cô lập theo origin, artifact này chỉ đọc được dữ liệu sự cố khi
@@ -127,5 +128,6 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
 
 ## Ngoài phạm vi milestone M1
 
-Hoá đơn điện tử có mã CQT · tồn kho · in bluetooth 58/80mm · tài khoản người dùng / phân quyền ·
-nhập đơn bằng giọng nói · VietQR trên phiếu · dark mode · đa ngôn ngữ.
+Hoá đơn điện tử có mã CQT · tồn kho · in bluetooth (SPR02 chỉ có USB/LAN — in nhiệt 80mm qua TCP/RawBT
+đã làm, xem [`docs/huong-dan-noi-may-in-nhiet.html`](docs/huong-dan-noi-may-in-nhiet.html)) · tài khoản
+người dùng / phân quyền · nhập đơn bằng giọng nói · VietQR trên phiếu · dark mode · đa ngôn ngữ.
