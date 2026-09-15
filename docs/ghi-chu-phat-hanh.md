@@ -1,5 +1,20 @@
 # Ghi chú phát hành
 
+## 2.5.1 — phóng to dòng tổng tiền trên phiếu (15/9/2026)
+
+> Chỉ đổi cỡ chữ trên phiếu, không đổi schema (vẫn v5), không di trú, không đụng Worker. Con số tiền và
+> mọi hành vi khác giữ nguyên.
+
+### Người bán thấy gì
+
+- **Dòng tổng tiền trên phiếu to hơn.** Tổng cộng, Còn nợ — và trên phiếu có nợ cũ là TỔNG PHẢI TRẢ,
+  NỢ CŨ CÒN LẠI — đổi từ 13px lên 15px cho dễ đọc, theo yêu cầu của chủ quán sau khi xem phiếu in thật.
+
+### Vì sao cần
+
+- Chủ quán gửi ảnh phiếu, kêu dòng tổng tiền nhỏ khó đọc. Phần "in ra nhạt" là mật độ in của máy SPR02
+  (chỉnh trên máy), không sửa ở app — chữ trên phiếu vốn đã in full mực.
+
 ## 2.5.0 — in máy in nhiệt: PWA qua RawBT, APK Android nối thẳng IP:9100 (9/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không có bước di trú, không cần deploy Worker: thay đổi chỉ nằm

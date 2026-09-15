@@ -11,7 +11,7 @@ const METHOD: Record<Payment['method'], string> = {
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex justify-between gap-3 py-0.5 ${strong ? 'text-[13px] font-bold' : 'text-[11px]'}`}>
+    <div className={`flex justify-between gap-3 py-0.5 ${strong ? 'text-[15px] font-bold' : 'text-[11px]'}`}>
       <span>{label}</span>
       <span className="money whitespace-nowrap">{value}</span>
     </div>

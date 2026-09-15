@@ -276,11 +276,14 @@ Phiếu không còn chữ xám: địa chỉ, header bảng và ghi chú đều 
 Phiếu dùng cỡ chữ nhỏ cho thân bảng và địa chỉ
     [Documentation]    Bộ cỡ chữ do chủ quán tự thực nghiệm trên chính máy in nhiệt 80mm rồi chốt.
     ...    Con số px là quyết định của khách, không phải hằng số chọn cho đẹp — đổi phải hỏi lại.
+    ...    2026-09-15: chủ quán gửi ảnh phiếu, kêu dòng tổng tiền nhỏ, xin to hơn → dòng tổng
+    ...    (Row strong) đổi 13px thành 15px theo yêu cầu. Thân bảng/địa chỉ/header giữ nguyên vì
+    ...    chủ quán chưa kêu. Cỡ 15px còn phải xác minh lại khi in thật trên SPR02.
     Bán Nhanh    Phở bò
     Get Style    ${ĐỊA_CHỈ_PHIẾU}    font-size    ==    11px
     Get Style    ${Ô_TÊN_MÓN}    font-size    ==    11px
     Get Style    ${HEADER_BẢNG}    font-size    ==    10px
-    Get Style    ${DÒNG_TỔNG_CỘNG}    font-size    ==    13px
+    Get Style    ${DÒNG_TỔNG_CỘNG}    font-size    ==    15px
 
 Header cột đơn giá rút thành Đ.GIÁ
     [Documentation]    "Đơn giá" chiếm cột rộng nên cột tên món hẹp lại và tên dài vỡ thêm dòng.
