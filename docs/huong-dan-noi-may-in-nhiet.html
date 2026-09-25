@@ -195,6 +195,41 @@
       bản debug và bản chính thức khác chữ ký, cài đè trực tiếp sẽ báo lỗi và bị chặn.</p>
   </section>
 
+  <section class="step">
+    <header><div class="num">8</div><h2>Nhận in qua Bluetooth (APK từ 2.6.0)</h2></header>
+    <p>Điện thoại chạy APK giả làm một <b>máy in Bluetooth</b> (SPP). Máy khác (laptop, script, máy bán hàng khác)
+      ghép Bluetooth với điện thoại rồi "in" vào nó như vào máy in thật; app đọc phiếu ESC/POS nhận được, dựng lại
+      bằng font tiếng Việt và in ra máy in nhiệt đã cài IP ở mục 4. App <b>chỉ in</b>, không ghi gì vào sổ.</p>
+    <ol>
+      <li>Làm xong mục 4 (IP máy in, IN THỬ ra giấy).</li>
+      <li><b>Cài đặt › NHẬN IN QUA BLUETOOTH</b> → <b>BẬT NHẬN IN</b> → cho phép quyền <b>Thiết bị ở gần</b>. Dòng
+        trạng thái hiện tên Bluetooth của điện thoại.</li>
+      <li>Trên máy gửi: ghép Bluetooth với tên đó. Lần ghép đầu, mở <b>Cài đặt Android › Bluetooth</b> trên điện thoại để nó hiện
+        ra cho máy gửi tìm thấy.
+        macOS tạo cổng <code>/dev/cu.&lt;tên&gt;</code>; Linux dùng <code>rfcomm bind 0 &lt;MAC&gt;</code> →
+        <code>/dev/rfcomm0</code>.</li>
+      <li>Gửi thử: <code>node scripts/gui-in-bluetooth.mjs /dev/cu.&lt;tên&gt;</code> — phiếu mẫu phải ra giấy và
+        hiện trong danh sách "Phiếu đã nhận" kèm ảnh xem trước.</li>
+    </ol>
+    <h3>Người gửi phải gửi gì</h3>
+    <ul>
+      <li>Chữ <b>UTF-8</b> (không dùng bảng mã CP1258/TCVN). Lưới 48 cột, canh cột bằng dấu cách.</li>
+      <li>Lệnh hiểu được: <code>ESC @</code>, <code>ESC ! n</code>, <code>ESC E</code>/<code>ESC G</code> (đậm),
+        <code>ESC -</code> (gạch chân), <code>ESC a</code> (căn lề), <code>ESC d</code>, <code>ESC J</code>,
+        <code>GS ! n</code> (cỡ chữ), <code>GS V</code> (cắt), ảnh <code>GS v 0</code> rộng tối đa 576 chấm. Lệnh bảng
+        mã/giãn dòng/font bị bỏ qua. Lệnh khác → phiếu báo "In hỏng" kèm vị trí byte, không in giấy rác.</li>
+      <li>Hết một phiếu là khi: gặp lệnh cắt (<code>GS V</code>, <code>ESC i</code>, <code>ESC m</code>), hoặc đóng
+        nối, hoặc im lặng 2 giây (không tính lúc đang dở một lệnh). Lệnh két tiền, còi, hỏi trạng thái bị bỏ qua.</li>
+      <li>Không lọc trùng: gửi hai lần là in hai tờ (in 2 liên được). Rớt nối giữa chừng thì phần đã nhận vẫn in.</li>
+      <li>Máy gửi tìm dịch vụ theo UUID SPP <code>00001101-0000-1000-8000-00805F9B34FB</code>; máy gửi đóng cứng kênh
+        RFCOMM 1 có thể không nối được.</li>
+    </ul>
+    <p class="note">Không có dịch vụ nền: giữ app mở. Khoá màn hình hay chuyển app thì Android có thể tạm dừng app —
+      phiếu gửi lúc đó có thể in trễ khi mở lại, hoặc mất nếu app bị tắt. Vuốt tắt app là dừng nhận; mở lại app thì tự
+      nghe lại nếu lần trước đã BẬT.</p>
+    <label class="check"><input type="checkbox"> Đã ghép máy gửi và in phiếu mẫu qua Bluetooth ra giấy</label>
+  </section>
+
   <footer>
     <p>Tên các mục trong menu RawBT viết theo hiểu biết, có thể khác chút theo phiên bản RawBT trên máy.
       Bốn ô cần điền ở mục 3 và các nhãn/nút trong app tính tiền ở mục 3–4 thì đã đối chiếu với giao diện

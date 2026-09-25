@@ -7,3 +7,7 @@ export function toBase64(bytes: Uint8Array): string {
   }
   return btoa(binary)
 }
+
+export function fromBase64(text: string): Uint8Array {
+  return Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
+}

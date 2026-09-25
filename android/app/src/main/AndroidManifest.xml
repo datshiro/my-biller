@@ -38,4 +38,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Nhận in qua Bluetooth: Android 12+ xin BLUETOOTH_CONNECT lúc chạy; máy cũ dùng quyền BLUETOOTH (cấp lúc cài). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 </manifest>

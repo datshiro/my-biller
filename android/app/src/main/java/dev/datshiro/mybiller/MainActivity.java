@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Đăng ký TRƯỚC super.onCreate: bridge dựng WebView trong super, plugin phải có mặt lúc đó.
         registerPlugin(PrinterSocketPlugin.class);
+        registerPlugin(BluetoothPrinterPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

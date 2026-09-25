@@ -268,6 +268,16 @@ Máy in: trên web nút IN THỬ bị khoá và có dòng chú thích chỉ in �
     Wait For Elements State    css=button:text-is("IN THỬ")    disabled
     Chờ Thấy Chữ    Chỉ in được trong app Android
 
+Nhận in Bluetooth: trên web nút BẬT NHẬN IN bị khoá kể cả khi lần trước đã bật
+    [Documentation]    Server RFCOMM chỉ có trong APK. Web phải khoá nút kèm dòng giải thích, và cờ đã-bật trong
+    ...    localStorage (từ APK hay gõ tay) không được làm web thử mở Bluetooth.
+    Mở Màn    /them/cai-dat
+    Evaluate JavaScript    ${None}    () => localStorage.setItem('nhan-in-bluetooth', '1')
+    Reload
+    Chờ Thấy Chữ    NHẬN IN QUA BLUETOOTH
+    Wait For Elements State    css=button:text-is("BẬT NHẬN IN")    disabled
+    Chờ Thấy Chữ    Chỉ nhận in qua Bluetooth trong app Android
+
 Máy in web Android: IN THỬ QUA RAWBT hỏi xác nhận; nút In thử là link rawbt: dựng sẵn, không bấm
     [Documentation]    Web Android in qua RawBT: khối IN QUA RAWBT trên khối IP có link cài RawBT (Play, mở
     ...    tab mới). Bấm IN THỬ QUA RAWBT chỉ MỞ hộp xác nhận (chặn bấm nhầm); nút "In thử" trong hộp là

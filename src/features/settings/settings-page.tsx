@@ -12,6 +12,7 @@ import {
   type PreparedBackup,
 } from './backup'
 import { AppUpdateSection } from './app-update-section'
+import { BtReceiverSection } from './bt-receiver-section'
 import { PrinterSection } from './printer-section'
 import { isNativeApp } from '../printer/printer-sink'
 import { BackupBanner } from './backup-banner'
@@ -355,6 +356,10 @@ export function SettingsPage() {
 
       <Section title="MÁY IN">
         <PrinterSection />
+      </Section>
+
+      <Section title="NHẬN IN QUA BLUETOOTH">
+        <BtReceiverSection />
       </Section>
 
       {/* Trong APK "bản mới" của Service Worker là vô nghĩa — cập nhật app bằng cài đè APK (D15). */}
