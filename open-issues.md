@@ -1,7 +1,14 @@
 # Open issues
 
 ### ISSUE-001 — `applier-pusher.test.ts` "cuộn ngược cả hai thao tác làm sau" chập chờn
-- State: promoted → https://github.com/datshiro/my-biller/issues/28 (2026-09-01)
+- State: resolved (27/09/2026, nhánh `feature/sua-open-issues-va-staging-ci`, đóng #28 qua PR)
+- Nguyên nhân đã chứng (27/09): lỗi ở **app**, không ở test. Hai lần đổi giá rơi cùng một mili giây nên
+  `updatedAt` hai bản như nhau; `restoreRow` `put` lại bản chụp, Dexie chỉ đưa phần khác nhau cho hook
+  `updating` của `stampTimestamps` (`src/db/db.ts`), hook thấy thiếu `updatedAt` nên đóng dấu giờ mới, bản
+  dán lại không còn khớp `after` của thao tác bị từ chối → coi là xung đột → giá kẹt ở 55.000. Sửa: tập
+  `verbatimWrites` cho transaction cuộn ngược bỏ qua đóng dấu. Ca Vitest cố định đồng hồ đỏ 10/10 trên mã
+  cũ; cả file chạy riêng 20/20 xanh (trước: đỏ 6/10). Review fresh-context: GO. Không có ca Robot: giao
+  diện không dựng được hai lần sửa cùng mili giây kèm máy chủ từ chối.
 - Severity: medium
 - Raised by: lượt thi công `plans/260901-1858-in-phieu-may-in-nhiet/`
 - Date: 2026-09-01
@@ -29,6 +36,7 @@
   thật: `@page` 200mm làm 2 frame ra 3 trang PDF. Chốt 350mm để cổng đếm trang xanh.
   Hệ quả vật lý: `@page` là khổ CỐ ĐỊNH, nên bill 2 món cũng nhả đủ 350mm giấy. Tiêu chí vòng in thử
   của pha 1 đặt mốc "bill 3 món ≤ 12cm" ⇒ đường `window.print()` gần như chắc chắn trượt mốc đó.
+- Rà 27/09/2026: giữ deferred — quyết định của người dùng ngày 01/09, chưa có phàn nàn hao giấy nào.
 - Mitigation: **người dùng chốt 2026-09-01: GIỮ 350mm, không làm thêm.** Lý do: bằng chứng 62,5% cho
   thấy chủ quán đang in bằng đường ẢNH, `window.print()` là đường phụ; mọi cổng tự động đã xanh. Mở
   lại chỉ khi vòng in thử cho thấy khách thực sự dùng nút In / Lưu PDF và kêu hao giấy. Ba đường
@@ -61,7 +69,7 @@
   `bao-cao.robot`: 12/12 pass. Ghi rõ trong commit là sửa test có sẵn.
 
 ### ISSUE-004 — CI dựa vào thứ tự bước ngầm để có `dist-next` cho ca cập nhật
-- State: deferred
+- State: resolved (27/09/2026)
 - Severity: low
 - Raised by: review độc lập PR #29 (S-3), `plans/reports/code-reviewer-260905-0100-pr-29-nut-cap-nhat.md`
 - Date: 2026-09-05
@@ -72,9 +80,11 @@
   `dist`/`dist-recovery` có sẵn từ trước, không riêng bản này.
 - Mitigation: chưa làm. Khi đụng lại `artifact-server.mjs`: kiểm tồn tại các root lúc khởi động và
   báo tên thư mục thiếu.
+- Resolved 27/09/2026: `artifact-server.mjs` kiểm ba thư mục lúc khởi động, thiếu thì thoát mã 1 kèm tên
+  thư mục và lệnh build cần chạy.
 
 ### ISSUE-005 — Gateway Worker rơi `?since`, máy kẹt ở seq 500 và đồng bộ quay vòng nóng
-- State: promoted → https://github.com/datshiro/my-biller/pull/32 (issue https://github.com/datshiro/my-biller/issues/31, 2026-09-05)
+- State: resolved (rà 27/09/2026: issue #31 đóng 06/09, bản sửa ship trong v2.3.1 qua PR #32)
 - Severity: high
 - Raised by: lượt đo bước 4 của `plans/260904-2300-doi-soat-tong-the/` (Phase 2)
 - Date: 2026-09-05
@@ -91,7 +101,7 @@
   đọc oplog quán thật mà không có token máy.
 
 ### ISSUE-006 — Ca Robot hai máy "Thiết bị cũ không ghi đè khoản thu đã hoàn" đỏ ngẫu nhiên trên CI
-- State: promoted
+- State: resolved (rà 27/09/2026: issue #33 đóng 06/09 qua PR #35)
 - Severity: low
 - Raised by: Claude (ak:vibe, hotfix PR #32 CI)
 - Date: 2026-09-05
@@ -101,6 +111,7 @@
 
 ### ISSUE-007 — Đường PWA + RawBT chưa nghiệm trên SPR02 thật (đường dùng hằng ngày)
 - State: deferred
+- Rà 27/09/2026: giữ deferred — chỉ máy in thật trả lời được, chờ chuyến quán.
 - Severity: medium
 - Raised by: đối chiếu pha 5 với buổi test thật 08/09 (chỉ chạy đường APK/TCP), lượt 09/09
 - Date: 2026-09-09
@@ -122,6 +133,7 @@
 
 ### ISSUE-008 — Ba mục nghiệm-thu phần cứng còn lại của pha 5 (chỉ có bằng chứng phần mềm)
 - State: deferred
+- Rà 27/09/2026: giữ deferred — chỉ máy in thật trả lời được, chờ chuyến quán.
 - Severity: low
 - Raised by: đối chiếu pha 5 với buổi test thật 08/09, lượt 09/09
 - Date: 2026-09-09
@@ -140,7 +152,7 @@
   `THERMAL_RATIO` (số đo pha 5). Rủi ro thấp — đường tiền/nội dung đã khớp ở phiếu ngắn thật.
 
 ### ISSUE-009 — In tem TSPL chưa nghiệm trên máy XPrinter XP-365B thật
-- State: deferred (phần lớn đã nghiệm 26/9, còn mục d)
+- State: deferred (phần lớn đã nghiệm 26/9; mục d có mã 27/09, chờ máy thật)
 - Severity: medium
 - Raised by / Date: review độc lập nhánh `feature/in-tem-theo-so-luong` / 26/9/2026
 - Related task: in tem theo số lượng (nút 🏷 IN TEM trên phiếu, mục MÁY IN TEM)
@@ -155,9 +167,15 @@
   (APK gộp tem + nhận in Bluetooth). Lỗi lần đầu là cuộn tem lắp ngược mặt, không phải code. Chưa thử (d).
 - Mitigation: Chuyến quán cùng ISSUE-007/008: in đơn 3 phần, đơn 30 phần, và một job khi cố tình sai khe
   hở. Nếu (d) xảy ra thật: thêm watchdog đóng socket trong `PrinterSocketPlugin.java` (cần dựng lại APK).
+- (d) có mã 27/09/2026: `SocketWriter.write` đóng socket bằng RST (bỏ byte còn trong bộ đệm máy gửi) khi quá hạn ghi (`writeTimeoutMs` = 20 s + 1 s/10 KB
+  từ TS) → mã `EWRITETIMEOUT` → câu "Máy in ngừng nhận giữa chừng…"; hàng in TS có hạn riêng dài hơn 2 s.
+  JUnit với server không đọc chứng lệnh ghi ném sau hạn, và ghi xong trước hạn thì không bị RST (chạy trong job
+  `APK debug`). Giới hạn: write() trả về khi byte vào bộ đệm nhân, nên job nhỏ lọt hết bộ đệm thì hạn không bao
+  giờ chạm dù máy in kẹt ngay sau đó — hạn này chỉ che job lớn (tem nhiều phần). **Staging/Robot không
+  chạy mã Java này**: vẫn cần cài APK mới và thử job sai khe hở trên XP-365B.
 
 ### ISSUE-010 — In phiếu và in nhận qua Bluetooth không xếp hàng chung trên máy in TCP
-- State: deferred
+- State: resolved (27/09/2026, mã; vẫn nên thử trên SPR02 ở chuyến quán)
 - Severity: medium
 - Raised by / Date: review độc lập PR #39 / 26/9/2026
 - Related task: 2.6.0 nhận in qua Bluetooth (`src/features/printer/bt-receiver.ts`)
@@ -167,9 +185,12 @@
   đường in trùng hay sai sổ.
 - Mitigation: Gom chuỗi promise vào `printer-sink.ts` (một `serialSink` dùng chung cho cả ba nơi gọi).
   Thử trên SPR02: job Bluetooth và phiếu cùng lúc để biết máy từ chối hay giữ nối thứ hai.
+- Resolved 27/09/2026: `nativeSink` giờ là `serialSink(sendRaw)` nên mọi job tới cùng một máy in (`host:port`)
+  — in phiếu, IN THỬ, in tem, job Bluetooth — xếp một hàng; máy in phiếu và máy in tem khác địa chỉ thì chạy song song. Mỗi job có hạn riêng để một job treo không làm kẹt cả hàng. Chỉ Vitest:
+  Robot không mở đường in TCP và không giả được nguồn Bluetooth.
 
 ### ISSUE-011 — Lệnh bị cắt giữa chừng trên nối Bluetooth giữ mở làm kẹt im lặng các job sau
-- State: deferred
+- State: resolved (27/09/2026)
 - Severity: medium
 - Raised by / Date: review độc lập PR #39 (đã dựng lại bằng probe) / 26/9/2026
 - Related task: 2.6.0 nhận in qua Bluetooth (`bt-receiver.ts` `onIdle`, `job-framer.ts`)
@@ -178,3 +199,19 @@
   0 job ra, không log, không lỗi, cho tới khi máy gửi ngắt nối.
 - Mitigation: Giới hạn thời gian chờ giữa lệnh (vd ~10 s tổng) rồi `flushNow()` để job dở báo lỗi
   "Job dừng giữa chừng một lệnh" thay vì biến mất. Hỏi xem app gửi ở quán có giữ nối SPP mở không.
+- Resolved 27/09/2026: dở một lệnh mà im quá `MID_COMMAND_MAX_MS` (10 s) thì bỏ phần dở, nhật ký ghi
+  "Job dừng giữa chừng một lệnh"; job sau in bình thường. Chỉ Vitest (nguồn byte là plugin SPP native).
+  Còn hỏi chủ quán: app gửi có giữ nối SPP mở không.
+
+### ISSUE-012 — Áp sự kiện từ sổ chung đóng dấu lại `updatedAt`, bản sao lệch mốc giờ với máy chủ
+- State: deferred (chờ người dùng chốt có gộp vào lượt này không)
+- Severity: medium
+- Raised by / Date: review fresh-context của bản sửa #28 / 27/09/2026
+- Related task: cùng nguyên nhân với ISSUE-001 (`stampTimestamps` trong `src/db/db.ts`)
+- Description: `src/db/sync/applier.ts:57-59` `put` sự kiện từ máy chủ. Sự kiện máy chủ tự dựng (ví dụ
+  `refreshOrderFromPayments` trong `worker/src/shop-do.ts`) giữ nguyên `updatedAt` mà đổi `paidAmount`/`status`,
+  nên hook đóng dấu `Date.now()` lên bản cục bộ — lần nào cũng xảy ra, không cần trùng mili giây. Tổng tiền và
+  Đối soát không so `updatedAt`, máy chủ không kiểm `before`, nên hiện chưa sai tiền; nhưng `before` của các
+  thao tác sau mang mốc đã lệch. `src/db/recalc.ts:23-34` đang lách cùng hành vi bằng hai lần `update`.
+- Mitigation: đề xuất `verbatimWrites.add(transaction)` trong `applyEvents`, kèm ca Vitest và review riêng;
+  gộp cách lách ở `recalc.ts` về cùng cơ chế. Chưa làm — ngoài phạm vi lượt sửa 27/09.
