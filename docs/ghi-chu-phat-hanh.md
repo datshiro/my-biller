@@ -18,6 +18,24 @@
 ### Chưa xác nhận trên máy thật
 
 - Lệnh TSPL, khổ tem thật và khe hở chưa được thử trên máy XPrinter XP-365B tại quán, kể cả chiều `DIRECTION` và việc máy kẹt giữa job dài (lệnh ghi socket trong plugin không có timeout).
+## 2.6.0 — APK nhận in qua Bluetooth, in lại ra máy in nhiệt (26/9/2026)
+
+> Không đổi schema IndexedDB (vẫn v5), không di trú, không đụng Worker. Tính năng chỉ có trong APK; bản
+> web/PWA chỉ thêm một mục Cài đặt bị khoá kèm ghi chú. APK tăng versionCode 1 → 2 để cài đè được.
+
+### Người bán thấy gì
+
+- **Cài đặt có thêm mục NHẬN IN QUA BLUETOOTH.** Trong APK: nút BẬT/TẮT NHẬN IN, dòng trạng thái (tên
+  Bluetooth của máy, máy gửi đang nối), danh sách 20 phiếu đã nhận gần nhất kèm ảnh xem trước, trạng thái
+  (Đã in / In hỏng + lý do) và nút IN LẠI (hỏi xác nhận). Trên web nút khoá.
+- **Phiếu nhận qua Bluetooth tự in ngay** ra máy in nhiệt đã cài IP ở mục MÁY IN, dù đang ở màn nào.
+  Không ghi gì vào sổ.
+
+### Vì sao cần
+
+- Để máy/script khác của quán gửi phiếu như gửi tới một máy in Bluetooth, mà phiếu vẫn ra máy in nhiệt
+  LAN với chữ tiếng Việt đúng (chữ được dựng lại thành ảnh, như phiếu của app). Giao thức người gửi ở
+  [`huong-dan-noi-may-in-nhiet.html`](huong-dan-noi-may-in-nhiet.html) mục 8.
 
 ## 2.5.1 — phóng to dòng tổng tiền trên phiếu (15/9/2026)
 
