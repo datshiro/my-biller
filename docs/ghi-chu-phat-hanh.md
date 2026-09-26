@@ -9,9 +9,11 @@
 
 - **Màn phiếu (trong APK) có thêm nút 🏷 IN TEM (n tem).** n là tổng số lượng của đơn, số lượng lẻ làm
   tròn lên từng dòng. Bấm mở hộp xác nhận ghi rõ số tem, khổ tem và IP máy tem. Đơn huỷ không có nút.
-- **Cài đặt có thêm mục MÁY IN TEM:** IP, cổng, rộng × cao tem và khe hở (mm), mặc định 60×40 khe 2 (khổ cuộn tem của quán).
+- **Cài đặt có thêm mục MÁY IN TEM:** IP, cổng, rộng × cao tem và khe hở (mm), mặc định 50×30 khe 2 (khổ cuộn tem của quán).
   Máy tem là máy riêng, khác máy in phiếu.
-- Mỗi tem in tên quán, mã đơn, giờ bán, tên khách và số thứ tự `i/n` ở góc dưới phải; không in tên món.
+- Mỗi tem là một phần của một món: in **tên món** (to nhất), ghi chú của món nếu có, tên quán, mã đơn,
+  giờ bán, tên khách và số thứ tự `i/n` của cả đơn ở góc dưới phải. Đơn Choco Mint ×3 + Matcha ×4 ra 3 tem
+  Choco Mint rồi 4 tem Matcha.
 
 ### Chưa xác nhận trên máy thật
 

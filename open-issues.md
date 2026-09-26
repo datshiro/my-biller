@@ -146,7 +146,7 @@
 - Related task: in tem theo số lượng (nút 🏷 IN TEM trên phiếu, mục MÁY IN TEM)
 - Description: Byte TSPL đúng cú pháp theo sách TSPL và đã kiểm bằng Vitest + Robot (APK giả), nhưng chưa
   lên giấy. Cần xác nhận trên máy: (a) máy ở chế độ nhận TSPL/label; (b) khổ tem + khe hở thật của cuộn
-  đang lắp (khổ 60×40 mm người dùng xác nhận 26/9, đã làm mặc định; khe 2 mm chưa đo); (c) `DIRECTION 1,0` ra chữ đúng chiều;
+  đang lắp (khổ 50×30 khe 2 đã in đúng trên máy thật 26/9, đã làm mặc định); (c) `DIRECTION 1,0` ra chữ đúng chiều;
   (d) job dài: plugin `PrinterSocket` chỉ có timeout lúc nối, lệnh ghi socket không có timeout — máy
   báo lỗi khe/cảm biến giữa job thì nút kẹt ở "Đang chuẩn bị tem…", in lại có thể ra tem gấp đôi khi máy
   hồi. Đơn trên 50 phần đã có câu nhắc trong hộp xác nhận.

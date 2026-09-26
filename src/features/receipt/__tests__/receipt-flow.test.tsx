@@ -68,7 +68,9 @@ vi.mock('../../printer/printer-sink', () => ({
 // Chụp tem cũng cần canvas thật. Màn này chỉ chịu trách nhiệm gọi đúng khổ + đúng số tem; byte TSPL
 // được kiểm ở tspl.test.ts và bằng Robot trên Chrome thật.
 const labelShim = vi.hoisted(() => ({
-  build: vi.fn(async (_node: HTMLElement, _size: unknown, count: number) => new Uint8Array([count])),
+  build: vi.fn<(items: readonly { node: HTMLElement; copies: number }[], size: unknown) => Promise<Uint8Array>>(
+    async (items) => new Uint8Array(items.map((item) => item.copies)),
+  ),
 }))
 vi.mock('../../printer/label-job', () => ({ buildLabelJob: labelShim.build }))
 
@@ -622,8 +624,11 @@ describe('in tem trong app native', () => {
 
     await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
     expect(labelShim.build).toHaveBeenCalledOnce()
+    const items = labelShim.build.mock.calls[0]?.[0] ?? []
+    expect(items.map((item) => item.copies)).toEqual([3])
+    // Tem mang tên món của chính dòng đó, không chỉ mã đơn.
+    expect(items[0]?.node.textContent).toContain('Phở bò')
     expect(labelShim.build.mock.calls[0]?.[1]).toEqual(temCfg)
-    expect(labelShim.build.mock.calls[0]?.[2]).toBe(3)
     expect(sinkShim.sink.mock.calls[0]?.[1]).toEqual(temCfg)
     expect(await screen.findByText('Đã gửi 3 tem tới máy in 192.168.1.60:9100.')).toBeDefined()
   })

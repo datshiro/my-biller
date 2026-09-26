@@ -13,8 +13,9 @@ import { buildReceiptJob } from '../printer/print-job'
 import { readPrinterConfig } from '../printer/printer-config'
 import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
 import { buildReceiptRawbtHref } from '../printer/rawbt-href'
-import { labelCount } from '@/domain/label-count'
+import { labelCopies, labelCount } from '@/domain/label-count'
 import { paginateLines } from '@/domain/receipt-pages'
+import type { OrderLine } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { EmptyState } from '@/ui/empty-state'
@@ -35,7 +36,7 @@ export function ReceiptPage() {
   // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
   const printLock = useRef(false)
   const [askPrint, setAskPrint] = useState(false)
-  const labelRef = useRef<HTMLDivElement | null>(null)
+  const labelRefs = useRef<(HTMLDivElement | null)[]>([])
   const labelLock = useRef(false)
   const [askLabel, setAskLabel] = useState(false)
   const [inTem, setInTem] = useState<{ busy: boolean; message: string | null; error: boolean; needConfig?: boolean }>({
@@ -174,19 +175,23 @@ export function ReceiptPage() {
   }
 
   // Như onPrintThermal: đọc lại cấu hình lúc gửi, khoá ref chống bấm-đúp (bấm đúp = in gấp đôi số tem).
-  const onPrintLabels = async (count: number) => {
+  const onPrintLabels = async (lines: readonly OrderLine[], count: number) => {
     if (labelLock.current) return
     const cfg = readLabelPrinterConfig()
     if (!cfg) {
       setInTem({ busy: false, message: 'Chưa cài máy in tem.', error: true, needConfig: true })
       return
     }
-    const node = labelRef.current
-    if (!node) return
+    const copies = labelCopies(lines)
+    const items = lines.flatMap((_, i) => {
+      const node = labelRefs.current[i]
+      return node ? [{ node, copies: copies[i] ?? 0 }] : []
+    })
+    if (items.length !== lines.length) return
     labelLock.current = true
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
-      await nativeSink(await buildLabelJob(node, cfg, count), cfg)
+      await nativeSink(await buildLabelJob(items, cfg), cfg)
       setInTem({ busy: false, message: `Đã gửi ${count} tem tới máy in ${cfg.host}:${cfg.port}.`, error: false })
     } catch (error) {
       setInTem({
@@ -262,7 +267,18 @@ export function ReceiptPage() {
 
           {showLabels ? (
             <div className="no-print -mt-4 h-0 overflow-hidden" aria-hidden="true">
-              <LabelView shop={shop} order={order} size={labelCfg ?? DEFAULT_LABEL_SIZE} innerRef={labelRef} />
+              {data.lines.map((line, index) => (
+                <LabelView
+                  key={line.id}
+                  shop={shop}
+                  order={order}
+                  line={line}
+                  size={labelCfg ?? DEFAULT_LABEL_SIZE}
+                  innerRef={(node) => {
+                    labelRefs.current[index] = node
+                  }}
+                />
+              ))}
             </div>
           ) : null}
 
@@ -440,7 +456,7 @@ export function ReceiptPage() {
               confirmVariant="primary"
               onConfirm={() => {
                 setAskLabel(false)
-                void onPrintLabels(labels)
+                void onPrintLabels(data.lines, labels)
               }}
               onCancel={() => setAskLabel(false)}
             />

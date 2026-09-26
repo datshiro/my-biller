@@ -5,8 +5,8 @@ import { parsePrinterConfig, type PrinterConfig } from './printer-config'
 export type LabelPrinterConfig = PrinterConfig & LabelSize
 
 export const LABEL_PRINTER_CONFIG_KEY = 'may-in-tem'
-/** Cuộn tem đang lắp ở quán: 60×40 mm. Khe 2 mm là mức phổ biến, chưa đo trên cuộn thật. */
-export const DEFAULT_LABEL_SIZE: LabelSize = { widthMm: 60, heightMm: 40, gapMm: 2 }
+/** Cuộn tem đang lắp ở quán: 50×30 mm, khe 2 mm — đã in đúng trên XP-365B thật. */
+export const DEFAULT_LABEL_SIZE: LabelSize = { widthMm: 50, heightMm: 30, gapMm: 2 }
 
 type Raw = { host: string; port: string; widthMm: string; heightMm: string; gapMm: string }
 type ParseResult = { ok: true; value: LabelPrinterConfig } | { ok: false; error: string }
