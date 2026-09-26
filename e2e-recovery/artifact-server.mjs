@@ -10,6 +10,19 @@ const roots = {
   // "bản mới" khi test đường cập nhật; mạng ra Worker bị chặn trong test nên URL staging vô hại.
   next: resolve('dist-next'),
 }
+const buildCommands = {
+  normal: 'npm run build',
+  recovery: 'npm run build:recovery',
+  next: 'npm run build:staging -- --outDir dist-next',
+}
+const missing = []
+for (const [name, root] of Object.entries(roots)) {
+  if (!(await stat(root).catch(() => null))?.isDirectory()) missing.push(`${root} (${buildCommands[name]})`)
+}
+if (missing.length > 0) {
+  console.error(`Thiếu thư mục build cho artifact server:\n  ${missing.join('\n  ')}`)
+  process.exit(1)
+}
 let mode = 'recovery'
 
 const contentTypes = {
