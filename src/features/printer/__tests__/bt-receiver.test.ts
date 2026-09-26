@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { toBase64 } from '@/domain/base64'
 import type { LaidBlock } from '@/domain/escpos/reflow'
-import { createBtReceiver, IDLE_MS, type BluetoothPrinterPlugin, type ReceiverDeps } from '../bt-receiver'
+import { createBtReceiver, IDLE_MS, MID_COMMAND_MAX_MS, type BluetoothPrinterPlugin, type ReceiverDeps } from '../bt-receiver'
 
 vi.mock('@capacitor/core', () => ({ registerPlugin: () => ({}), Capacitor: { isNativePlatform: () => true } }))
 
@@ -143,6 +143,41 @@ describe('bộ nhận in Bluetooth', () => {
     await receiver.idle()
     expect(deps.sink).toHaveBeenCalledTimes(1)
     expect(receiver.getState().log[0]).toMatchObject({ status: 'printed' })
+  })
+
+  it.each([
+    ['ảnh khai 100 hàng chỉ tới 1 hàng', Uint8Array.of(0x61, 0x0a, 0x1d, 0x76, 0x30, 0, 1, 0, 100, 0, 0xff)],
+    ['ESC lẻ cuối job', Uint8Array.of(0x61, 0x0a, 0x1b)],
+  ])('dở một lệnh (%s) mà im quá lâu → báo lỗi, job sau vẫn in', async (_name, bytes) => {
+    const { receiver, deps, emit, advance } = setup()
+    await receiver.start()
+    emit('data', { base64: toBase64(bytes) })
+    advance(IDLE_MS)
+    advance(MID_COMMAND_MAX_MS - IDLE_MS - 1)
+    expect(receiver.getState().log).toHaveLength(0)
+    advance(1)
+    expect(receiver.getState().log[0]).toMatchObject({
+      status: 'failed',
+      message: expect.stringContaining('dừng giữa chừng một lệnh'),
+    })
+
+    emit('data', { base64: chunk('Phở bò\n') })
+    await receiver.idle()
+    expect(deps.sink).toHaveBeenCalledTimes(1)
+    expect(receiver.getState().log[0]).toMatchObject({ status: 'printed' })
+  })
+
+  it('đóng nối khi đang chờ hạn giữa lệnh → chốt phần dở một lần, hạn cũ không ghi thêm', async () => {
+    const { receiver, emit, advance } = setup()
+    await receiver.start()
+    emit('connection', { state: 'connected', device: 'Laptop' })
+    emit('data', { base64: toBase64(Uint8Array.of(0x61, 0x0a, 0x1d, 0x76, 0x30, 0, 1, 0, 100, 0, 0xff)) })
+    advance(IDLE_MS)
+    emit('connection', { state: 'disconnected', device: 'Laptop' })
+    await receiver.idle()
+    expect(receiver.getState().log).toHaveLength(1)
+    advance(MID_COMMAND_MAX_MS)
+    expect(receiver.getState().log).toHaveLength(1)
   })
 
   it('in hỏng thì job gửi lại vẫn được in', async () => {

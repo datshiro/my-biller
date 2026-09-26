@@ -57,6 +57,11 @@ export type ReceiverDeps = {
  * thì không tính — cắt ngang lệnh là hỏng cả hai nửa; nối đóng mới chốt.
  */
 export const IDLE_MS = 2000
+/**
+ * Nhưng dở một lệnh mà im quá chừng này (ảnh khai 100 hàng chỉ tới 10, `ESC` lẻ cuối job) thì bỏ phần dở
+ * và báo lỗi — đợi tiếp thì job sau bị nuốt làm dữ liệu ảnh, không ra gì mà cũng không báo gì.
+ */
+export const MID_COMMAND_MAX_MS = 10_000
 const LOG_LIMIT = 20
 
 function startErrorMessage(caught: unknown): string {
@@ -127,8 +132,20 @@ export function createBtReceiver(deps: ReceiverDeps) {
 
   const onIdle = () => {
     idle = null
-    if (framer.midCommand) return
-    flushNow()
+    if (framer.midCommand) idle = deps.setTimer(onStalled, MID_COMMAND_MAX_MS - IDLE_MS)
+    else flushNow()
+  }
+
+  const onStalled = () => {
+    idle = null
+    if (!framer.flush()) return
+    addEntry({
+      id: nextId++,
+      at: deps.now(),
+      device: state.device ?? 'Không rõ máy gửi',
+      status: 'failed',
+      message: 'Job dừng giữa chừng một lệnh — máy gửi ngừng gửi byte. Gửi lại từ máy gửi.',
+    })
   }
 
   const flushNow = () => {
