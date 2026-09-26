@@ -1,0 +1,108 @@
+# Deploy Worker staging + Pages preview của đúng commit đang xét, rồi chạy bộ hai máy (Chrome thật) trên
+# Worker thật. Kích bằng nhãn `staging` trên PR (workflow_dispatch chỉ dùng được khi file đã nằm trên main).
+# Worker và Durable Object staging là tài nguyên dùng chung: mỗi lúc chỉ một lượt, không huỷ lượt đang chạy
+# (GitHub chỉ giữ một lượt chờ: lượt chờ của PR khác có thể bị lượt mới thay chỗ — chạy lại nếu cần).
+name: Deploy staging
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: Deploy staging + Robot hai máy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (contains(github.event.pull_request.labels.*.name, 'staging') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'staging') &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: staging
+      url: ${{ steps.pages.outputs.preview_url }}
+    env:
+      WORKER_URL: https://my-biller-sync-staging.datshiro.workers.dev
+    steps:
+      # Đúng commit đầu PR (không phải merge ref) để kết quả staging gắn với commit ghi trên deployment.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: robot/requirements.txt
+
+      - run: npm ci
+
+      - name: Deploy Worker staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npm run worker:deploy:staging
+          curl --fail --silent --show-error --retry 5 --retry-all-errors "$WORKER_URL/health"
+
+      - name: Dựng bundle staging và kiểm không trỏ production
+        run: |
+          set -euo pipefail
+          npm run build:staging
+          grep -Rql 'my-biller-sync-staging.datshiro.workers.dev' dist/assets
+          if grep -Rql 'my-biller-sync.datshiro.workers.dev' dist; then exit 1; fi
+          grep -q '<title>my-biller — Bán hàng</title>' dist/index.html
+
+      - name: Deploy Pages preview bất biến
+        id: pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          output="$(npx wrangler pages deploy dist --project-name an-quynh --branch staging-ci \
+            --commit-hash "$COMMIT_SHA" --commit-dirty=false --commit-message "staging $COMMIT_SHA")"
+          printf '%s\n' "$output"
+          preview_url="$(grep -Eo 'https://[0-9a-f]+\.an-quynh\.pages\.dev' <<<"$output" | tail -1)"
+          test -n "$preview_url"
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
+          for attempt in $(seq 30); do
+            if curl --fail --silent "$preview_url/" | grep -q '<title>my-biller — Bán hàng</title>'; then exit 0; fi
+            sleep 2
+          done
+          echo "Preview $preview_url chưa phục vụ bản vừa deploy." >&2
+          exit 1
+
+      - name: Cài Robot Framework và Google Chrome
+        run: ./robot/install.sh --with-deps
+
+      - name: Robot hai máy trên staging
+        env:
+          ROBOT_REMOTE: "1"
+          BASE_URL: ${{ steps.pages.outputs.preview_url }}
+          ROBOT_WORKER_ADMIN_SECRET: ${{ secrets.STAGING_ADMIN_SECRET }}
+        run: ./robot/run.sh robot/tests/hai-may.robot
+
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: robot-staging-results
+          path: robot/results/
+          if-no-files-found: ignore
+          retention-days: 7
