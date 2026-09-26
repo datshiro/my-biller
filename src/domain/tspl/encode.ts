@@ -18,6 +18,21 @@ export function labelDots(size: LabelSize): { width: number; height: number } {
   return { width: size.widthMm * DOTS_PER_MM, height: size.heightMm * DOTS_PER_MM }
 }
 
+/**
+ * Chỗ máy in vẽ số thứ tự của tem cuối (chuỗi dài nhất) — góc dưới phải. Tem từ 40 mm cao trở lên còn
+ * chỗ nên phóng đôi cho đọc được từ xa. Dùng chung với `LabelView` để chữ trên tem chừa đúng chỗ này.
+ */
+export function counterBox(size: LabelSize, count: number): { x: number; y: number; scale: number } {
+  const dots = labelDots(size)
+  const scale = dots.height >= 40 * DOTS_PER_MM ? 2 : 1
+  const width = COUNTER_FONT.width * scale * `${count}/${count}`.length
+  return {
+    x: Math.max(0, dots.width - width - COUNTER_MARGIN),
+    y: dots.height - COUNTER_FONT.height * scale - COUNTER_MARGIN,
+    scale,
+  }
+}
+
 const ascii = (text: string) => Uint8Array.from(text, (ch) => ch.charCodeAt(0))
 
 /**
@@ -60,9 +75,7 @@ export function encodeLabels(labels: readonly Bitmap[], size: LabelSize): Uint8A
         'REFERENCE 0,0\r\n',
     ),
   ]
-  // Tem từ 40 mm cao trở lên còn chỗ: phóng đôi số thứ tự cho đọc được từ xa.
-  const scale = dots.height >= 40 * DOTS_PER_MM ? 2 : 1
-  const counterY = dots.height - COUNTER_FONT.height * scale - COUNTER_MARGIN
+  const { scale, y: counterY } = counterBox(size, count)
   labels.forEach((bitmap, index) => {
     const counter = `${index + 1}/${count}`
     const counterX = Math.max(0, dots.width - COUNTER_FONT.width * scale * counter.length - COUNTER_MARGIN)

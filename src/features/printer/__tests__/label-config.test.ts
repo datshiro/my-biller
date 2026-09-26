@@ -29,7 +29,8 @@ describe('parseLabelPrinterConfig', () => {
   it('khổ ngoài tầm XP-365B hoặc mm lẻ → lỗi, không làm tròn hộ', () => {
     expect(parseLabelPrinterConfig({ ...raw, widthMm: '80' }).ok).toBe(false)
     expect(parseLabelPrinterConfig({ ...raw, widthMm: '40.5' }).ok).toBe(false)
-    expect(parseLabelPrinterConfig({ ...raw, heightMm: '15' }).ok).toBe(false)
+    expect(parseLabelPrinterConfig({ ...raw, heightMm: '24' }).ok).toBe(false)
+    expect(parseLabelPrinterConfig({ ...raw, widthMm: '29' }).ok).toBe(false)
     expect(parseLabelPrinterConfig({ ...raw, gapMm: '11' }).ok).toBe(false)
     expect(parseLabelPrinterConfig({ ...raw, gapMm: '0' }).ok).toBe(true)
   })

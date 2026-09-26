@@ -155,3 +155,26 @@
   (APK gộp tem + nhận in Bluetooth). Lỗi lần đầu là cuộn tem lắp ngược mặt, không phải code. Chưa thử (d).
 - Mitigation: Chuyến quán cùng ISSUE-007/008: in đơn 3 phần, đơn 30 phần, và một job khi cố tình sai khe
   hở. Nếu (d) xảy ra thật: thêm watchdog đóng socket trong `PrinterSocketPlugin.java` (cần dựng lại APK).
+
+### ISSUE-010 — In phiếu và in nhận qua Bluetooth không xếp hàng chung trên máy in TCP
+- State: deferred
+- Severity: medium
+- Raised by / Date: review độc lập PR #39 / 26/9/2026
+- Related task: 2.6.0 nhận in qua Bluetooth (`src/features/printer/bt-receiver.ts`)
+- Description: Hàng đợi của `bt-receiver` chỉ xếp các job Bluetooth với nhau; nút in phiếu và IN THỬ gọi
+  `nativeSink` trực tiếp. Job Bluetooth đang đổ vào cổng 9100 mà người bán bấm in phiếu thì mở nối TCP
+  thứ hai — tuỳ firmware SPR02, một trong hai báo "In hỏng" (phải in lại) hoặc chờ rồi in sau. Không có
+  đường in trùng hay sai sổ.
+- Mitigation: Gom chuỗi promise vào `printer-sink.ts` (một `serialSink` dùng chung cho cả ba nơi gọi).
+  Thử trên SPR02: job Bluetooth và phiếu cùng lúc để biết máy từ chối hay giữ nối thứ hai.
+
+### ISSUE-011 — Lệnh bị cắt giữa chừng trên nối Bluetooth giữ mở làm kẹt im lặng các job sau
+- State: deferred
+- Severity: medium
+- Raised by / Date: review độc lập PR #39 (đã dựng lại bằng probe) / 26/9/2026
+- Related task: 2.6.0 nhận in qua Bluetooth (`bt-receiver.ts` `onIdle`, `job-framer.ts`)
+- Description: Khi framer đang ở giữa một lệnh (`midCommand`), `onIdle` không hẹn giờ lại. Ảnh `GS v 0`
+  khai 100 hàng mà chỉ tới 10 hàng, hay một `ESC` lẻ ở cuối, làm job kế tiếp bị nuốt làm dữ liệu ảnh:
+  0 job ra, không log, không lỗi, cho tới khi máy gửi ngắt nối.
+- Mitigation: Giới hạn thời gian chờ giữa lệnh (vd ~10 s tổng) rồi `flushNow()` để job dở báo lỗi
+  "Job dừng giữa chừng một lệnh" thay vì biến mất. Hỏi xem app gửi ở quán có giữ nối SPP mở không.

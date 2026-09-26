@@ -22,11 +22,11 @@ function parseMm(raw: string, min: number, max: number): number | null {
 export function parseLabelPrinterConfig(raw: Raw): ParseResult {
   const printer = parsePrinterConfig(raw.host, raw.port)
   if (!printer.ok) return printer
-  const widthMm = parseMm(raw.widthMm, 20, 72)
-  if (widthMm === null) return { ok: false, error: 'Chiều rộng tem phải là số mm từ 20 đến 72.' }
-  // Dưới 20 mm thì số thứ tự `i/n` (cao 32 chấm) đè lên dòng tên khách.
-  const heightMm = parseMm(raw.heightMm, 20, 100)
-  if (heightMm === null) return { ok: false, error: 'Chiều cao tem phải là số mm từ 20 đến 100.' }
+  // Nhỏ hơn 30×25 mm thì tên món, ghi chú, tên khách và số thứ tự `i/n` không còn đủ chỗ mà không đè nhau.
+  const widthMm = parseMm(raw.widthMm, 30, 72)
+  if (widthMm === null) return { ok: false, error: 'Chiều rộng tem phải là số mm từ 30 đến 72.' }
+  const heightMm = parseMm(raw.heightMm, 25, 100)
+  if (heightMm === null) return { ok: false, error: 'Chiều cao tem phải là số mm từ 25 đến 100.' }
   const gapMm = parseMm(raw.gapMm, 0, 10)
   if (gapMm === null) return { ok: false, error: 'Khe hở giữa hai tem phải là số mm từ 0 đến 10.' }
   return { ok: true, value: { ...printer.value, widthMm, heightMm, gapMm } }

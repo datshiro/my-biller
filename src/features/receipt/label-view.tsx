@@ -1,5 +1,5 @@
 import { format } from 'date-fns'
-import { labelDots, type LabelSize } from '@/domain/tspl/encode'
+import { counterBox, labelDots, type LabelSize } from '@/domain/tspl/encode'
 import type { Order, OrderLine, ShopSettings } from '@/domain/schema'
 
 /**
@@ -11,23 +11,27 @@ export function LabelView({
   order,
   line,
   size,
+  count,
   innerRef,
 }: {
   shop: ShopSettings
   order: Order
   line: OrderLine
   size: LabelSize
+  /** Tổng số tem của đơn — để chừa đủ chỗ cho số thứ tự dài nhất (`12/12`) ở góc dưới phải. */
+  count: number
   innerRef?: React.Ref<HTMLDivElement>
 }) {
   const { width, height } = labelDots(size)
   const unit = height / 10
+  const padding = unit * 0.4
 
   return (
     <div
       ref={innerRef}
       data-label
       className="flex flex-col overflow-hidden bg-white leading-tight text-ink"
-      style={{ width, height, padding: unit * 0.4 }}
+      style={{ width, height, padding }}
     >
       {shop.name ? (
         <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
@@ -47,7 +51,7 @@ export function LabelView({
           {line.note}
         </p>
       ) : null}
-      <p className="mt-auto truncate font-semibold" style={{ fontSize: unit * 0.75, maxWidth: width * 0.55 }}>
+      <p className="mt-auto truncate font-semibold" style={{ fontSize: unit * 0.75, maxWidth: counterBox(size, count).x - padding - 4 }}>
         {order.customerName}
       </p>
     </div>

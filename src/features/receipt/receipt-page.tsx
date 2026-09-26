@@ -187,7 +187,10 @@ export function ReceiptPage() {
       const node = labelRefs.current[i]
       return node ? [{ node, copies: copies[i] ?? 0 }] : []
     })
-    if (items.length !== lines.length) return
+    if (items.length !== lines.length) {
+      setInTem({ busy: false, message: 'Chưa dựng xong tem — thử lại sau giây lát.', error: true })
+      return
+    }
     labelLock.current = true
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
@@ -274,6 +277,7 @@ export function ReceiptPage() {
                   order={order}
                   line={line}
                   size={labelCfg ?? DEFAULT_LABEL_SIZE}
+                  count={labels}
                   innerRef={(node) => {
                     labelRefs.current[index] = node
                   }}
