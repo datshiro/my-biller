@@ -1,5 +1,26 @@
 # Ghi chú phát hành
 
+## 2.7.0 — in tem theo số lượng, mỗi tem ghi tên món (máy in tem XPrinter XP-365B qua LAN) (26/9/2026)
+
+> Chỉ frontend. Không đổi schema IndexedDB, không di trú, không đụng Worker hay đồng bộ: cấu hình máy
+> tem nằm ở localStorage của từng máy như máy in phiếu. APK tăng versionCode 2 → 3 để cài đè được.
+
+### Người bán thấy gì
+
+- **Màn phiếu (trong APK) có thêm nút 🏷 IN TEM (n tem).** n là tổng số lượng của đơn, số lượng lẻ làm
+  tròn lên từng dòng. Bấm mở hộp xác nhận ghi rõ số tem, khổ tem và IP máy tem. Đơn huỷ không có nút.
+- **Cài đặt có thêm mục MÁY IN TEM:** IP, cổng, rộng × cao tem và khe hở (mm), mặc định 50×30 khe 2 (khổ cuộn tem của quán).
+  Máy tem là máy riêng, khác máy in phiếu.
+- Mỗi tem là một phần của một món: in **tên món** (to nhất), ghi chú của món nếu có, tên quán, mã đơn,
+  giờ bán, tên khách và số thứ tự `i/n` của cả đơn ở góc dưới phải. Đơn Choco Mint ×3 + Matcha ×4 ra 3 tem
+  Choco Mint rồi 4 tem Matcha.
+
+### Đã in thật
+
+- 26/9 in đúng trên XP-365B (tem 50×30 khe 2, đúng chiều, có tên món và ghi chú) ở điện thoại chủ quán
+  và máy nhân viên. Chưa thử máy kẹt giữa một job dài — lệnh ghi socket trong plugin không có timeout
+  (ISSUE-009).
+
 ## 2.6.0 — APK nhận in qua Bluetooth, in lại ra máy in nhiệt (26/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không di trú, không đụng Worker. Tính năng chỉ có trong APK; bản

@@ -436,6 +436,93 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
+In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
+    [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
+    ...    IN TEM thật và đọc được đúng byte TSPL app định gửi. Số tem đối chiếu với orderLines trong
+    ...    IndexedDB (tổng số lượng làm tròn lên từng dòng), không chỉ tin chữ trên nút.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    192.168.1.50
+    Click    css=button:text-is("LƯU")
+    Chờ Thấy Chữ    Đã lưu 192.168.1.50:9100
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×30 mm
+
+    Mở Màn    /
+    Chọn Món    Trà đá    2
+    Chọn Món    Cà phê sữa
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${mã_đơn}=    Set Variable    ${đơn}[id]
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $mã_đơn]
+    ${số_tem}=    Evaluate    sum(math.ceil(d['qty']) for d in $của_đơn)    modules=math
+    Should Be Equal As Integers    ${số_tem}    3
+
+    Click    css=button[data-label-print]
+    Chờ Hộp Xác Nhận    In 3 tem cho đơn ${đơn}[code]?
+    Chờ Thấy Chữ    tới máy in tem 192.168.1.60:9100
+    Xác Nhận Trong Hộp    In tem
+    Chờ Thấy Chữ    Đã gửi 3 tem tới máy in 192.168.1.60:9100.
+
+    ${jobs}=    Evaluate JavaScript    ${None}    () => window.__printJobs.map((j) => ({ ...j, text: atob(j.base64) }))
+    Length Should Be    ${jobs}    1    Một lần bấm phải ra đúng một job.
+    Should Be Equal    ${jobs}[0][host]    192.168.1.60
+    Should Be Equal As Integers    ${jobs}[0][port]    9100
+    ${tspl}=    Set Variable    ${jobs}[0][text]
+    Should Start With    ${tspl}    SIZE 50 mm,30 mm\r\nGAP 2 mm,0 mm\r\n
+    Should Be Equal As Integers    ${{ $tspl.count('PRINT 1,1') }}    3
+    Should Contain    ${tspl}    "1/3"
+    Should Contain    ${tspl}    "3/3"
+    Should Not Contain    ${tspl}    "4/3"
+    # Ảnh tem phải có mực: chụp hỏng ra tờ trắng trơn (toàn 0xFF trong TSPL) thì đếm lệnh vẫn đủ.
+    ${mực}=    Evaluate JavaScript    ${None}
+    ...    () => { const t = atob(window.__printJobs[0].base64); const head = 'BITMAP 0,0,50,240,0,';
+    ...    const at = t.indexOf(head) + head.length; let ink = 0;
+    ...    for (let i = at; i < at + 50 * 240; i++) if (t.charCodeAt(i) !== 0xff) ink++; return ink }
+    Should Be True    ${mực} > 100    Ảnh tem gần như trắng trơn — khâu chụp tem hỏng.
+    # Mỗi tem mang món của chính nó: hai tem Trà đá chung một ảnh, tem Cà phê sữa là ảnh khác.
+    ${giống}=    Evaluate JavaScript    ${None}
+    ...    () => { const t = atob(window.__printJobs[0].base64); const head = 'BITMAP 0,0,50,240,0,';
+    ...    const imgs = []; for (let at = t.indexOf(head); at !== -1; at = t.indexOf(head, at + 1))
+    ...    imgs.push(t.slice(at + head.length, at + head.length + 50 * 240));
+    ...    return [imgs.length, imgs[0] === imgs[1], imgs[1] === imgs[2]] }
+    Should Be Equal    ${giống}    ${{ [3, True, False] }}
+
+In tem: chưa cài máy in tem thì báo kèm đường vào Cài đặt, không gửi gì
+    [Documentation]    Không có khổ và IP thì không được đoán — gửi tem tới máy in phiếu là in ra giấy phí.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Bán Nhanh    Trà đá
+    Click    css=button[data-label-print]
+    Xác Nhận Trong Hộp    In tem
+    Chờ Thấy Chữ    Chưa cài máy in tem.
+    Chờ Thấy Chữ    Vào Cài đặt › MÁY IN TEM
+    ${jobs}=    Evaluate JavaScript    ${None}    () => window.__printJobs.length
+    Should Be Equal As Integers    ${jobs}    0
+
+In tem: trên web không có nút IN TEM, khổ tem lưu được và còn sau khi tải lại
+    [Documentation]    Web không mở được TCP nên nút IN TEM chỉ có trong APK. Mục MÁY IN TEM vẫn hiện để
+    ...    cài trước; khoá riêng `may-in-tem` để tem không chạy nhầm sang máy in phiếu.
+    Bán Nhanh    Trà đá
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    Get Element Count    css=button[data-label-print]    ==    0
+
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Điền Ô    Rộng tem (mm)    50
+    Điền Ô    Cao tem (mm)    25
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×25 mm
+    ${lưu}=    Evaluate JavaScript    ${None}    () => localStorage.getItem('may-in-tem')
+    Should Be Equal    ${lưu}    {"host":"192.168.1.60","port":9100,"widthMm":50,"heightMm":25,"gapMm":2}
+    ${máy_in_phiếu}=    Evaluate JavaScript    ${None}    () => localStorage.getItem('may-in')
+    Should Be Equal    ${máy_in_phiếu}    ${None}
+    Reload
+    ${rộng}=    Đọc Ô    Rộng tem (mm)
+    Should Be Equal    ${rộng}    50
+
 *** Keywords ***
 Dựng Đơn Nhiều Dòng
     [Documentation]    Seed một đơn ${số_dòng} dòng qua repository (như e2e `buildReceiptWithLines`)

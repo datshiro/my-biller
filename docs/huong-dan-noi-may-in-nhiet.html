@@ -152,7 +152,14 @@
       <li><b>Cài đặt › MÁY IN</b> → điền <b>Địa chỉ IP máy in</b> và <b>Cổng</b> (mặc định <code>9100</code>)
         → <b>LƯU</b> → <b>IN THỬ</b> → hộp xác nhận → <b>In</b>.</li>
       <li>In phiếu thật: mở một đơn → <b>Xem phiếu</b> → <b>🖨 IN MÁY IN NHIỆT</b> → hộp xác nhận → <b>In</b>.</li>
+      <li>In tem (máy in tem XPrinter nối LAN, chỉ có trong APK): <b>Cài đặt › MÁY IN TEM</b> → điền IP
+        máy tem, cổng (mặc định <code>9100</code>), khổ tem rộng × cao và khe hở (mm, mặc định 50×30, khe 2)
+        → <b>LƯU MÁY IN TEM</b>. Rồi ở phiếu bấm <b>🏷 IN TEM (n tem)</b> → hộp xác nhận → <b>In tem</b>.
+        Mỗi phần hàng một tem (tổng số lượng, số lẻ làm tròn lên từng dòng); tem in tên quán, mã đơn, giờ,
+        tên khách và số thứ tự <code>i/n</code>, kèm <b>tên món</b> và ghi chú của món trên từng tem.</li>
     </ol>
+    <p class="note">Máy tem nhận lệnh TSPL. Nếu tem in lệch qua khe hở, kiểm lại khổ và khe hở trong
+      Cài đặt cho đúng cuộn tem đang lắp, và bật chế độ nhãn (label) trên máy.</p>
     <p class="ok">Đường này đã in thử và in phiếu thật thành công trên máy SPR02 tại quán, kể cả đường lỗi
       (máy tắt/sai IP báo trong vòng vài giây) và giấy tự cắt sau khi in.</p>
     <label class="check"><input type="checkbox"> Đã Ghép máy (nếu cần) và IN THỬ ra giấy</label>
