@@ -15,21 +15,21 @@ afterEach(() => {
 })
 
 describe('mục MÁY IN TEM trong Cài đặt', () => {
-  it('khổ mặc định 40×30 khe 2; nhập IP rồi LƯU → ghi đủ khổ vào khoá riêng', async () => {
+  it('khổ mặc định 60×40 khe 2 (cuộn tem của quán); nhập IP rồi LƯU → ghi đủ khổ vào khoá riêng', async () => {
     render(<LabelPrinterSection />)
-    expect((screen.getByLabelText('Rộng tem (mm)') as HTMLInputElement).value).toBe('40')
-    expect((screen.getByLabelText('Cao tem (mm)') as HTMLInputElement).value).toBe('30')
+    expect((screen.getByLabelText('Rộng tem (mm)') as HTMLInputElement).value).toBe('60')
+    expect((screen.getByLabelText('Cao tem (mm)') as HTMLInputElement).value).toBe('40')
     expect((screen.getByLabelText('Khe hở (mm)') as HTMLInputElement).value).toBe('2')
 
     await userEvent.type(screen.getByLabelText('Địa chỉ IP máy in tem'), '192.168.1.60')
     await userEvent.click(screen.getByRole('button', { name: 'LƯU MÁY IN TEM' }))
 
-    expect(screen.getByText('Đã lưu 192.168.1.60:9100 · tem 40×30 mm')).toBeDefined()
+    expect(screen.getByText('Đã lưu 192.168.1.60:9100 · tem 60×40 mm')).toBeDefined()
     expect(JSON.parse(localStorage.getItem(LABEL_PRINTER_CONFIG_KEY) ?? '')).toEqual({
       host: '192.168.1.60',
       port: 9100,
-      widthMm: 40,
-      heightMm: 30,
+      widthMm: 60,
+      heightMm: 40,
       gapMm: 2,
     })
   })

@@ -53,14 +53,16 @@ export function encodeLabels(bitmap: Bitmap, size: LabelSize, count: number): Ui
         'REFERENCE 0,0\r\n',
     ),
   ]
-  const counterY = dots.height - COUNTER_FONT.height - COUNTER_MARGIN
+  // Tem từ 40 mm cao trở lên còn nửa dưới trống: phóng đôi số thứ tự cho đọc được từ xa.
+  const scale = dots.height >= 40 * DOTS_PER_MM ? 2 : 1
+  const counterY = dots.height - COUNTER_FONT.height * scale - COUNTER_MARGIN
   for (let i = 1; i <= count; i++) {
     const counter = `${i}/${count}`
-    const counterX = Math.max(0, dots.width - COUNTER_FONT.width * counter.length - COUNTER_MARGIN)
+    const counterX = Math.max(0, dots.width - COUNTER_FONT.width * scale * counter.length - COUNTER_MARGIN)
     parts.push(
       ascii(`CLS\r\nBITMAP 0,0,${stride},${bitmap.height},0,`),
       raster,
-      ascii(`\r\nTEXT ${counterX},${counterY},"${COUNTER_FONT.name}",0,1,1,"${counter}"\r\nPRINT 1,1\r\n`),
+      ascii(`\r\nTEXT ${counterX},${counterY},"${COUNTER_FONT.name}",0,${scale},${scale},"${counter}"\r\nPRINT 1,1\r\n`),
     )
   }
 

@@ -9,13 +9,13 @@
 
 - **Màn phiếu (trong APK) có thêm nút 🏷 IN TEM (n tem).** n là tổng số lượng của đơn, số lượng lẻ làm
   tròn lên từng dòng. Bấm mở hộp xác nhận ghi rõ số tem, khổ tem và IP máy tem. Đơn huỷ không có nút.
-- **Cài đặt có thêm mục MÁY IN TEM:** IP, cổng, rộng × cao tem và khe hở (mm), mặc định 40×30 khe 2.
+- **Cài đặt có thêm mục MÁY IN TEM:** IP, cổng, rộng × cao tem và khe hở (mm), mặc định 60×40 khe 2 (khổ cuộn tem của quán).
   Máy tem là máy riêng, khác máy in phiếu.
 - Mỗi tem in tên quán, mã đơn, giờ bán, tên khách và số thứ tự `i/n` ở góc dưới phải; không in tên món.
 
 ### Chưa xác nhận trên máy thật
 
-- Lệnh TSPL, khổ tem thật và khe hở chưa được thử trên máy XPrinter 365B tại quán, kể cả chiều `DIRECTION` và việc máy kẹt giữa job dài (lệnh ghi socket trong plugin không có timeout).
+- Lệnh TSPL, khổ tem thật và khe hở chưa được thử trên máy XPrinter XP-365B tại quán, kể cả chiều `DIRECTION` và việc máy kẹt giữa job dài (lệnh ghi socket trong plugin không có timeout).
 
 ## 2.5.1 — phóng to dòng tổng tiền trên phiếu (15/9/2026)
 

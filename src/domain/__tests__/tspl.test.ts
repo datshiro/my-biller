@@ -33,6 +33,12 @@ describe('encodeLabels', () => {
     expect(job).not.toContain('"4/3"')
   })
 
+  it('tem cao từ 40 mm: số thứ tự phóng đôi, vẫn sát góc dưới phải', () => {
+    const job = latin1(encodeLabels(blank(480, 320), { widthMm: 60, heightMm: 40, gapMm: 2 }, 2))
+    // "1/2" rộng 3×48 = 144 → x = 480 − 144 − 8; cao 64 → y = 320 − 64 − 8.
+    expect(job).toContain('TEXT 328,248,"4",0,2,2,"1/2"')
+  })
+
   it('tem hẹp mà số thứ tự dài → kẹp x về 0, không vẽ ra ngoài mép trái', () => {
     const narrow = { widthMm: 20, heightMm: 30, gapMm: 2 }
     const job = latin1(encodeLabels(blank(160, 240), narrow, 100))

@@ -139,14 +139,14 @@
   trong hộp xác nhận ra một tờ. Nếu lệch: T6 hạ `ROWS_PER_BAND` (64/48) hoặc đổi `DOTS_PER_LINE`/
   `THERMAL_RATIO` (số đo pha 5). Rủi ro thấp — đường tiền/nội dung đã khớp ở phiếu ngắn thật.
 
-### ISSUE-009 — In tem TSPL chưa nghiệm trên máy XPrinter 365B thật
+### ISSUE-009 — In tem TSPL chưa nghiệm trên máy XPrinter XP-365B thật
 - State: deferred
 - Severity: medium
 - Raised by / Date: review độc lập nhánh `feature/in-tem-theo-so-luong` / 26/9/2026
 - Related task: in tem theo số lượng (nút 🏷 IN TEM trên phiếu, mục MÁY IN TEM)
 - Description: Byte TSPL đúng cú pháp theo sách TSPL và đã kiểm bằng Vitest + Robot (APK giả), nhưng chưa
   lên giấy. Cần xác nhận trên máy: (a) máy ở chế độ nhận TSPL/label; (b) khổ tem + khe hở thật của cuộn
-  đang lắp (người dùng chưa cho khổ, mặc định 40×30 khe 2); (c) `DIRECTION 1,0` ra chữ đúng chiều;
+  đang lắp (khổ 60×40 mm người dùng xác nhận 26/9, đã làm mặc định; khe 2 mm chưa đo); (c) `DIRECTION 1,0` ra chữ đúng chiều;
   (d) job dài: plugin `PrinterSocket` chỉ có timeout lúc nối, lệnh ghi socket không có timeout — máy
   báo lỗi khe/cảm biến giữa job thì nút kẹt ở "Đang chuẩn bị tem…", in lại có thể ra tem gấp đôi khi máy
   hồi. Đơn trên 50 phần đã có câu nhắc trong hộp xác nhận.

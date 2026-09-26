@@ -447,7 +447,7 @@ In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ kh
     Chờ Thấy Chữ    Đã lưu 192.168.1.50:9100
     Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
     Bấm Nút    LƯU MÁY IN TEM
-    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 40×30 mm
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 60×40 mm
 
     Mở Màn    /
     Chọn Món    Trà đá    2
@@ -472,16 +472,16 @@ In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ kh
     Should Be Equal    ${jobs}[0][host]    192.168.1.60
     Should Be Equal As Integers    ${jobs}[0][port]    9100
     ${tspl}=    Set Variable    ${jobs}[0][text]
-    Should Start With    ${tspl}    SIZE 40 mm,30 mm\r\nGAP 2 mm,0 mm\r\n
+    Should Start With    ${tspl}    SIZE 60 mm,40 mm\r\nGAP 2 mm,0 mm\r\n
     Should Be Equal As Integers    ${{ $tspl.count('PRINT 1,1') }}    3
     Should Contain    ${tspl}    "1/3"
     Should Contain    ${tspl}    "3/3"
     Should Not Contain    ${tspl}    "4/3"
     # Ảnh tem phải có mực: chụp hỏng ra tờ trắng trơn (toàn 0xFF trong TSPL) thì đếm lệnh vẫn đủ.
     ${mực}=    Evaluate JavaScript    ${None}
-    ...    () => { const t = atob(window.__printJobs[0].base64); const head = 'BITMAP 0,0,40,240,0,';
+    ...    () => { const t = atob(window.__printJobs[0].base64); const head = 'BITMAP 0,0,60,320,0,';
     ...    const at = t.indexOf(head) + head.length; let ink = 0;
-    ...    for (let i = at; i < at + 40 * 240; i++) if (t.charCodeAt(i) !== 0xff) ink++; return ink }
+    ...    for (let i = at; i < at + 60 * 320; i++) if (t.charCodeAt(i) !== 0xff) ink++; return ink }
     Should Be True    ${mực} > 100    Ảnh tem gần như trắng trơn — khâu chụp tem hỏng.
 
 In tem: chưa cài máy in tem thì báo kèm đường vào Cài đặt, không gửi gì
