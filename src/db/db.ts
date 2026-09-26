@@ -53,6 +53,13 @@ async function backfillGids(
 }
 
 /**
+ * Transaction ghi lại đúng nguyên văn một bản đã chụp (cuộn ngược thao tác bị từ chối). Dexie chỉ đưa
+ * cho hook `updating` phần khác nhau, nên bản dán lại có `updatedAt` trùng bản hiện tại sẽ bị đóng dấu
+ * giờ mới và không còn khớp `after` của thao tác trước nó.
+ */
+export const verbatimWrites = new WeakSet<Transaction>()
+
+/**
  * `createdAt` chỉ được đặt khi bản ghi chưa có — nhập file sao lưu phải giữ nguyên mốc thời gian gốc,
  * không được đóng dấu ngày nhập lên toàn bộ dữ liệu cũ.
  */
@@ -64,8 +71,10 @@ function stampTimestamps<T extends Stamped>(table: Table<T, number>): void {
     row.updatedAt ??= now
   })
 
-  table.hook('updating', (modifications) =>
-    'updatedAt' in (modifications as object) ? undefined : { updatedAt: Date.now() },
+  table.hook('updating', (modifications, _primKey, _obj, transaction) =>
+    'updatedAt' in (modifications as object) || verbatimWrites.has(transaction)
+      ? undefined
+      : { updatedAt: Date.now() },
   )
 }
 

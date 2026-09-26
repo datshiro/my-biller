@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db'
 import {
   beginDevicePairing,
@@ -378,6 +378,36 @@ describe('rollback từ chối nghiệp vụ', () => {
     expect(await db.deviceState.get('notice')).toMatchObject({
       message: expect.stringContaining('2 thao tác làm sau'),
     })
+  })
+
+  it('hai lần đổi giá trong cùng một mili giây vẫn cuộn ngược về giá gốc', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000)
+    try {
+      const id = await createItem({
+        name: 'Phở',
+        groupId: null,
+        unit: 'tô',
+        unitPrice: 50_000,
+        costPrice: null,
+        isActive: 1,
+      })
+      await db.outbox.clear()
+      clock.mockReturnValue(1_800_000_000_002)
+      await updateItem(id, { unitPrice: 55_000 })
+      const rejected = (await db.outbox.orderBy('id').first())!
+      await updateItem(id, { unitPrice: 60_000 })
+      clock.mockReturnValue(1_800_000_000_004)
+
+      await rollbackRejectedTail(rejected, leader, 'Máy chủ từ chối.')
+
+      expect(await db.items.get(id)).toMatchObject({
+        unitPrice: 50_000,
+        updatedAt: 1_800_000_000_000,
+      })
+      expect(await db.deviceState.get('sync')).toMatchObject({ resyncRequired: false })
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it('không dán before đè thay đổi mới và đánh dấu kéo lại từ đầu', async () => {

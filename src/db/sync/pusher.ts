@@ -1,5 +1,5 @@
 import type { Transaction } from 'dexie'
-import { db } from '../db'
+import { db, verbatimWrites } from '../db'
 import { getDeviceSyncState } from '../repositories/device-state'
 import { pushEvent, SyncApiError } from './client'
 import { assertLeadership, type LeaderToken } from './leader'
@@ -51,6 +51,7 @@ export async function rollbackRejectedTail(
   const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
   await db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
     await assertLeadership(db, leader)
+    verbatimWrites.add(transaction)
     const tail = (await db.outbox.toArray())
       .filter((row) => (row.id ?? 0) >= (rejected.id ?? 0))
       .sort((left, right) => (right.id ?? 0) - (left.id ?? 0))
