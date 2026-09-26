@@ -1,9 +1,9 @@
 # Ghi chú phát hành
 
-## Chưa phát hành — in tem theo số lượng (máy in tem XPrinter XP-365B qua LAN)
+## 2.7.0 — in tem theo số lượng, mỗi tem ghi tên món (máy in tem XPrinter XP-365B qua LAN) (26/9/2026)
 
 > Chỉ frontend. Không đổi schema IndexedDB, không di trú, không đụng Worker hay đồng bộ: cấu hình máy
-> tem nằm ở localStorage của từng máy như máy in phiếu.
+> tem nằm ở localStorage của từng máy như máy in phiếu. APK tăng versionCode 2 → 3 để cài đè được.
 
 ### Người bán thấy gì
 
@@ -15,9 +15,12 @@
   giờ bán, tên khách và số thứ tự `i/n` của cả đơn ở góc dưới phải. Đơn Choco Mint ×3 + Matcha ×4 ra 3 tem
   Choco Mint rồi 4 tem Matcha.
 
-### Chưa xác nhận trên máy thật
+### Đã in thật
 
-- Lệnh TSPL, khổ tem thật và khe hở chưa được thử trên máy XPrinter XP-365B tại quán, kể cả chiều `DIRECTION` và việc máy kẹt giữa job dài (lệnh ghi socket trong plugin không có timeout).
+- 26/9 in đúng trên XP-365B (tem 50×30 khe 2, đúng chiều, có tên món và ghi chú) ở điện thoại chủ quán
+  và máy nhân viên. Chưa thử máy kẹt giữa một job dài — lệnh ghi socket trong plugin không có timeout
+  (ISSUE-009).
+
 ## 2.6.0 — APK nhận in qua Bluetooth, in lại ra máy in nhiệt (26/9/2026)
 
 > Không đổi schema IndexedDB (vẫn v5), không di trú, không đụng Worker. Tính năng chỉ có trong APK; bản
