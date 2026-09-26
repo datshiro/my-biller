@@ -119,6 +119,12 @@ không có cách lái tới — không có Chrome/Playwright nào chạy đượ
 biên bản đo trên máy thật (xem `docs/deploy.md#dựng-apk-android-capacitor`) kèm máy in ảo
 `scripts/may-in-ao.mjs` để thử tại bàn.
 
+Riêng các **nút** chỉ có trong APK (🏷 IN TEM) thì Robot lái được bằng `Mở Phiên APK Giả Có Dữ Liệu
+Mẫu`: keyword `Gia Lap Apk` (JS extension `robot/libraries/gia-lap-apk.cjs`) cài một cầu nối Capacitor
+giả qua init script *trước* khi app nạp, nên `isNativeApp()` bật và `PrinterSocket.printRaw` không mở
+socket mà đẩy job vào `window.__printJobs`. Ca kiểm đọc byte thật app định gửi (host, cổng, lệnh TSPL).
+Socket TCP thật vẫn chỉ đo được trên máy thật.
+
 Đường **RawBT** (web/PWA) dựng một `<a data-rawbt href="rawbt:...">` — Robot **chỉ đọc** href bằng
 `Get Attribute href` để kiểm URL/giải mã ảnh, **không bao giờ `Click`** anchor đó. CI không cài RawBT nên
 một cú Click sẽ treo Chrome ở hộp "mở ứng dụng ngoài".

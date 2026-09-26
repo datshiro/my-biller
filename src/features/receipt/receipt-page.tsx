@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import './receipt.css'
+import { LabelView } from './label-view'
 import { ReceiptView } from './receipt-view'
 import { receiptToText } from './receipt-text'
 import { canShareReceipt, downloadReceipt, renderReceiptPng, shareReceipt } from './share-receipt'
 import { receiptSignature, useReceipt } from './use-receipt'
 import { downloadBytes } from '../printer/download-bytes'
+import { DEFAULT_LABEL_SIZE, readLabelPrinterConfig } from '../printer/label-config'
+import { buildLabelJob } from '../printer/label-job'
 import { buildReceiptJob } from '../printer/print-job'
 import { readPrinterConfig } from '../printer/printer-config'
 import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
 import { buildReceiptRawbtHref } from '../printer/rawbt-href'
+import { labelCount } from '@/domain/label-count'
 import { paginateLines } from '@/domain/receipt-pages'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { EmptyState } from '@/ui/empty-state'
 
 type Png = { blobs: Blob[]; canShare: boolean }
+
+const MANY_LABELS = 50
 
 export function ReceiptPage() {
   const { id } = useParams()
@@ -29,6 +35,14 @@ export function ReceiptPage() {
   // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
   const printLock = useRef(false)
   const [askPrint, setAskPrint] = useState(false)
+  const labelRef = useRef<HTMLDivElement | null>(null)
+  const labelLock = useRef(false)
+  const [askLabel, setAskLabel] = useState(false)
+  const [inTem, setInTem] = useState<{ busy: boolean; message: string | null; error: boolean; needConfig?: boolean }>({
+    busy: false,
+    message: null,
+    error: false,
+  })
   const [png, setPng] = useState<Png | null>(null)
   const [pngError, setPngError] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -159,6 +173,32 @@ export function ReceiptPage() {
     }
   }
 
+  // Như onPrintThermal: đọc lại cấu hình lúc gửi, khoá ref chống bấm-đúp (bấm đúp = in gấp đôi số tem).
+  const onPrintLabels = async (count: number) => {
+    if (labelLock.current) return
+    const cfg = readLabelPrinterConfig()
+    if (!cfg) {
+      setInTem({ busy: false, message: 'Chưa cài máy in tem.', error: true, needConfig: true })
+      return
+    }
+    const node = labelRef.current
+    if (!node) return
+    labelLock.current = true
+    setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
+    try {
+      await nativeSink(await buildLabelJob(node, cfg, count), cfg)
+      setInTem({ busy: false, message: `Đã gửi ${count} tem tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+    } catch (error) {
+      setInTem({
+        busy: false,
+        message: error instanceof Error ? error.message : 'Không gửi được tem.',
+        error: true,
+      })
+    } finally {
+      labelLock.current = false
+    }
+  }
+
   const onDownloadBin = async () => {
     const node = thermalRef.current
     if (!node) return
@@ -176,6 +216,10 @@ export function ReceiptPage() {
   const androidWeb = isAndroidWeb()
   // IP để hiện trong hộp xác nhận; onPrintThermal vẫn đọc lại lúc gửi (nguồn sự thật).
   const printerCfg = native ? readPrinterConfig() : null
+  // Tem chỉ đi TCP trong APK (RawBT không biết khe hở giữa hai tem). Đơn huỷ không ra ly nào để dán.
+  const labels = labelCount(data.lines)
+  const showLabels = native && order.status !== 'void' && labels > 0
+  const labelCfg = showLabels ? readLabelPrinterConfig() : null
 
   return (
     <div className="receipt-screen flex h-dvh flex-col bg-surface">
@@ -215,6 +259,12 @@ export function ReceiptPage() {
               />
             </div>
           ))}
+
+          {showLabels ? (
+            <div className="no-print -mt-4 h-0 overflow-hidden" aria-hidden="true">
+              <LabelView shop={shop} order={order} size={labelCfg ?? DEFAULT_LABEL_SIZE} innerRef={labelRef} />
+            </div>
+          ) : null}
 
           {/* Bản nhiệt một dải cho máy in nhiệt: con CUỐI của .space-y-4, ẩn (bất biến #4). KHÔNG mang
               .receipt-view — các ca đếm tấm gửi khách bằng class đó. `-mt-4` triệt margin space-y-4 qua
@@ -302,6 +352,19 @@ export function ReceiptPage() {
             </div>
           ) : null}
 
+          {showLabels ? (
+            <Button
+              size="cta"
+              variant="secondary"
+              data-label-print
+              disabled={inTem.busy}
+              onClick={() => setAskLabel(true)}
+              className="mb-3"
+            >
+              {inTem.busy ? 'Đang chuẩn bị tem…' : `🏷 IN TEM (${labels} tem)`}
+            </Button>
+          ) : null}
+
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" onClick={() => window.print()}>
               🖨 In / Lưu PDF
@@ -343,6 +406,44 @@ export function ReceiptPage() {
                 </>
               ) : null}
             </p>
+          ) : null}
+
+          {inTem.message ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`mt-3 rounded-btn px-3 py-2 text-[13px] ${inTem.error ? 'bg-danger-tint text-danger' : 'text-muted'}`}
+            >
+              {inTem.message}
+              {inTem.needConfig ? (
+                <>
+                  {' '}
+                  <Link to="/them/cai-dat" className="font-semibold underline">
+                    Vào Cài đặt › MÁY IN TEM
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {askLabel && showLabels ? (
+            <ConfirmDialog
+              title={`In ${labels} tem cho đơn ${order.code}?`}
+              message={
+                (labelCfg
+                  ? `Gửi ${labels} tem (${labelCfg.widthMm}×${labelCfg.heightMm} mm) tới máy in tem ${labelCfg.host}:${labelCfg.port}.`
+                  : `Gửi ${labels} tem tới máy in tem.`) +
+                // Đơn sỉ vài chục phần là chuyện thường; đã gửi thì cuộn tem chạy một mạch, không dừng giữa chừng được.
+                (labels > MANY_LABELS ? ` Nhiều tem — kiểm lại số lượng trước khi in.` : '')
+              }
+              confirmLabel="In tem"
+              confirmVariant="primary"
+              onConfirm={() => {
+                setAskLabel(false)
+                void onPrintLabels(labels)
+              }}
+              onCancel={() => setAskLabel(false)}
+            />
           ) : null}
 
           {/* Hỏi xác nhận trước khi in để chặn cú bấm nhầm (giấy in phí). Native → nút "In" gọi thẳng

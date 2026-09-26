@@ -8,7 +8,7 @@ import { ReceiptPage } from '../receipt-page'
 import { buildReceiptRawbtHref } from '../../printer/rawbt-href'
 import { db } from '@/db/db'
 import { createItem, updateItem } from '@/db/repositories/items'
-import { createOrder } from '@/db/repositories/orders'
+import { createOrder, voidOrder } from '@/db/repositories/orders'
 import { collectDebt, listCustomerPayments } from '@/db/repositories/payments'
 import { saveShop } from '@/db/repositories/settings'
 import { renderReceiptPng } from '../share-receipt'
@@ -38,7 +38,7 @@ vi.mock('../share-receipt', async (importOriginal) => {
 
 // Node ẩn bản nhiệt nhân đôi mọi chữ của phiếu → getByText vấp strict-mode. Bỏ qua CON CHÁU của
 // [data-thermal] (không phải chính nó): các ca đếm đúng bản gửi khách, không lẫn bản nhiệt.
-configure({ defaultIgnore: 'script, style, [data-thermal] *' })
+configure({ defaultIgnore: 'script, style, [data-thermal] *, [data-label] *' })
 
 // html-to-image cần canvas thật; jsdom không có. Chụp là lười (chỉ khi bấm nút TCP/`.bin`) nên hầu hết
 // ca không chạm tới — mock để nếu có chạm thì trả ảnh 576 chấm hợp lệ thay vì ném "getContext".
@@ -65,6 +65,13 @@ vi.mock('../../printer/printer-sink', () => ({
   nativeSink: sinkShim.sink,
 }))
 
+// Chụp tem cũng cần canvas thật. Màn này chỉ chịu trách nhiệm gọi đúng khổ + đúng số tem; byte TSPL
+// được kiểm ở tspl.test.ts và bằng Robot trên Chrome thật.
+const labelShim = vi.hoisted(() => ({
+  build: vi.fn(async (_node: HTMLElement, _size: unknown, count: number) => new Uint8Array([count])),
+}))
+vi.mock('../../printer/label-job', () => ({ buildLabelJob: labelShim.build }))
+
 // `buildReceiptRawbtHref` chạy `encodePng1`+`CompressionStream` trên canvas thật — jsdom không có. Mock
 // trả href hợp lệ; ca "quá dài" override bằng `mockResolvedValueOnce(null)`.
 vi.mock('../../printer/rawbt-href', () => ({
@@ -77,8 +84,10 @@ afterEach(() => {
   sinkShim.native = false
   sinkShim.androidWeb = false
   sinkShim.sink.mockReset()
+  labelShim.build.mockClear()
   try {
     localStorage.removeItem('may-in')
+    localStorage.removeItem('may-in-tem')
   } catch {
     /* jsdom */
   }
@@ -579,6 +588,123 @@ describe('in máy in nhiệt trong app native', () => {
     await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
     expect(sinkShim.sink).toHaveBeenCalledOnce()
   })
+})
+
+describe('in tem trong app native', () => {
+  const temCfg = { host: '192.168.1.60', port: 9100, widthMm: 50, heightMm: 30, gapMm: 2 }
+  const nútTem = () => screen.findByRole('button', { name: /IN TEM/ })
+  const xacNhanTem = () => userEvent.click(screen.getByRole('button', { name: 'In tem' }))
+
+  it('nút ghi đúng số tem = tổng số lượng, bấm chỉ MỞ hộp xác nhận', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder({ qty: 3, paid: 165_000 })
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+
+    expect((await nútTem()).textContent).toContain('IN TEM (3 tem)')
+    expect(screen.getByRole('alertdialog', { name: 'In 3 tem cho đơn PBH-260807-A001?' })).toBeDefined()
+    expect(screen.getByText('Gửi 3 tem (50×30 mm) tới máy in tem 192.168.1.60:9100.')).toBeDefined()
+    expect(sinkShim.sink).not.toHaveBeenCalled()
+  })
+
+  it('xác nhận → dựng đúng số tem theo khổ đã cài, gửi tới máy in TEM chứ không phải máy in phiếu', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockResolvedValueOnce(undefined)
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder({ qty: 3, paid: 165_000 })
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+    await xacNhanTem()
+
+    await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
+    expect(labelShim.build).toHaveBeenCalledOnce()
+    expect(labelShim.build.mock.calls[0]?.[1]).toEqual(temCfg)
+    expect(labelShim.build.mock.calls[0]?.[2]).toBe(3)
+    expect(sinkShim.sink.mock.calls[0]?.[1]).toEqual(temCfg)
+    expect(await screen.findByText('Đã gửi 3 tem tới máy in 192.168.1.60:9100.')).toBeDefined()
+  })
+
+  it('đơn trên 50 phần → hộp xác nhận nhắc kiểm lại số lượng', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder({ qty: 51, paid: 51 * 55_000 })
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+
+    expect(screen.getByText(/Nhiều tem — kiểm lại số lượng trước khi in/)).toBeDefined()
+  })
+
+  it('chưa cài máy in tem → báo kèm link Cài đặt, không gửi gì', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in', JSON.stringify({ host: '192.168.1.50', port: 9100 }))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+    await xacNhanTem()
+
+    expect(await screen.findByText(/Chưa cài máy in tem/)).toBeDefined()
+    expect(screen.getByRole('link', { name: /MÁY IN TEM/ })).toBeDefined()
+    expect(sinkShim.sink).not.toHaveBeenCalled()
+  })
+
+  it('máy in tem lỗi → giữ nguyên câu lỗi thật của sink', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockRejectedValueOnce(new Error('Máy in không trả lời sau 3 giây.'))
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+    await xacNhanTem()
+
+    expect(await screen.findByText('Máy in không trả lời sau 3 giây.')).toBeDefined()
+  })
+
+  it('bấm-đúp "In tem" → chỉ MỘT lượt tem gửi đi (bấm đúp không được in gấp đôi số tem)', async () => {
+    sinkShim.native = true
+    sinkShim.sink.mockResolvedValue(undefined)
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+    await userEvent.click(await nútTem())
+    const inBtn = screen.getByRole('button', { name: 'In tem' })
+
+    await act(async () => {
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      inBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
+    expect(labelShim.build).toHaveBeenCalledOnce()
+  })
+
+  it('đơn đã huỷ → không có nút IN TEM', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder()
+    await voidOrder(id)
+    renderReceipt(id)
+
+    await nútIn()
+    expect(screen.queryByRole('button', { name: /IN TEM/ })).toBeNull()
+  })
+
+  it('trên web → không có nút IN TEM (tem chỉ đi TCP trong APK)', async () => {
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const { id } = await seedOrder()
+    renderReceipt(id)
+
+    await screen.findByText('PHIẾU BÁN HÀNG')
+    expect(screen.queryByRole('button', { name: /IN TEM/ })).toBeNull()
+  })
+
+  const nútIn = () => screen.findByRole('button', { name: /IN MÁY IN NHIỆT/ })
 })
 
 // Web Android in qua RawBT: nút mở hộp xác nhận; href `rawbt:` dựng sẵn nằm trên nút "In" của hộp (không

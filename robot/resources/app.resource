@@ -4,7 +4,7 @@ Documentation    Nền chung cho mọi suite: mở trình duyệt, dựng phiên
 ...
 ...              Mỗi test chạy trong một `New Context` riêng — context của Playwright là một hồ sơ
 ...              trình duyệt trắng, nên IndexedDB rỗng và không test nào ăn dữ liệu của test khác.
-Library          Browser    enable_playwright_debug=disabled
+Library          Browser    enable_playwright_debug=disabled    jsextension=${CURDIR}/../libraries/gia-lap-apk.cjs
 Library          OperatingSystem
 Library          Collections
 
@@ -59,6 +59,15 @@ Mở Phiên Android
 Mở Phiên Android Có Dữ Liệu Mẫu
     [Documentation]    Phiên Android rồi nạp bộ mẫu — cho ca RawBT cần bán từ mặt hàng mẫu.
     Mở Phiên Android
+    Nạp Dữ Liệu Mẫu
+
+Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    [Documentation]    Chrome thật đóng vai APK: init script `gia-lap-apk.cjs` cài cầu nối Capacitor giả TRƯỚC
+    ...    khi app nạp, nên `isNativeApp()` bật và nút chỉ-có-trong-APK hiện ra. Job in bị giữ lại ở
+    ...    `window.__printJobs` thay vì mở socket — đường TCP thật vẫn chỉ đo được trên máy thật.
+    New Context    viewport=${VIEWPORT}    acceptDownloads=${True}
+    Gia Lap Apk
+    New Page    ${BASE_URL}/
     Nạp Dữ Liệu Mẫu
 
 Đóng Phiên

@@ -138,3 +138,17 @@
 - Mitigation: Gộp vào chuyến quán cùng ISSUE-007. T3 đo thước; T5 in `bill40.bin`; bấm-đúp nút "In"
   trong hộp xác nhận ra một tờ. Nếu lệch: T6 hạ `ROWS_PER_BAND` (64/48) hoặc đổi `DOTS_PER_LINE`/
   `THERMAL_RATIO` (số đo pha 5). Rủi ro thấp — đường tiền/nội dung đã khớp ở phiếu ngắn thật.
+
+### ISSUE-009 — In tem TSPL chưa nghiệm trên máy XPrinter 365B thật
+- State: deferred
+- Severity: medium
+- Raised by / Date: review độc lập nhánh `feature/in-tem-theo-so-luong` / 26/9/2026
+- Related task: in tem theo số lượng (nút 🏷 IN TEM trên phiếu, mục MÁY IN TEM)
+- Description: Byte TSPL đúng cú pháp theo sách TSPL và đã kiểm bằng Vitest + Robot (APK giả), nhưng chưa
+  lên giấy. Cần xác nhận trên máy: (a) máy ở chế độ nhận TSPL/label; (b) khổ tem + khe hở thật của cuộn
+  đang lắp (người dùng chưa cho khổ, mặc định 40×30 khe 2); (c) `DIRECTION 1,0` ra chữ đúng chiều;
+  (d) job dài: plugin `PrinterSocket` chỉ có timeout lúc nối, lệnh ghi socket không có timeout — máy
+  báo lỗi khe/cảm biến giữa job thì nút kẹt ở "Đang chuẩn bị tem…", in lại có thể ra tem gấp đôi khi máy
+  hồi. Đơn trên 50 phần đã có câu nhắc trong hộp xác nhận.
+- Mitigation: Chuyến quán cùng ISSUE-007/008: in đơn 3 phần, đơn 30 phần, và một job khi cố tình sai khe
+  hở. Nếu (d) xảy ra thật: thêm watchdog đóng socket trong `PrinterSocketPlugin.java` (cần dựng lại APK).
