@@ -140,7 +140,7 @@
   `THERMAL_RATIO` (số đo pha 5). Rủi ro thấp — đường tiền/nội dung đã khớp ở phiếu ngắn thật.
 
 ### ISSUE-009 — In tem TSPL chưa nghiệm trên máy XPrinter XP-365B thật
-- State: deferred
+- State: deferred (phần lớn đã nghiệm 26/9, còn mục d)
 - Severity: medium
 - Raised by / Date: review độc lập nhánh `feature/in-tem-theo-so-luong` / 26/9/2026
 - Related task: in tem theo số lượng (nút 🏷 IN TEM trên phiếu, mục MÁY IN TEM)
@@ -150,5 +150,8 @@
   (d) job dài: plugin `PrinterSocket` chỉ có timeout lúc nối, lệnh ghi socket không có timeout — máy
   báo lỗi khe/cảm biến giữa job thì nút kẹt ở "Đang chuẩn bị tem…", in lại có thể ra tem gấp đôi khi máy
   hồi. Đơn trên 50 phần đã có câu nhắc trong hộp xác nhận.
+- Nghiệm 26/9: (a)(b)(c) ĐẠT — XP-365B `192.168.1.9:9100` trả `MODEL:XP-365B` cho lệnh TSPL, tem 50×30
+  khe 2 in đúng khổ, đúng chiều, có tên món và ghi chú, trên điện thoại của chủ quán và trên máy nhân viên
+  (APK gộp tem + nhận in Bluetooth). Lỗi lần đầu là cuộn tem lắp ngược mặt, không phải code. Chưa thử (d).
 - Mitigation: Chuyến quán cùng ISSUE-007/008: in đơn 3 phần, đơn 30 phần, và một job khi cố tình sai khe
   hở. Nếu (d) xảy ra thật: thêm watchdog đóng socket trong `PrinterSocketPlugin.java` (cần dựng lại APK).
