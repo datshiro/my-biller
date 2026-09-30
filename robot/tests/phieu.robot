@@ -491,6 +491,68 @@ In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ kh
     ...    return [imgs.length, imgs[0] === imgs[1], imgs[1] === imgs[2]] }
     Should Be Equal    ${giống}    ${{ [3, True, False] }}
 
+In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của một ly đi liền nhau và chung số
+    [Documentation]    Trước đây ghi chú bị cắt ở hai dòng (`line-clamp`) nên người pha không thấy nửa sau.
+    ...    Giờ phần thừa sang tem kế, mỗi tem lặp đầu tem + tên món và có dấu "tr k/m". Đo trên Chrome thật
+    ...    vì chia trang dựa vào chiều cao chữ thật. Số thứ tự `i/n` đếm theo LY, không theo tờ giấy: đơn hai
+    ...    ly thì mọi tem chỉ mang "1/2" hoặc "2/2", không bao giờ "3/2". Thân tem 50×30 chỉ còn ~4 dòng chữ nên
+    ...    ghi chú thử dài ~8 dòng (6 câu × ~65 ký tự) để chắc chắn tràn — đừng rút ngắn vì tưởng thừa. Không assert
+    ...    số trang cố định vì nó phụ thuộc font; chỉ đòi ≥ 2 và đối chiếu mọi số khác với số đo được.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    192.168.1.50
+    Click    css=button:text-is("LƯU")
+    Chờ Thấy Chữ    Đã lưu 192.168.1.50:9100
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×30 mm
+
+    ${câu}=    Set Variable    không lấy ống hút, để đá riêng ra túi nylon, gói kỹ giúp em nhé
+    ${ghi_chú}=    Evaluate    ' '.join([$câu] * 6)
+    Mở Màn    /
+    Chọn Món    Trà đá
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Ghi chú    ${ghi_chú}
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${dòng}=    Đọc Bảng    orderLines
+    ${đơn}=    Đơn Mới Nhất
+    ${cà_phê}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Cà phê sữa'][0]
+    Should Be Equal    ${cà_phê}[note]    ${ghi_chú}    Ghi chú chưa xuống sổ nguyên vẹn — tem in từ sổ sẽ thiếu chữ.
+
+    # Các tem dựng sẵn trong DOM: Trà đá một tem, Cà phê sữa từ hai tem trở lên. `Chốt Đơn` chỉ chờ URL nên
+    # phải chờ tem dựng xong rồi mới đếm.
+    Get Element Count    css=[data-label]    >=    3
+    ${tem}=    Evaluate JavaScript    ${None}
+    ...    () => [...document.querySelectorAll('[data-label]')].map((n) => ({
+    ...    text: n.textContent, body: n.querySelector('[data-label-body]').textContent }))
+    ${số_trang}=    Evaluate    len($tem) - 1
+    Should Be True    ${số_trang} >= 2    Ghi chú dài mà chỉ ra một tem — phần thừa vẫn bị cắt mất.
+    Should Not Contain    ${tem}[0][text]    tr${SPACE}    Tem Trà đá một tờ không được có dấu phụ trang.
+    FOR    ${k}    IN RANGE    1    ${số_trang} + 1
+        ${t}=    Set Variable    ${tem}[${k}]
+        Should Contain    ${t}[text]    Cà phê sữa    Tem tiếp phải lặp lại tên món.
+        Should Contain    ${t}[text]    tr ${k}/${số_trang}    Thiếu dấu phụ trang đúng số.
+    END
+    ${thân}=    Evaluate    ' '.join(t['body'] for t in $tem[1:])
+    Should Be Equal    ${thân}    ${ghi_chú}    Ghép các tem tiếp lại không ra đúng ghi chú — mất chữ hoặc lặp chữ.
+
+    Click    css=button[data-label-print]
+    Chờ Hộp Xác Nhận    In 2 tem cho đơn ${đơn}[code]?
+    Xác Nhận Trong Hộp    In tem
+    Chờ Thấy Chữ    Đã gửi ${{ 1 + $số_trang }} tem tới máy in 192.168.1.60:9100.
+    ${tspl}=    Evaluate JavaScript    ${None}    () => atob(window.__printJobs[0].base64)
+    Should Be Equal As Integers    ${{ $tspl.count('PRINT 1,1') }}    ${{ 1 + $số_trang }}
+    Should Be Equal As Integers    ${{ $tspl.count('"1/2"') }}    1
+    Should Be Equal As Integers    ${{ $tspl.count('"2/2"') }}    ${số_trang}
+    Should Not Contain    ${tspl}    "3/2"
+    Should Contain    ${tspl}    TEXT
+    Should Contain    ${tspl}    ,"3",0,1,1,"1/2"
+    Should Not Contain    ${tspl}    ,"4",0
+
 In tem: chưa cài máy in tem thì báo kèm đường vào Cài đặt, không gửi gì
     [Documentation]    Không có khổ và IP thì không được đoán — gửi tem tới máy in phiếu là in ra giấy phí.
     [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
