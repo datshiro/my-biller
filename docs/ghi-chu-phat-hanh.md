@@ -1,5 +1,26 @@
 # Ghi chú phát hành
 
+## 2.7.1 — rollback trả đúng đơn giá, hàng in chung theo máy in, job in treo không kẹt cả hàng (1/10/2026)
+
+> Không đổi schema IndexedDB, không di trú, không đổi Worker. APK tăng versionCode 3 → 4 để cài đè được;
+> sửa ở plugin in TCP chỉ tới máy khi cài APK mới.
+
+### Người bán thấy gì
+
+- **Sửa lỗi sổ (#28):** thao tác bị máy chủ từ chối được hoàn lại đúng giá cũ cả khi hai lần sửa giá sát
+  nhau; trước đây giá có thể kẹt ở giá bị từ chối.
+- **In phiếu, IN THỬ, in tem và job nhận qua Bluetooth tới cùng một máy in giờ xếp hàng,** không còn mở hai
+  nối cùng lúc làm một bản báo "In hỏng". Máy in phiếu và máy in tem vẫn in song song.
+- **Máy in ngừng nhận giữa job** (hết tem, sai khe hở) thì sau một lúc app báo "Máy in ngừng nhận giữa chừng
+  — kiểm tra giấy/tem, khe hở rồi in lại" thay vì nút kẹt mãi; job cũ bị cắt hẳn nên in lại không ra thêm
+  phần thừa (cần APK 2.7.1).
+- **Job Bluetooth dừng giữa một lệnh quá 10 giây** thì nhật ký báo "Job dừng giữa chừng một lệnh", job sau
+  in bình thường.
+
+### Chưa nghiệm trên máy thật
+
+- Hạn ghi của plugin (máy tem kẹt giữa job dài) mới chứng bằng JUnit; cần thử trên XP-365B (ISSUE-009 d).
+
 ## 2.7.0 — in tem theo số lượng, mỗi tem ghi tên món (máy in tem XPrinter XP-365B qua LAN) (26/9/2026)
 
 > Chỉ frontend. Không đổi schema IndexedDB, không di trú, không đụng Worker hay đồng bộ: cấu hình máy
