@@ -127,6 +127,28 @@ unset STAGING_ADMIN_SECRET
 Chỉ chạy `hai-may.robot` ở đây, không chạy cả `robot/tests`. Các suite còn lại không cần Worker thật
 và chạy từ xa chỉ tốn thời gian.
 
+### Chạy staging bằng CI
+
+Workflow `Deploy staging` (`.github/workflows/deploy-staging.yml`) làm đúng các bước tay ở trên cho commit
+đầu PR: deploy Worker staging, kiểm `/health`, `build:staging`, chặn nếu bundle có URL Worker production,
+deploy Pages preview nhánh `staging-ci`, chờ đúng URL bất biến trả trang, rồi chạy `hai-may.robot` remote.
+Kết quả Robot tải lên artifact `robot-staging-results`.
+
+- **Kích:** gắn nhãn `staging` lên PR (`gh pr edit <số> --add-label staging`). Còn nhãn thì mỗi push chạy
+  lại. Sau khi workflow đã nằm trên `main` thì dùng được thêm `gh workflow run deploy-staging.yml`.
+- **Mỗi lúc một lượt** (`concurrency: deploy-staging`, không huỷ lượt đang chạy): Worker và Durable Object
+  staging là tài nguyên chung, hai PR chạy chồng sẽ giẫm dữ liệu của nhau.
+- **Environment `staging`** trên GitHub phải có `CLOUDFLARE_WORKERS_API_TOKEN` (Workers Scripts:Edit),
+  `CLOUDFLARE_PAGES_API_TOKEN` (Pages:Edit), `CLOUDFLARE_ACCOUNT_ID` và `STAGING_ADMIN_SECRET` (khớp
+  `ADMIN_SECRET` của Worker staging). Không đặt deployment branch policy chỉ-`main` cho environment này —
+  policy đó chặn luôn ref của PR.
+- **Token Cloudflare cấp theo account, không khoá được vào Worker staging hay nhánh preview:** mã của bất kỳ
+  PR nào cùng repo (kể cả script cài của một dependency) chạy với token này đều deploy được Worker production
+  hay `pages deploy --branch main`, vượt qua cổng tag của environment `production`. Nên environment `staging`
+  phải có **Required reviewers** (chủ repo duyệt từng lượt), hoặc dùng token của một account Cloudflare riêng
+  cho staging. Nhãn `staging` chỉ để tiết kiệm lượt chạy, không phải cổng tin cậy.
+- Đỏ ở staging không tự động là hồi quy: xem các ngưỡng hiệu chuẩn cho `127.0.0.1` ngay dưới đây.
+
 **Lượt này đỏ một ca không tự động nghĩa là hồi quy.** Ngưỡng chờ trong `hai-may.robot` được hiệu
 chuẩn cho Worker ở `127.0.0.1`: mặc định 15s cho một chữ hiện ra (`app.resource`, `Set Browser
 Timeout`), 10–40s cho các vòng dò sổ, và 3s cho SLA "đơn chốt ở quầy này phải hiện ở quầy kia"

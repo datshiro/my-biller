@@ -132,6 +132,10 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Unit test JVM (hạn ghi socket máy in)
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest
+
   robot-live:
     name: Robot live
     runs-on: ubuntu-latest
