@@ -6,7 +6,8 @@ import { syncTransaction } from '../sync/outbox'
 
 /** `note` để tuỳ chọn vì schema có `.default('')` — chỗ gọi không phải truyền chuỗi rỗng cho có. */
 export type ItemInput = Omit<Item, 'id' | 'gid' | 'createdAt' | 'updatedAt' | 'note'> & { note?: string }
-export type ItemGroupInput = Omit<ItemGroup, 'id' | 'gid' | 'createdAt' | 'updatedAt'>
+export type ItemGroupInput = Omit<ItemGroup, 'id' | 'gid' | 'createdAt' | 'updatedAt' | 'optionGroups' | 'toppingMenu'> &
+  Partial<Pick<ItemGroup, 'optionGroups' | 'toppingMenu'>>
 
 const now = () => Date.now()
 
@@ -60,6 +61,10 @@ export async function deleteItem(id: number): Promise<void> {
 
 export function listGroups(): Promise<ItemGroup[]> {
   return db.itemGroups.orderBy('sortOrder').toArray()
+}
+
+export function getGroup(id: number): Promise<ItemGroup | undefined> {
+  return db.itemGroups.get(id)
 }
 
 export async function createGroup(input: ItemGroupInput): Promise<number> {

@@ -152,3 +152,45 @@ Bớt Một
     [Arguments]    ${tên_món}
     ${giá_trị}=    Get Property    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    value
     RETURN    ${giá_trị}
+
+Cài Thực Đơn Đồ Uống
+    [Documentation]    Cài nhóm Đồ uống đúng đường chủ quán đi: Nhóm mặt hàng › nhóm › Tuỳ chọn & topping.
+    ...    Một nhóm tuỳ chọn (Đường: Ít đường, Không đường) và hai topping (Trân châu 5.000, Thạch 3.000).
+    ...    Chờ lưu xong bằng cách đọc lại sổ, không đoán theo thời gian.
+    Mở Màn    /them/nhom-mat-hang
+    Click    css=button:has-text("Đồ uống")
+    Bấm Nút    Tuỳ chọn & topping
+    Bấm Nút    ＋ Thêm nhóm tuỳ chọn
+    Điền Ô    Tên nhóm tuỳ chọn 1    Đường
+    Điền Ô    Các lựa chọn của nhóm 1    Ít đường, Không đường
+    Bấm Nút    ＋ Thêm topping
+    Điền Ô    Tên topping 1    Trân châu
+    Điền Ô    Giá topping 1    5000
+    Bấm Nút    ＋ Thêm topping
+    Điền Ô    Tên topping 2    Thạch
+    Điền Ô    Giá topping 2    3000
+    Click    css=[role=dialog] >> css=button:text-is("LƯU")
+    Wait Until Keyword Succeeds    20x    250ms    Nhóm Đồ Uống Phải Có Thực Đơn
+
+Nhóm Đồ Uống Phải Có Thực Đơn
+    ${nhóm}=    Đọc Bảng    itemGroups
+    ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
+    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [{'name': 'Đường', 'choices': ['Ít đường', 'Không đường']}] }}
+    ${menu}=    Evaluate    [(t['name'], t['price']) for t in $đồ_uống['toppingMenu']]
+    Should Be Equal    ${menu}    ${{ [('Trân châu', 5000), ('Thạch', 3000)] }}
+
+Bán Hai Ly Cà Phê Có Topping
+    [Documentation]    Hai ly cà phê sữa (20.000) + Ít đường + trân châu ×2 + thạch + ghi chú "mang về":
+    ...    mỗi ly 33.000, thành tiền 66.000. Cần đã cài thực đơn qua `Cài Thực Đơn Đồ Uống`.
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Số lượng    2
+    Chọn Chip    Ít đường
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Thạch"]
+    Điền Ô    Ghi chú    mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn

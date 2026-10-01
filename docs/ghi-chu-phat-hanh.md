@@ -1,5 +1,48 @@
 # Ghi chú phát hành
 
+## Chưa phát hành — tem ghi chú dài in tiếp; tuỳ chọn và topping có giá theo nhóm món
+
+> **Deploy Worker TRƯỚC Pages/APK, và cập nhật mọi máy đã ghép trong cùng ngày.** Dòng đơn và nhóm món có
+> thêm trường mới (không đổi schema IndexedDB, không di trú, không bump version Dexie). Zod bỏ khoá lạ
+> trong im lặng: Worker còn chạy schema cũ mà máy mới đẩy `toppings` lên thì topping bị cắt khỏi sổ chung
+> **vĩnh viễn**, kể cả khi máy gốc kéo lại từ đầu. APK tăng versionCode để cài đè được.
+
+### Người bán thấy gì
+
+- **Tem mới:** tên quán, mã đơn + giờ, một vạch kẻ ngang, tên món, rồi tuỳ chọn → topping (đậm, có dấu +) →
+  ghi chú khách (nghiêng). Tên khách ở góc dưới trái đã bỏ; số thứ tự `i/n` góc dưới phải nhỏ hơn (font
+  16×24 chấm, không còn phóng đôi trên tem cao từ 40 mm).
+- **Ghi chú dài không còn bị cắt:** phần thừa sang tem kế, mỗi tem lặp đầu tem và tên món, có dấu phụ trang
+  `tr 1/2`, `tr 2/2` ở góc dưới trái. Các tem của một ly đi liền nhau; số `i/n` đếm theo **ly**, nên các tem
+  của một ly mang chung số. Nút và hộp xác nhận vẫn ghi "n tem" theo số ly; thông báo sau khi gửi nói rõ khi
+  số tờ giấy nhiều hơn.
+- **Tuỳ chọn và topping:** Cài đặt › Nhóm mặt hàng › mở một nhóm › **Tuỳ chọn & topping**. Nhóm tuỳ chọn
+  (Đường: Ít đường, Không đường…) miễn phí, trong một nhóm chỉ chọn một; nhóm **Đá** (Đá chung / Đá riêng) có
+  sẵn cho mọi món. Topping có giá (cộng thêm cho mỗi phần). Ở màn Bán hàng, sửa dòng món sẽ hiện các chip và
+  nút −/+ topping của nhóm món đó. Chip đá trước đây ghi vào ô ghi chú, nay ghi vào tuỳ chọn.
+- **Tiền:** thành tiền dòng = (giá ly + Σ giá topping × số phần) × số ly. `Giá ly` vẫn là giá danh mục, giá
+  riêng, giá sỉ hoặc giá gõ tay; topping luôn cộng thêm. Topping mang giá **lúc bán** trên dòng, đổi giá
+  thực đơn không đổi đơn cũ. Hai ly cùng món khác tuỳ chọn hoặc topping là hai dòng riêng. Số lượng lẻ (0,5)
+  không thêm được topping mới; topping đã có trên dòng vẫn hiện và bớt được, tiền tính theo cùng công thức.
+- Phiếu và chi tiết đơn liệt kê từng topping kèm giá một ly dưới tên món; Đ.GIÁ đã gồm topping nên
+  SL × Đ.GIÁ ra T.tiền.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Worker giữ lại thực đơn của nhóm khi một máy cũ đổi tên nhóm (bản ghi của máy cũ không có hai trường đó);
+  máy mới cố ý xoá hết thực đơn vẫn được tôn trọng.
+- Dòng đơn và nhóm món ghi trước bản này đọc ra mảng rỗng (hook đọc của Dexie), không cần di trú.
+- File sao lưu cũ nhập vào bản này được; file sao lưu mới nhập vào app cũ sẽ rụng tuỳ chọn và topping (thành
+  tiền vẫn đúng). `BACKUP_VERSION` giữ nguyên 4.
+- Máy chưa cập nhật nhận đơn có topping sẽ không thấy phần topping (thành tiền vẫn đúng, nên dòng hiện như
+  "2 × 20.000 = 66.000"). **Chỉ dẫn đá cũng mất trên máy đó:** chip đá giờ nằm ở tuỳ chọn chứ không còn trong
+  ghi chú, nên phiếu và tem ở quầy pha chạy bản cũ sẽ không còn "Đá riêng" — cập nhật quầy pha trước.
+  Máy cũ nhận đơn có topping trong lúc chưa cập nhật lưu dòng đó thiếu tuỳ chọn và topping **vĩnh viễn trên
+  máy đó**, kể cả sau khi cập nhật; muốn phiếu và tem in lại đúng thì bấm Cài đặt › **Kéo lại từ đầu** một
+  lần sau khi cập nhật (tiền không lệch dù không làm).
+- Báo cáo lãi tính giá vốn trên ly, không có giá vốn topping: lãi các đơn có topping **cao hơn thật**.
+- Chưa in thử tem trên XP-365B thật: font "3" 16×24 chấm theo tài liệu TSPL và phép chia trang đo trên Chrome.
+
 ## 2.7.1 — rollback trả đúng đơn giá, hàng in chung theo máy in, job in treo không kẹt cả hàng (1/10/2026)
 
 > Không đổi schema IndexedDB, không di trú, không đổi Worker. APK tăng versionCode 3 → 4 để cài đè được;

@@ -547,6 +547,65 @@ describe('oplog đồng bộ', () => {
     expect((await push(event('itemGroups', groupGid, null, {}, 'delete', group))).status).toBe(201)
   })
 
+  it('giữ nguyên tuỳ chọn và topping của dòng đơn, từ chối topping sai hợp đồng', async () => {
+    const customerGid = crypto.randomUUID()
+    const orderGid = crypto.randomUUID()
+    const lineGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+    const order = orderRow(orderGid, customerGid, 80_000)
+    expect((await push(event('orders', orderGid, order.after, order.refs))).status).toBe(201)
+
+    const line = {
+      gid: lineGid,
+      orderId: 1,
+      itemId: null,
+      name: 'Trà sữa',
+      unit: 'ly',
+      unitPrice: 25_000,
+      costPrice: null,
+      qty: 2,
+      amount: 80_000,
+      note: '',
+      options: ['Ít đường'],
+      toppings: [
+        { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+        { name: 'Thạch', unitPrice: 5_000, qty: 1 },
+      ],
+    }
+    const refs = { orderId: orderGid, itemId: null }
+    expect((await push(event('orderLines', lineGid, line, refs))).status).toBe(201)
+    const stored = (await pullAll()).filter((entry) => entry.table === 'orderLines').at(-1)
+    expect(stored?.after).toMatchObject({ options: ['Ít đường'], toppings: line.toppings })
+
+    const fractional = crypto.randomUUID()
+    const bad = { ...line, gid: fractional, toppings: [{ name: 'Trân châu', unitPrice: 5_000, qty: 0.5 }] }
+    expect((await push(event('orderLines', fractional, bad, refs))).status).toBe(409)
+  })
+
+  it('máy cũ đổi tên nhóm món không xoá thực đơn tuỳ chọn và topping; máy mới xoá chủ ý thì được tôn trọng', async () => {
+    const groupGid = crypto.randomUUID()
+    const menu = {
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    }
+    const created = { ...groupRow(groupGid), ...menu }
+    expect((await push(event('itemGroups', groupGid, created))).status).toBe(201)
+
+    const lastGroup = async () => (await pullAll()).filter((entry) => entry.table === 'itemGroups').at(-1)
+    expect((await lastGroup())?.after).toMatchObject(menu)
+
+    // Bản cũ không có hai trường nên payload không mang chúng.
+    const renamedByOldClient = { ...groupRow(groupGid, 'Đồ uống'), updatedAt: 2 }
+    expect(
+      (await push(event('itemGroups', groupGid, renamedByOldClient, {}, 'put', groupRow(groupGid)))).status,
+    ).toBe(201)
+    expect((await lastGroup())?.after).toMatchObject({ name: 'Đồ uống', ...menu })
+
+    const clearedOnPurpose = { ...renamedByOldClient, updatedAt: 3, optionGroups: [], toppingMenu: [] }
+    expect((await push(event('itemGroups', groupGid, clearedOnPurpose, {}, 'put', renamedByOldClient))).status).toBe(201)
+    expect((await lastGroup())?.after).toMatchObject({ optionGroups: [], toppingMenu: [] })
+  })
+
   it('từ chối payload sai hợp đồng ở mọi bảng trước khi ghi vào sổ', async () => {
     const customerGid = crypto.randomUUID()
     const groupGid = crypto.randomUUID()

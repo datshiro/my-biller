@@ -229,6 +229,8 @@ export function SalesPage() {
           unitPrice: line.unitPrice,
           costPrice: line.costPrice,
           qty: line.qty,
+          options: line.options,
+          toppings: line.toppings,
           note: line.note,
         })),
         discount: cart.discount,
@@ -526,11 +528,12 @@ export function SalesPage() {
       {editing ? (
         <LineEditSheet
           line={editing}
-          onApply={({ qty, unitPrice, note }) => {
+          menu={groups?.find((group) => group.id === items?.find((item) => item.id === editing.itemId)?.groupId)}
+          onApply={({ qty, unitPrice, options, toppings, note }) => {
             // `updateLine` với qty 0 cũng gỡ dòng, nhưng lặng lẽ. Đẩy nhánh đó qua cùng handler với ô
             // số lượng trong giỏ để người bán có đúng một đường hoàn lại, dù bỏ món từ chỗ nào.
             if (qty === 0) setQtyWithUndo(editing.key, 0)
-            else dispatch({ type: 'updateLine', key: editing.key, qty, unitPrice, note })
+            else dispatch({ type: 'updateLine', key: editing.key, qty, unitPrice, options, toppings, note })
             setEditing(null)
           }}
           onRemove={() => {

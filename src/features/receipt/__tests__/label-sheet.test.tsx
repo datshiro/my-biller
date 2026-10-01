@@ -6,7 +6,8 @@ import { DEFAULT_SHOP, type Order, type OrderLine } from '@/domain/schema'
 
 const order = { code: 'PBH-260926-A001', soldAt: new Date(2026, 8, 26, 9, 5).getTime() } as Order
 const size = { widthMm: 50, heightMm: 30, gapMm: 2 }
-const line = (note: string) => ({ name: 'Trà sữa', note }) as OrderLine
+const line = (note: string, extras: Partial<OrderLine> = {}) =>
+  ({ name: 'Trà sữa', note, options: [], toppings: [], ...extras }) as OrderLine
 const LINE_CHARS = 10
 const BODY_LINES = 3
 
@@ -62,6 +63,29 @@ describe('LabelSheet', () => {
     const { last } = renderSheet('')
     expect(last()).toHaveLength(1)
     expect(last()[0]?.querySelector('[data-label-body]')?.textContent).toBe('')
+  })
+
+  it('ba hạng mục đi theo thứ tự trên tem; hạng mục dài tràn sang tem sau giữ nguyên thứ tự đọc', () => {
+    const onNodes = vi.fn<(nodes: HTMLElement[]) => void>()
+    render(
+      <LabelSheet
+        shop={{ ...DEFAULT_SHOP, name: 'Quán Nhỏ' }}
+        order={order}
+        line={line('mang về gói kỹ giúp em nhé', {
+          options: ['Ít đường', 'Đá riêng'],
+          toppings: [{ name: 'Trân châu', unitPrice: 5_000, qty: 2 }],
+        })}
+        size={size}
+        count={3}
+        onNodes={onNodes}
+      />,
+    )
+    const nodes = onNodes.mock.calls.at(-1)?.[0] ?? []
+    const bodies = nodes.map((node) => [...node.querySelectorAll('[data-label-body] p')].map((p) => p.textContent))
+
+    expect(nodes.length).toBeGreaterThan(1)
+    expect(bodies.flat().join(' ')).toBe('Ít đường, Đá riêng + Trân châu x2 mang về gói kỹ giúp em nhé')
+    expect(bodies[0]?.[0]).toBe('Ít đường, Đá riêng')
   })
 
   it('đổi ghi chú thì chia lại trang', () => {

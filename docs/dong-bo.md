@@ -24,6 +24,12 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   món làm căn cứ duy nhất cho việc bếp phải làm cho tới khi mọi máy và Worker đã lên cùng một bản.
   Ghi chú mất không làm sai một đồng nào của sổ — đó là lý do rủi ro này được chấp nhận thay vì phải
   đánh phiên bản sự kiện.
+- `orderLines.options` và `orderLines.toppings` (và thực đơn `itemGroups.optionGroups`/`toppingMenu`) theo
+  cùng cách: trường mảng có `.default`, không index, không bump version Dexie. Khác `note`, topping mang
+  tiền: giá lúc bán nằm trên dòng và đã nằm sẵn trong `amount`, nên mất topping chỉ làm mất phần mô tả chứ
+  không lệch tổng. Worker phải lên TRƯỚC máy mới (Worker cũ cắt `toppings` khỏi sổ chung vĩnh viễn). Thực
+  đơn nhóm món là last-write-wins; Worker chép thực đơn đã lưu vào bản ghi của máy cũ không có hai trường đó
+  để đổi tên nhóm không xoá thực đơn.
 
 ## Đường ghi và đọc
 

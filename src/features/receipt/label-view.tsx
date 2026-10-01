@@ -34,7 +34,6 @@ export function LabelView({
   const { width, height } = labelDots(size)
   const unit = labelUnit(size)
   const padding = unit * 0.4
-  const bodyStyle = labelBodyStyle(size)
 
   return (
     <div
@@ -59,7 +58,7 @@ export function LabelView({
       </p>
       <div data-label-body className="relative min-h-0 flex-1 overflow-hidden">
         {blocks.map((block) => (
-          <p key={block.kind} style={bodyStyle}>
+          <p key={block.kind} style={labelBodyStyle(size, block.kind)}>
             {block.text}
           </p>
         ))}

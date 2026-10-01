@@ -4,8 +4,6 @@ import {
   cartReducer,
   cartTotals,
   emptyCart,
-  hasNoteToken,
-  toggleNoteToken,
   type Cart,
   type CartLine,
 } from '../cart'
@@ -295,6 +293,8 @@ describe('khôi phục nháp', () => {
           priceSource: 'catalog',
           costPrice: 30_000,
           qty: 1,
+          options: [],
+          toppings: [],
           note: '',
         },
       ],
@@ -361,6 +361,8 @@ describe('hoàn lại dòng vừa gỡ', () => {
           costPrice: 30_000,
           priceSource: 'catalog',
           qty: 0,
+          options: [],
+          toppings: [],
           note: '',
         },
       },
@@ -452,7 +454,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
     ])
     const cũ = khoá(gốc)
 
-    const gio = run([{ type: 'updateLine', key: cũ, qty: 1, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    const gio = run([{ type: 'updateLine', key: cũ, qty: 1, unitPrice: 55_000, options: [], toppings: [], note: 'Đá chung' }], gốc)
 
     expect(gio.lines).toHaveLength(2)
     expect(gio.lines[0]).toMatchObject({ name: 'Phở bò', note: 'Đá chung' })
@@ -465,7 +467,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
       { type: 'addLine', line: hàng('Đá chung', 3), book: RONG },
     ])
 
-    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, options: [], toppings: [], note: 'Đá chung' }], gốc)
 
     expect(gio.lines).toHaveLength(1)
     expect(gio.lines[0]).toMatchObject({ note: 'Đá chung', qty: 5 })
@@ -485,7 +487,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
       lines: [vừaSửa, { ...đích, unit: 'CHÉN', retailPrice: 99_000, costPrice: 1 }],
     }
 
-    const gio = run([{ type: 'updateLine', key: vừaSửa.key, qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    const gio = run([{ type: 'updateLine', key: vừaSửa.key, qty: 2, unitPrice: 55_000, options: [], toppings: [], note: 'Đá chung' }], gốc)
 
     expect(gio.lines).toHaveLength(1)
     expect(gio.lines[0]).toMatchObject({
@@ -504,7 +506,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
       { type: 'addLine', line: hàng(undefined, 2), book: RONG },
     ])
 
-    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, note: '' }], gốc)
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, options: [], toppings: [], note: '' }], gốc)
 
     expect(gio.lines).toHaveLength(1)
     expect(gio.lines[0]).toMatchObject({ note: '', qty: 5 })
@@ -513,7 +515,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
   it('B7 · mở sheet rồi bấm XONG mà không đổi gì thì không tự cộng dồn với chính mình', () => {
     const gốc = run([{ type: 'addLine', line: hàng('Đá chung', 3), book: RONG }])
 
-    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 3, unitPrice: 55_000, options: [], toppings: [], note: 'Đá chung' }], gốc)
 
     expect(gio.lines).toHaveLength(1)
     expect(gio.lines[0]?.qty).toBe(3)
@@ -522,7 +524,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
   it('B8 · đổi cả giá lẫn ghi chú một lượt → khoá mang cả hai, dòng thành giá gõ tay', () => {
     const gốc = run([{ type: 'addLine', line: hàng(undefined, 1), book: RONG }])
 
-    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 1, unitPrice: 60_000, note: 'Đá riêng' }], gốc)
+    const gio = run([{ type: 'updateLine', key: khoá(gốc), qty: 1, unitPrice: 60_000, options: [], toppings: [], note: 'Đá riêng' }], gốc)
 
     expect(gio.lines[0]).toMatchObject({ unitPrice: 60_000, note: 'Đá riêng', priceSource: 'manual' })
     expect(gio.lines[0]?.key).toContain('Đá riêng')
@@ -623,6 +625,8 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
           priceSource: 'catalog',
           costPrice: 30_000,
           qty: 1,
+          options: [],
+          toppings: [],
           note: '',
         },
       ],
@@ -662,7 +666,7 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
     ])
     const bịGộp = gốc.lines[1] as CartLine
 
-    const đãGộp = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, note: 'Đá chung' }], gốc)
+    const đãGộp = run([{ type: 'updateLine', key: khoá(gốc), qty: 2, unitPrice: 55_000, options: [], toppings: [], note: 'Đá chung' }], gốc)
     expect(đãGộp.lines).toHaveLength(1)
     expect(đãGộp.lines[0]?.qty).toBe(5)
 
@@ -673,52 +677,102 @@ describe('ghi chú nằm trong khoá dòng giỏ', () => {
   })
 })
 
-describe('bật/tắt một nhãn trong ghi chú dòng', () => {
-  it('T1 · ghi chú rỗng thì nhãn thành cả nội dung', () => {
-    expect(toggleNoteToken('', 'Đá chung')).toBe('Đá chung')
+describe('tuỳ chọn và topping trên dòng giỏ', () => {
+  const tranChau = { name: 'Trân châu', unitPrice: 5_000, qty: 2 }
+  const thach = { name: 'Thạch', unitPrice: 3_000, qty: 1 }
+  const cafe = () => item({ id: 2, name: 'Cà phê sữa', unitPrice: 20_000 })
+
+  const addCafe = () => run([{ type: 'addItem', item: cafe(), book: RONG }])
+  const edit = (cart: Cart, patch: { options?: string[]; toppings?: CartLine['toppings']; qty?: number }) =>
+    cartReducer(cart, {
+      type: 'updateLine',
+      key: cart.lines[0]?.key ?? '',
+      qty: patch.qty ?? 1,
+      unitPrice: 20_000,
+      options: patch.options ?? [],
+      toppings: patch.toppings ?? [],
+      note: '',
+    })
+
+  it('giá ly giữ nguyên, tổng giỏ cộng topping rồi nhân số ly', () => {
+    const cart = edit(addCafe(), { qty: 2, toppings: [tranChau, thach] })
+
+    expect(cart.lines[0]).toMatchObject({ unitPrice: 20_000, qty: 2 })
+    expect(cartTotals(cart).total).toBe(66_000)
   })
 
-  it('T2 · nối vào cuối, không đè chữ người bán tự gõ', () => {
-    expect(toggleNoteToken('ít đường', 'Đá chung')).toBe('ít đường, Đá chung')
+  it('hai ly cùng món cùng giá nhưng khác topping là hai dòng, không gộp', () => {
+    const withTopping = edit(addCafe(), { toppings: [tranChau] })
+    const cart = cartReducer(withTopping, { type: 'addItem', item: cafe(), book: RONG })
+
+    expect(cart.lines).toHaveLength(2)
+    expect(cartTotals(cart).total).toBe(30_000 + 20_000)
   })
 
-  it('T3 · bấm lại thì gỡ đúng nhãn đó, phần còn lại nguyên vẹn', () => {
-    expect(toggleNoteToken('ít đường, Đá chung', 'Đá chung')).toBe('ít đường')
+  it('khác tuỳ chọn cũng là hai dòng', () => {
+    const cart = cartReducer(edit(addCafe(), { options: ['Ít đường'] }), { type: 'addItem', item: cafe(), book: RONG })
+    expect(cart.lines).toHaveLength(2)
   })
 
-  it('T4 · gỡ nhãn duy nhất thì ghi chú về rỗng', () => {
-    expect(toggleNoteToken('Đá chung', 'Đá chung')).toBe('')
+  it('cùng topping khác thứ tự chọn vẫn là MỘT dòng: sửa ly trơn cho trùng thì cộng số lượng', () => {
+    const first = edit(addCafe(), { toppings: [tranChau, thach], qty: 1 })
+    const both = cartReducer(first, { type: 'addItem', item: cafe(), book: RONG })
+    const plain = both.lines.find((line) => line.toppings.length === 0)
+    expect(plain).toBeDefined()
+
+    const merged = cartReducer(both, {
+      type: 'updateLine',
+      key: plain?.key ?? '',
+      qty: 3,
+      unitPrice: 20_000,
+      options: [],
+      toppings: [thach, tranChau],
+      note: '',
+    })
+
+    expect(merged.lines).toHaveLength(1)
+    expect(merged.lines[0]).toMatchObject({ qty: 4 })
+    expect(cartTotals(merged).total).toBe(4 * 33_000)
   })
 
-  it('T5 · gỡ được cả khi nhãn đứng đầu', () => {
-    expect(toggleNoteToken('Đá chung, ít đường', 'Đá chung')).toBe('ít đường')
+  it('khoá không lẫn khi tên topping chứa dấu ~ hay dấu ngoặc', () => {
+    const odd = { name: 'a~b]', unitPrice: 1_000, qty: 1 }
+    const a = edit(addCafe(), { toppings: [odd] })
+    const b = edit(addCafe(), { toppings: [] })
+    expect(a.lines[0]?.key).not.toBe(b.lines[0]?.key)
   })
 
-  it('T6 · khớp NGUYÊN phần tử: "Đá chung nhiều" không phải là nhãn "Đá chung"', () => {
-    expect(toggleNoteToken('Đá chung nhiều', 'Đá chung')).toBe('Đá chung nhiều, Đá chung')
+  it('bật SỈ giữ nguyên topping và vẫn cộng topping lên giá sỉ', () => {
+    const cart = edit(addCafe(), { toppings: [tranChau] })
+    const book: PriceBook = new Map([[2, 18_000]])
+    const wholesale = cartReducer(cart, { type: 'applyPriceMode', mode: 'wholesale', book })
+
+    expect(wholesale.lines[0]).toMatchObject({ unitPrice: 18_000, toppings: [tranChau] })
+    expect(cartTotals(wholesale).total).toBe(28_000)
   })
 
-  it('T7 · là toggle THUẦN, không biết luật loại trừ của nghiệp vụ đá', () => {
-    expect(toggleNoteToken('Đá chung, Đá riêng', 'Đá riêng')).toBe('Đá chung')
-  })
+  it('nháp cũ thiếu options và toppings được khôi phục thành mảng rỗng và tính lại khoá', () => {
+    const legacy = {
+      ...emptyCart(),
+      lines: [
+        {
+          key: 'khoá-cũ',
+          itemId: 2,
+          name: 'Cà phê sữa',
+          unit: 'ly',
+          unitPrice: 20_000,
+          retailPrice: 20_000,
+          priceSource: 'catalog',
+          costPrice: null,
+          qty: 1,
+          note: '',
+        },
+      ],
+    } as unknown as Cart
 
-  it('T8 · trim từng phần trước khi so, khoảng trắng thừa không làm hụt nhãn', () => {
-    expect(toggleNoteToken('ít đường ,  Đá chung', 'Đá chung')).toBe('ít đường')
-  })
-
-  it('H1 · thấy nhãn đang bật', () => {
-    expect(hasNoteToken('ít đường, Đá chung', 'Đá chung')).toBe(true)
-  })
-
-  it('H2 · không có nhãn thì false', () => {
-    expect(hasNoteToken('ít đường', 'Đá chung')).toBe(false)
-  })
-
-  it('H3 · "Đá chung nhiều" KHÔNG tính là có nhãn "Đá chung" — `includes` sẽ sai ở đây', () => {
-    expect(hasNoteToken('Đá chung nhiều', 'Đá chung')).toBe(false)
-  })
-
-  it('H4 · ghi chú rỗng thì false', () => {
-    expect(hasNoteToken('', 'Đá chung')).toBe(false)
+    const restored = cartReducer(emptyCart(), { type: 'restore', cart: legacy })
+    expect(restored.lines[0]).toMatchObject({ options: [], toppings: [] })
+    expect(restored.lines[0]?.key).not.toBe('khoá-cũ')
+    expect(cartReducer(restored, { type: 'addItem', item: cafe(), book: RONG }).lines).toHaveLength(1)
   })
 })

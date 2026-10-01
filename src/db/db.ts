@@ -78,6 +78,20 @@ function stampTimestamps<T extends Stamped>(table: Table<T, number>): void {
   )
 }
 
+/**
+ * Dòng đơn và nhóm món ghi TRƯỚC khi có trường mảng mới (tuỳ chọn, topping, thực đơn của nhóm) nằm trong
+ * IndexedDB mà không có trường đó, và đổi `version` chỉ để vá chúng là đóng dấu `schemaGen` mới lên
+ * máy đang chạy. Điền mảng rỗng lúc ĐỌC để mọi chỗ dùng được tin kiểu: `line.toppings.reduce` không
+ * được nổ trên phiếu của đơn cũ.
+ */
+function defaultArrayFields<T extends object>(table: Table<T, number>, fields: readonly (keyof T & string)[]): void {
+  table.hook('reading', (obj) => {
+    const row = obj as Record<string, unknown>
+    const missing = fields.filter((field) => !Array.isArray(row[field]))
+    return missing.length === 0 ? obj : { ...obj, ...Object.fromEntries(missing.map((field) => [field, []])) }
+  })
+}
+
 export class BillerDb extends Dexie {
   settings!: Table<SettingRow, string>
   deviceState!: Table<DeviceState, string>
@@ -190,6 +204,8 @@ export class BillerDb extends Dexie {
     stampTimestamps(this.orders)
     stampTimestamps(this.expenseCategories)
     stampTimestamps(this.expenses)
+    defaultArrayFields(this.orderLines, ['options', 'toppings'])
+    defaultArrayFields(this.itemGroups, ['optionGroups', 'toppingMenu'])
     installOutboxHooks(this)
 
     // `.upgrade()` không chạy khi IndexedDB được tạo mới thẳng ở version mới nhất.

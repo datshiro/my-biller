@@ -1,3 +1,4 @@
+import { ItemGroupMenuSheet } from './item-group-menu-sheet'
 import { NameListScreen } from './name-list-screen'
 import { useItemGroupRows } from './use-catalog'
 import { appendGroup, deleteGroup, updateGroup } from '@/db/repositories/items'
@@ -8,7 +9,7 @@ export function ItemGroupPage() {
   return (
     <NameListScreen
       title="Nhóm mặt hàng"
-      hint="Nhóm để lọc nhanh khi bán: Đồ uống, Đồ ăn, Thuốc lá…"
+      hint="Nhóm để lọc nhanh khi bán: Đồ uống, Đồ ăn, Thuốc lá… Mở một nhóm để cài tuỳ chọn và topping cho các món trong nhóm."
       addLabel="Thêm nhóm"
       emptyMessage="Chưa có nhóm nào. Bán ít món thì không cần nhóm — thêm khi danh sách bắt đầu dài."
       rows={rows}
@@ -22,6 +23,10 @@ export function ItemGroupPage() {
       onCreate={appendGroup}
       onRename={(id, name) => updateGroup(id, { name })}
       onDelete={deleteGroup}
+      extra={{
+        label: 'Tuỳ chọn & topping',
+        sheet: (row, onClose) => <ItemGroupMenuSheet key={row.id} groupId={row.id} onClose={onClose} />,
+      }}
     />
   )
 }

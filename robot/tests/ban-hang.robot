@@ -641,21 +641,22 @@ Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi 
     ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
     Length Should Be    ${của_đơn}    2
     ...    Hai nhóm ly bị gộp về một dòng — bếp sẽ pha 5 ly cùng một kiểu đá.
-    ${chung}=    Evaluate    [d for d in $của_đơn if d['note'] == 'Đá chung'][0]
-    ${riêng}=    Evaluate    [d for d in $của_đơn if d['note'] == 'Đá riêng'][0]
+    ${chung}=    Evaluate    [d for d in $của_đơn if d['options'] == ['Đá chung']][0]
+    ${riêng}=    Evaluate    [d for d in $của_đơn if d['options'] == ['Đá riêng']][0]
     Should Be Equal As Numbers    ${chung}[qty]    3    Số ly đá chung xuống sổ sai.
     Should Be Equal As Numbers    ${riêng}[qty]    2    Số ly đá riêng xuống sổ sai.
 
-Gõ ghi chú tay rồi bấm chip thì ghi chú giữ cả hai, không bị đè
-    [Documentation]    Chip chỉ NỐI một nhãn vào ghi chú, không thay cả ô. Đối chiếu tận sổ vì kiểu
-    ...    hỏng của `note` đã có tiền lệ ở ca ngay trên: màn hình hiện đúng, sổ ghi thiếu.
+Chọn chip đá không đụng vào ô ghi chú: nhãn xuống `options`, chữ gõ tay xuống `note`
+    [Documentation]    Chip từng NỐI nhãn vào ô ghi chú; giờ nhãn nằm riêng ở `options` để tem và phiếu
+    ...    in được từng hạng mục. Đối chiếu tận sổ vì kiểu hỏng này có tiền lệ: màn hình hiện đúng,
+    ...    sổ ghi thiếu — ở đây là nhãn rơi mất hoặc chui nhầm vào `note`.
     Mở Màn    /
     Chọn Món    Phở bò
     Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
     Điền Ô    Ghi chú    ít đường
     Chọn Chip    Đá riêng
     ${ghi_chú}=    Đọc Ô    Ghi chú
-    Should Be Equal    ${ghi_chú}    ít đường, Đá riêng
+    Should Be Equal    ${ghi_chú}    ít đường    Chip đá vẫn ghi chữ vào ô ghi chú.
     Bấm Nút    XONG
     Mở Sheet Thu Tiền
     Chốt Đơn
@@ -663,8 +664,10 @@ Gõ ghi chú tay rồi bấm chip thì ghi chú giữ cả hai, không bị đè
     ${đơn}=    Đơn Mới Nhất
     ${dòng}=    Đọc Bảng    orderLines
     ${phở}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]][0]
-    Should Be Equal    ${phở}[note]    ít đường, Đá riêng
-    ...    Chip đè mất chữ người bán tự gõ — bếp mất nửa yêu cầu của khách.
+    Should Be Equal    ${phở}[note]    ít đường
+    ...    Chữ người bán tự gõ bị chip đè — bếp mất nửa yêu cầu của khách.
+    Should Be Equal    ${phở}[options]    ${{ ['Đá riêng'] }}
+    ...    Nhãn đá không xuống `options` của dòng.
 
 Bấm lại chip đang chọn thì gỡ đúng nhãn đó, ghi chú gõ tay còn nguyên
     Mở Màn    /
@@ -694,7 +697,84 @@ Hai chip đá loại trừ nhau: bấm cái này thì cái kia tự tắt
     ${chung}=    Chip Đang Chọn    Đá chung
     Should Be Equal    ${chung}    false
     ${ghi_chú}=    Đọc Ô    Ghi chú
-    Should Be Equal    ${ghi_chú}    ít đường, Đá riêng
+    Should Be Equal    ${ghi_chú}    ít đường
+
+Tuỳ chọn và topping của nhóm món xuống sổ: giá ly cộng topping, đối chiếu IndexedDB
+    [Documentation]    Tiền là chỗ hỏng tệ nhất của app này: màn hình hiện đúng mà sổ ghi sai. Ca này lên
+    ...    đúng một đơn 2 ly cà phê (20.000) + trân châu ×2 (5.000/phần) + thạch (3.000) rồi đọc thẳng
+    ...    `orderLines` và `orders`: thành tiền = (20.000 + 10.000 + 3.000) × 2 = 66.000, `unitPrice`
+    ...    vẫn là giá ly, topping mang giá LÚC BÁN.
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Số lượng    2
+    Chọn Chip    Ít đường
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Thạch"]
+    Chờ Thấy Chữ    Mỗi ly: 33.000
+    Điền Ô    Ghi chú    mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    ${ly}=    Set Variable    ${của_đơn}[0]
+    Should Be Equal As Integers    ${ly}[unitPrice]    20000    `unitPrice` phải là giá ly, không gồm topping.
+    Should Be Equal As Integers    ${ly}[amount]    66000    Thành tiền xuống sổ không gồm đúng tiền topping.
+    Should Be Equal    ${ly}[options]    ${{ ['Ít đường'] }}
+    Should Be Equal    ${ly}[note]    mang về
+    ${topping}=    Set Variable    ${{ [(t['name'], t['unitPrice'], t['qty']) for t in $ly['toppings']] }}
+    Should Be Equal    ${topping}    ${{ [('Trân châu', 5000, 2), ('Thạch', 3000, 1)] }}
+    ...    Topping không xuống sổ kèm giá lúc bán.
+    Should Be Equal As Integers    ${đơn}[subtotal]    66000
+    Should Be Equal As Integers    ${đơn}[total]    66000    Tổng đơn lệch tổng các dòng.
+
+Hai ly cùng món khác topping là hai dòng riêng; thêm topping cho ly trơn thì gộp vào dòng cùng topping
+    [Documentation]    Gộp nhầm hai ly khác topping là bán thiếu hoặc thừa tiền topping mà không lỗi nào
+    ...    hiện ra. Khoá dòng gồm cả tuỳ chọn lẫn topping; sửa dòng làm khoá trùng thì cộng số lượng.
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Bấm Nút    XONG
+    Chọn Món    Cà phê sữa
+    Chờ Thấy Chữ    Cà phê sữa
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    sorted([d for d in $dòng if d['orderId'] == ${đơn}[id]], key=lambda d: d['amount'])
+    Length Should Be    ${của_đơn}    2    Hai ly khác topping bị gộp về một dòng.
+    Should Be Equal As Integers    ${của_đơn}[0][amount]    20000
+    Should Be Equal As Integers    ${của_đơn}[1][amount]    25000
+
+Thêm topping cho ly trơn đến mức trùng dòng có sẵn thì gộp số lượng, không đẻ dòng thứ ba
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Bấm Nút    XONG
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Bấm Nút    XONG
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1    Hai ly cùng topping không gộp thành một dòng.
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    2
+    Should Be Equal As Integers    ${của_đơn}[0][amount]    50000
 
 Bấm Đã hiểu để dọn banner bỏ món, không phải bấm Hoàn lại
     [Documentation]    Bỏ món bằng cách gõ 0 thường là CỐ Ý, và banner sống tới hết đơn. Trước đây nút

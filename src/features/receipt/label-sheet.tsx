@@ -17,13 +17,12 @@ function paginateOnProbe(probe: HTMLElement, blocks: readonly LabelBlock[], size
   Object.assign(ruler.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '0', width: `${body.clientWidth}px` })
   body.appendChild(ruler)
   const room = body.getBoundingClientRect().height
-  const bodyStyle = labelBodyStyle(size)
   try {
     return paginateBlocks(blocks, (page) => {
       ruler.replaceChildren(
         ...page.map((block) => {
           const p = document.createElement('p')
-          Object.assign(p.style, bodyStyle)
+          Object.assign(p.style, labelBodyStyle(size, block.kind))
           p.textContent = block.text
           return p
         }),

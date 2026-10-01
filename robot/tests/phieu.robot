@@ -292,6 +292,23 @@ Header cột đơn giá rút thành Đ.GIÁ
     Chờ Thấy Chữ    Đ.GIÁ
     Không Được Thấy Chữ    Đơn giá
 
+Phiếu liệt kê từng topping kèm giá dưới tên món, đơn giá đã gồm topping nên SL × Đ.GIÁ ra T.tiền
+    [Documentation]    Khách phải thấy vì sao ly cà phê 20.000 tính 33.000: từng topping một dòng kèm giá
+    ...    một ly, rồi tuỳ chọn và ghi chú. Đọc chữ từ DOM phiếu chứ không tin ảnh chụp.
+    Cài Thực Đơn Đồ Uống
+    Bán Hai Ly Cà Phê Có Topping
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+    ${ô}=    Evaluate JavaScript    css=.receipt-view tbody tr
+    ...    (row) => [...row.querySelectorAll('td')].map((td) => td.textContent)
+    Should Contain    ${ô}[0]    + Trân châu x2
+    Should Contain    ${ô}[0]    10.000
+    Should Contain    ${ô}[0]    + Thạch
+    Should Contain    ${ô}[0]    3.000
+    Should Contain    ${ô}[0]    Ít đường, mang về
+    Should Be Equal    ${ô}[1]    2
+    Should Be Equal    ${ô}[2]    33.000    Đ.GIÁ phải đã gồm topping (20.000 + 10.000 + 3.000).
+    Should Be Equal    ${ô}[3]    66.000
+
 Ghi chú từng món hiện trên phiếu dưới tên món
     [Documentation]    Ghi chú từng dòng đã xuống sổ (ban-hang.robot) nhưng chưa từng lên tờ giấy
     ...    đưa bếp. Dòng note là dòng thứ ba trong ô tên món một cách CÓ CHỦ Ý — tiêu chí "tên món
@@ -543,7 +560,7 @@ In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của
     Click    css=button[data-label-print]
     Chờ Hộp Xác Nhận    In 2 tem cho đơn ${đơn}[code]?
     Xác Nhận Trong Hộp    In tem
-    Chờ Thấy Chữ    Đã gửi ${{ 1 + $số_trang }} tem tới máy in 192.168.1.60:9100.
+    Chờ Thấy Chữ    Đã gửi 2 tem (${{ 1 + $số_trang }} tờ giấy, ${{ $số_trang - 1 }} tờ là phần ghi chú dài) tới máy in 192.168.1.60:9100.
     ${tspl}=    Evaluate JavaScript    ${None}    () => atob(window.__printJobs[0].base64)
     Should Be Equal As Integers    ${{ $tspl.count('PRINT 1,1') }}    ${{ 1 + $số_trang }}
     Should Be Equal As Integers    ${{ $tspl.count('"1/2"') }}    1
@@ -552,6 +569,35 @@ In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của
     Should Contain    ${tspl}    TEXT
     Should Contain    ${tspl}    ,"3",0,1,1,"1/2"
     Should Not Contain    ${tspl}    ,"4",0
+
+In tem: ba hạng mục theo thứ tự tuỳ chọn, topping, ghi chú khách, và số thứ tự đếm theo ly
+    [Documentation]    Thân tem không còn là một khối ghi chú: tuỳ chọn, topping (có dấu +) và lời dặn của
+    ...    khách là ba khối riêng đúng thứ tự người pha đọc. Hai ly nên số thứ tự là "1/2" và "2/2".
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in    192.168.1.50
+    Click    css=button:text-is("LƯU")
+    Chờ Thấy Chữ    Đã lưu 192.168.1.50:9100
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×30 mm
+    Cài Thực Đơn Đồ Uống
+    Bán Hai Ly Cà Phê Có Topping
+
+    Get Element Count    css=[data-label]    >=    1
+    ${thân}=    Evaluate JavaScript    ${None}
+    ...    () => [...document.querySelectorAll('[data-label-body] p')].map((p) => p.textContent)
+    ${đọc}=    Evaluate    ' '.join($thân)
+    Should Be Equal    ${đọc}    Ít đường + Trân châu x2, Thạch mang về
+    ...    Thân tem không đúng thứ tự tuỳ chọn, topping, ghi chú khách.
+
+    Click    css=button[data-label-print]
+    Xác Nhận Trong Hộp    In tem
+    Chờ Thấy Chữ    Đã gửi 2 tem
+    ${tspl}=    Evaluate JavaScript    ${None}    () => atob(window.__printJobs[0].base64)
+    Should Contain    ${tspl}    "1/2"
+    Should Contain    ${tspl}    "2/2"
+    Should Not Contain    ${tspl}    "3/2"
 
 In tem: chưa cài máy in tem thì báo kèm đường vào Cài đặt, không gửi gì
     [Documentation]    Không có khổ và IP thì không được đoán — gửi tem tới máy in phiếu là in ra giấy phí.

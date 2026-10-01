@@ -841,9 +841,27 @@ export class ShopDO extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Máy chạy bản cũ không biết thực đơn tuỳ chọn/topping của nhóm món, nên đổi tên nhóm xong nó đẩy lên bản
+   * ghi KHÔNG có hai trường đó — và schema Worker điền mảng rỗng cho chúng. Không giữ lại thì last-write-wins
+   * xoá sạch thực đơn trên mọi máy. Chỉ giữ khi payload gốc thiếu hẳn trường: máy mới cố ý xoá hết thực đơn
+   * vẫn gửi `[]` rõ ràng và được tôn trọng.
+   */
+  private preserveItemGroupMenu(raw: SyncEvent, event: SyncEvent): SyncEvent {
+    if (event.table !== 'itemGroups' || !event.after || !raw.after) return event
+    const stored = this.ledgerPayload('itemGroups', event.entityKey)?.after
+    if (!stored) return event
+    const after = { ...event.after }
+    for (const field of ['optionGroups', 'toppingMenu']) {
+      if (!(field in raw.after) && field in stored) after[field] = stored[field]
+    }
+    return { ...event, after }
+  }
+
   private canonicalizeEvent(event: SyncEvent): { event: SyncEvent } | { problem: string } {
-    const validated = this.validateEventPayloads(event)
-    if ('problem' in validated) return validated
+    const checked = this.validateEventPayloads(event)
+    if ('problem' in checked) return checked
+    const validated = { event: this.preserveItemGroupMenu(event, checked.event) }
     const identityProblem = this.identityProblem(validated.event)
     if (identityProblem) return { problem: identityProblem }
     if (validated.event.operation === 'delete') return validated

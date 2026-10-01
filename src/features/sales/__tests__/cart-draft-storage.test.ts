@@ -80,6 +80,8 @@ describe('nháp do bản build này ghi', () => {
         priceSource: 'catalog',
         costPrice: 30_000,
         qty: 2,
+        options: [],
+        toppings: [],
         note: '',
       },
     ],
@@ -106,5 +108,53 @@ describe('nháp hỏng', () => {
 
     expect(loadCartDraft()).toBeNull()
     expect(localStorage.getItem(KEY)).toBeNull()
+  })
+})
+
+describe('nháp do bản build trước khi có tuỳ chọn/topping ghi', () => {
+  it('thiếu hai trường thì nạp được với mảng rỗng, không bỏ cả nháp', () => {
+    localStorage.setItem(
+      'my-biller:cart-draft',
+      JSON.stringify({
+        ...emptyCart(),
+        sessionId: 'phiên-cũ',
+        lines: [
+          {
+            key: 'k',
+            itemId: 1,
+            name: 'Phở bò',
+            unit: 'tô',
+            unitPrice: 55_000,
+            priceSource: 'catalog',
+            costPrice: null,
+            qty: 1,
+            note: '',
+          },
+        ],
+      }),
+    )
+
+    expect(loadCartDraft()?.cart.lines[0]).toMatchObject({ options: [], toppings: [] })
+  })
+
+  it('topping và tuỳ chọn đi qua lưu rồi nạp nguyên vẹn', () => {
+    const toppings = [{ name: 'Trân châu', unitPrice: 5_000, qty: 2 }]
+    const line = {
+      key: 'k',
+      itemId: 1,
+      name: 'Cà phê sữa',
+      unit: 'ly',
+      unitPrice: 20_000,
+      retailPrice: 20_000,
+      priceSource: 'catalog' as const,
+      costPrice: null,
+      qty: 1,
+      options: ['Ít đường'],
+      toppings,
+      note: '',
+    }
+    saveCartDraft({ ...emptyCart(), lines: [line] })
+
+    expect(loadCartDraft()?.cart.lines[0]).toMatchObject({ options: ['Ít đường'], toppings })
   })
 })

@@ -195,9 +195,11 @@ export function ReceiptPage() {
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
       await nativeSink(await buildLabelJob(items, cfg), cfg)
-      // Ghi chú dài ra thêm tem tiếp nên số tờ thật có thể nhiều hơn số ly.
+      // Ghi chú dài ra thêm tem tiếp nên số tờ thật có thể nhiều hơn số ly; nói rõ để người bán không đếm lệch.
+      const cups = copies.reduce((sum, n) => sum + n, 0)
       const sheets = items.reduce((sum, { nodes, copies }) => sum + nodes.length * copies, 0)
-      setInTem({ busy: false, message: `Đã gửi ${sheets} tem tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+      const extra = sheets > cups ? ` (${sheets} tờ giấy, ${sheets - cups} tờ là phần ghi chú dài)` : ''
+      setInTem({ busy: false, message: `Đã gửi ${cups} tem${extra} tới máy in ${cfg.host}:${cfg.port}.`, error: false })
     } catch (error) {
       setInTem({
         busy: false,

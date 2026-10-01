@@ -13,18 +13,22 @@ import {
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
+  type LineTopping,
   type Order,
   type OrderLine,
   type Payment,
 } from '@/domain/schema'
 
-export type OrderLineDraft = Omit<OrderLine, 'id' | 'gid' | 'orderId' | 'amount' | 'note'> & {
+export type OrderLineDraft = Omit<OrderLine, 'id' | 'gid' | 'orderId' | 'amount' | 'note' | 'options' | 'toppings'> & {
   /**
    * Ghi chú từng món ("ít đường, mang về"). Cố ý OPTIONAL ở bản nháp: để bắt buộc thì ~25 file phải
    * thêm `note: ''` một cách cơ học, mà diff cơ học là chỗ lỗi trốn. Đổi lại, TypeScript không ép
    * call site nhớ truyền — nên chốt chặn là ca hành vi trong `orders.test.ts`, không phải kiểu.
    */
   note?: string
+  /** Như `note`: bỏ trống là không có tuỳ chọn / topping, schema rơi về mảng rỗng. */
+  options?: string[]
+  toppings?: LineTopping[]
 }
 
 export type OrderDraft = {
@@ -208,7 +212,10 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
   const identity = await requireDeviceIdentity()
 
   return syncTransaction(async () => {
-    const lines = draft.lines.map((line) => ({ ...line, amount: calcLineAmount(line) }))
+    const lines = draft.lines.map((line) => {
+      const toppings = line.toppings ?? []
+      return { ...line, toppings, amount: calcLineAmount({ ...line, toppings }) }
+    })
     const totals = calcOrderTotals({ lines, discount: draft.discount, surcharge: draft.surcharge })
 
     const paidAmount = draft.payment?.amount ?? 0

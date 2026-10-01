@@ -5,7 +5,9 @@ import { OrderStatusChip } from './order-status-chip'
 import { useOrderDetail } from './use-orders'
 import { updateOrderNote, voidOrder } from '@/db/repositories/orders'
 import { resolveUnallocatedPayment } from '@/db/repositories/payments'
+import { toppingAmount, toppingLabel } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
+import { calcUnitPriceWithToppings } from '@/domain/order-total'
 import { remainingOf } from '@/domain/order-status'
 import type { Payment } from '@/domain/schema'
 import { Button } from '@/ui/button'
@@ -123,8 +125,16 @@ export function OrderDetailPage() {
             <span className="block truncate font-semibold">{line.name}</span>
             <span className="money block text-[13px] text-muted">
               {formatQty(line.qty)}
-              {line.unit ? ` ${line.unit}` : ''} × {formatAmount(line.unitPrice)}
+              {line.unit ? ` ${line.unit}` : ''} × {formatAmount(calcUnitPriceWithToppings(line))}
             </span>
+            {line.toppings.map((topping) => (
+              <span key={topping.name} className="money block text-[13px] text-muted">
+                + {toppingLabel(topping)} · {formatAmount(toppingAmount(topping))}
+              </span>
+            ))}
+            {line.options.length > 0 || line.note ? (
+              <span className="block text-[13px] text-muted">{[...line.options, line.note].filter(Boolean).join(', ')}</span>
+            ) : null}
           </span>
           <span className="money shrink-0 font-bold">{formatAmount(line.amount)}</span>
         </div>

@@ -10,7 +10,15 @@ import {
   listExpenseCategories,
   listExpensesBetween,
 } from '../repositories/expenses'
-import { createGroup, createItem, deactivateItem, deleteGroup, listActiveItems } from '../repositories/items'
+import {
+  createGroup,
+  createItem,
+  deactivateItem,
+  deleteGroup,
+  getGroup,
+  listActiveItems,
+  updateGroup,
+} from '../repositories/items'
 import { createOrder } from '../repositories/orders'
 import { getShop, saveShop } from '../repositories/settings'
 import { installTestDevice } from '@/test-fixtures'
@@ -142,5 +150,31 @@ describe('expenses', () => {
     await ensureDefaultExpenseCategories()
 
     expect(await db.expenseCategories.count()).toBe(1)
+  })
+})
+
+describe('thực đơn tuỳ chọn và topping của nhóm món', () => {
+  it('lưu và đọc lại nguyên vẹn; đổi tên nhóm không làm mất thực đơn', async () => {
+    const id = await createGroup({ name: 'Đồ uống', sortOrder: 1 })
+    expect((await getGroup(id))?.optionGroups).toEqual([])
+
+    await updateGroup(id, {
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    })
+    await updateGroup(id, { name: 'Nước uống' })
+
+    expect(await getGroup(id)).toMatchObject({
+      name: 'Nước uống',
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    })
+  })
+
+  it('từ chối nhóm tuỳ chọn không có lựa chọn và topping giá âm hay lẻ', async () => {
+    const id = await createGroup({ name: 'Đồ uống', sortOrder: 1 })
+    await expect(updateGroup(id, { optionGroups: [{ name: 'Đường', choices: [] }] })).rejects.toThrow()
+    await expect(updateGroup(id, { toppingMenu: [{ name: 'Thạch', price: -1 }] })).rejects.toThrow()
+    await expect(updateGroup(id, { toppingMenu: [{ name: 'Thạch', price: 1.5 }] })).rejects.toThrow()
   })
 })

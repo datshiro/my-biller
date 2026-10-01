@@ -4,7 +4,7 @@ import { testGid } from '@/test-fixtures'
 const at = new Date(2026, 7, 9, 10).getTime()
 const settings: BackupData['settings'] = []
 
-const group = (gid: number) => ({ id: 1, gid: testGid(gid), name: 'Món', sortOrder: 1, createdAt: 1, updatedAt: 1 })
+const group = (gid: number) => ({ id: 1, gid: testGid(gid), name: 'Món', sortOrder: 1, optionGroups: [], toppingMenu: [], createdAt: 1, updatedAt: 1 })
 const item = (gid: number) => ({ id: 1, gid: testGid(gid), name: 'Phở', groupId: 1, unit: 'tô', unitPrice: 50_000, costPrice: 20_000, isActive: 1 as const, note: '', createdAt: 1, updatedAt: 1 })
 const customer = (gid: number) => ({ id: 1, gid: testGid(gid), name: 'Chị Hoa', phone: gid === 101 ? '0901' : '0902', address: '', note: '', createdAt: 1, updatedAt: 1 })
 const price = (gid: number) => ({ id: 1, gid: testGid(gid), customerId: 1, itemId: 1, unitPrice: 45_000, createdAt: 1, updatedAt: 1 })
@@ -29,7 +29,7 @@ const order = (id: number, gid: number, code: string, total: number, paidAmount:
   createdAt: 1,
   updatedAt: 1,
 })
-const line = (id: number, gid: number, orderId: number, amount: number) => ({ id, gid: testGid(gid), orderId, itemId: 1, name: 'Phở', unit: 'tô', unitPrice: amount, costPrice: 20_000, qty: 1, amount, note: '' })
+const line = (id: number, gid: number, orderId: number, amount: number) => ({ id, gid: testGid(gid), orderId, itemId: 1, name: 'Phở', unit: 'tô', unitPrice: amount, costPrice: 20_000, qty: 1, amount, note: '', options: [], toppings: [] })
 const payment = (id: number, gid: number, orderId: number, amount: number, allocatedOrderId: number) => ({ id, gid: testGid(gid), orderId, allocatedOrderId, customerId: 1, amount, method: 'cash' as const, paidAt: at + id, note: '' })
 
 export const ledgerA: BackupData = {

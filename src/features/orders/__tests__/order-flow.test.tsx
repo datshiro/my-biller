@@ -123,6 +123,37 @@ describe('chi tiết đơn', () => {
     expect(dòng.textContent).toBe('2 × 40.000')
   })
 
+  it('dòng có topping hiện đơn giá đã gồm topping, từng topping kèm giá một ly, rồi tuỳ chọn và ghi chú', async () => {
+    const { id } = await createOrder(
+      draft({
+        lines: [
+          {
+            itemId: null,
+            name: 'Cà phê sữa',
+            unit: 'ly',
+            unitPrice: 20_000,
+            costPrice: null,
+            qty: 2,
+            options: ['Ít đường'],
+            toppings: [
+              { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+              { name: 'Thạch', unitPrice: 3_000, qty: 1 },
+            ],
+            note: 'mang về',
+          },
+        ],
+        payment: { amount: 66_000, method: 'cash', note: '' },
+      }),
+    )
+    renderApp(`/don/${id}`)
+
+    expect((await screen.findByText(/× 33.000/)).textContent).toBe('2 ly × 33.000')
+    expect(screen.getByText('+ Trân châu x2 · 10.000')).toBeDefined()
+    expect(screen.getByText('+ Thạch · 3.000')).toBeDefined()
+    expect(screen.getByText('Ít đường, mang về')).toBeDefined()
+    expect(screen.getAllByText('66.000 đ').length).toBeGreaterThan(0)
+  })
+
   it('huỷ đơn từ giao diện: phải xác nhận, xong thì đơn thành đã huỷ và giữ phiếu thu', async () => {
     const { id } = await createOrder(draft())
     renderApp(`/don/${id}`)

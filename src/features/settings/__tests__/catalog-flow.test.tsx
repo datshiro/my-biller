@@ -111,3 +111,69 @@ describe('nhóm mặt hàng', () => {
     expect((await db.items.get(itemId))?.groupId).toBeNull()
   })
 })
+
+describe('tuỳ chọn và topping của nhóm mặt hàng', () => {
+  const openMenu = async (groupName: string) => {
+    renderPage(<ItemGroupPage />)
+    await openRow(groupName)
+    await userEvent.click(await screen.findByRole('button', { name: /Tuỳ chọn & topping/ }))
+    return within(await screen.findByRole('dialog', { name: /Tuỳ chọn & topping/ }))
+  }
+  const save = () => userEvent.click(screen.getByRole('button', { name: 'LƯU' }))
+
+  it('thêm nhóm tuỳ chọn và topping rồi lưu: nằm trên nhóm, giá topping là số nguyên đồng', async () => {
+    const groupId = await appendGroup('Đồ uống')
+    const sheet = await openMenu('Đồ uống')
+
+    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm nhóm tuỳ chọn' }))
+    await userEvent.type(sheet.getByLabelText('Tên nhóm tuỳ chọn 1'), 'Đường')
+    await userEvent.type(sheet.getByLabelText('Các lựa chọn của nhóm 1'), 'Ít đường, Không đường')
+    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm topping' }))
+    await userEvent.type(sheet.getByLabelText('Tên topping 1'), 'Trân châu')
+    await userEvent.type(sheet.getByLabelText('Giá topping 1'), '5000')
+    await save()
+
+    await waitFor(async () => expect((await db.itemGroups.get(groupId))?.toppingMenu).toHaveLength(1))
+    expect(await db.itemGroups.get(groupId)).toMatchObject({
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Tuỳ chọn & topping/ })).toBeNull())
+  })
+
+  it('lựa chọn trùng nhóm Đá có sẵn bị chặn kèm lý do, không ghi gì', async () => {
+    const groupId = await appendGroup('Đồ uống')
+    const sheet = await openMenu('Đồ uống')
+
+    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm nhóm tuỳ chọn' }))
+    await userEvent.type(sheet.getByLabelText('Tên nhóm tuỳ chọn 1'), 'Kiểu đá')
+    await userEvent.type(sheet.getByLabelText('Các lựa chọn của nhóm 1'), 'Đá riêng')
+    await save()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('chỉ thuộc một nhóm')
+    expect((await db.itemGroups.get(groupId))?.optionGroups).toEqual([])
+  })
+
+  it('topping thiếu giá bị chặn; xoá một topping rồi lưu thì thực đơn còn đúng cái còn lại', async () => {
+    const groupId = await appendGroup('Đồ uống')
+    await db.itemGroups.update(groupId, {
+      toppingMenu: [
+        { name: 'Trân châu', price: 5_000 },
+        { name: 'Thạch', price: 3_000 },
+      ],
+    })
+    const sheet = await openMenu('Đồ uống')
+
+    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm topping' }))
+    await userEvent.type(sheet.getByLabelText('Tên topping 3'), 'Pudding')
+    await save()
+    expect((await screen.findByRole('alert')).textContent).toContain('Nhập giá cho topping “Pudding”')
+
+    await userEvent.click(sheet.getByRole('button', { name: 'Xoá topping 3' }))
+    await userEvent.click(sheet.getByRole('button', { name: 'Xoá topping 1' }))
+    await save()
+
+    await waitFor(async () => expect((await db.itemGroups.get(groupId))?.toppingMenu).toHaveLength(1))
+    expect((await db.itemGroups.get(groupId))?.toppingMenu).toEqual([{ name: 'Thạch', price: 3_000 }])
+  })
+})
