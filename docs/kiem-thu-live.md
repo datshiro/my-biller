@@ -34,8 +34,13 @@ npm run test:live                              # toàn bộ suite live
 npm run test:regression                        # chỉ các ca chốt chặn hồi quy — vòng nhanh lúc đang sửa
 ./robot/run.sh robot/tests/ban-hang.robot      # một màn
 ./robot/run.sh robot/tests/hai-may.robot       # riêng diễn tập hai máy
-./robot/run.sh --variable HEADLESS:False robot/tests/ban-hang.robot   # xem tận mắt
+npm run test:live:headed -- robot/tests/ban-hang.robot              # xem tận mắt, chậm cỡ người
+ROBOT_HEADED=1 ROBOT_SLOW_MO=1s ./robot/run.sh robot/tests/ban-hang.robot   # chậm hơn nữa
 ```
+
+`ROBOT_HEADED=1` mở cửa sổ Chrome thật và chèn 500 ms trước mỗi thao tác Playwright (bấm, điền, đọc)
+để mắt người theo kịp. `ROBOT_SLOW_MO` đổi độ trễ đó (định dạng thời gian Robot: `250ms`, `1s`), và
+cũng dùng được khi vẫn chạy headless. Mặc định — và trên CI — là headless, không trễ.
 
 `run.sh` tự dựng Vite ở cổng 5175 và Worker/ShopDO ở cổng 8787. Cổng 5173 để dành cho người đang
 code, 5174 cho Playwright. Khi một worktree cần cổng riêng đã định trước, truyền `ROBOT_PORT`; app

@@ -11,6 +11,8 @@ Library          Collections
 *** Variables ***
 ${BASE_URL}         http://localhost:5175
 ${HEADLESS}         True
+# Độ trễ chèn vào mỗi thao tác Playwright. 0s cho CI; `ROBOT_HEADED=1` của run.sh nâng lên để mắt theo kịp.
+${SLOW_MO}          0s
 # Bề ngang máy Android phổ thông. Ca 320px đã có bộ Playwright lo, ở đây kiểm luồng nghiệp vụ.
 &{VIEWPORT}         width=390    height=844
 ${DOWNLOAD_DIR}     ${CURDIR}/../downloads
@@ -33,7 +35,7 @@ ${HỘP_XÁC_NHẬN}     css=[role=alertdialog]
 
 Mở Trình Duyệt Cho Suite
     [Documentation]    Chrome thật của máy, đúng thứ người bán chạy — không phải bản chromium đóng gói.
-    New Browser    chromium    headless=${HEADLESS}    channel=chrome
+    New Browser    chromium    headless=${HEADLESS}    channel=chrome    slowMo=${SLOW_MO}
     Set Browser Timeout    15s
 
 Đóng Trình Duyệt Cuối Suite
