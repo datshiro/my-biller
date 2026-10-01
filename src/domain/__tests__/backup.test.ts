@@ -285,7 +285,7 @@ describe('dữ liệu nghiệp vụ trong bản sao', () => {
       ...emptyData,
       settings: [{ key: 'app', value: { lastBackupAt: null, seededExpenseCategories: true } }],
       itemGroups: [
-        { id: 1, gid: testGid(101), name: 'Món nước', sortOrder: 0, createdAt: 0, updatedAt: 0 },
+        { id: 1, gid: testGid(101), name: 'Món nước', sortOrder: 0, optionGroups: [], toppingMenu: [], createdAt: 0, updatedAt: 0 },
       ],
       expenseCategories: [
         { id: 1, gid: testGid(102), name: 'Nguyên liệu', createdAt: 0, updatedAt: 0 },
@@ -343,5 +343,39 @@ describe('diagnostic từ bản ghi', () => {
     expect(shownName).not.toContain('\u202E')
     expect([...shownName]).toHaveLength(80)
     expect(shownName.endsWith('…')).toBe(true)
+  })
+})
+
+describe('parseBackupFile — tuỳ chọn và topping', () => {
+  const group = (over: Row = {}) => ({ id: 2, gid: testGid(2), name: 'Đồ uống', sortOrder: 1, createdAt: 0, updatedAt: 0, ...over })
+
+  it('file cũ không có hai trường: dòng đơn và nhóm món nhận mảng rỗng, tiền không đổi', () => {
+    const parsed = parseBackupFile(wholeFile({ itemGroups: [group()] }))
+
+    expect(parsed.data.orderLines[0]).toMatchObject({ options: [], toppings: [], amount: 100_000 })
+    expect(parsed.data.itemGroups[0]).toMatchObject({ optionGroups: [], toppingMenu: [] })
+  })
+
+  it('topping và thực đơn đi qua nguyên vẹn, thành tiền dòng không bị tính lại', () => {
+    const toppings = [{ name: 'Trân châu', unitPrice: 5_000, qty: 2 }]
+    const menu = { optionGroups: [{ name: 'Đường', choices: ['Ít đường'] }], toppingMenu: [{ name: 'Trân châu', price: 5_000 }] }
+    const parsed = parseBackupFile(
+      wholeFile({
+        itemGroups: [group(menu)],
+        orderLines: [orderLine({ unitPrice: 90_000, amount: 100_000, options: ['Ít đường'], toppings })],
+      }),
+    )
+
+    expect(parsed.data.orderLines[0]).toMatchObject({ options: ['Ít đường'], toppings, amount: 100_000 })
+    expect(parsed.data.itemGroups[0]).toMatchObject(menu)
+  })
+
+  it('topping sai hợp đồng (số phần lẻ, giá âm) bị chặn khi nhập', () => {
+    expect(() =>
+      parseBackupFile(wholeFile({ orderLines: [orderLine({ toppings: [{ name: 'Thạch', unitPrice: 3_000, qty: 0.5 }] })] })),
+    ).toThrow()
+    expect(() =>
+      parseBackupFile(wholeFile({ orderLines: [orderLine({ toppings: [{ name: 'Thạch', unitPrice: -3_000, qty: 1 }] })] })),
+    ).toThrow()
   })
 })

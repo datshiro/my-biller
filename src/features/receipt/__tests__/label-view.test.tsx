@@ -7,36 +7,66 @@ import { DEFAULT_SHOP, type Order, type OrderLine } from '@/domain/schema'
 afterEach(cleanup)
 
 const order = { code: 'PBH-260926-A001', soldAt: new Date(2026, 8, 26, 9, 5).getTime(), customerName: 'Chị Lan' } as Order
-const line = (note: string) => ({ name: 'Choco Mint', note }) as OrderLine
+const line = { name: 'Choco Mint' } as OrderLine
 const size = { widthMm: 50, heightMm: 30, gapMm: 2 }
+const base = { shop: { ...DEFAULT_SHOP, name: 'Quán Nhỏ' }, order, line, size, count: 3, blocks: [], page: 1, pageCount: 1 }
+const tem = (container: HTMLElement) => container.querySelector('[data-label]') as HTMLElement
 
 describe('LabelView', () => {
-  it('tem ghi tên món, ghi chú của món, mã đơn, giờ và tên khách; đúng khổ 400×240 chấm', () => {
-    const { container } = render(
-      <LabelView shop={{ ...DEFAULT_SHOP, name: 'Quán Nhỏ' }} order={order} line={line('Ít đá')} size={size} count={3} />,
-    )
-    const tem = container.querySelector('[data-label]') as HTMLElement
+  it('đầu tem: tên quán, rồi mã đơn và giờ, rồi vạch kẻ, rồi tên món — đúng khổ 400×240 chấm', () => {
+    const { container } = render(<LabelView {...base} blocks={[{ kind: 'note', text: 'Ít đá' }]} />)
+    const node = tem(container)
+    const text = node.textContent ?? ''
 
-    expect(tem.textContent).toContain('Choco Mint')
-    expect(tem.textContent).toContain('Ít đá')
-    expect(tem.textContent).toContain('PBH-260926-A001 · 09:05 26/09')
-    expect(tem.textContent).toContain('Chị Lan')
-    expect(tem.style.width).toBe('400px')
-    expect(tem.style.height).toBe('240px')
+    expect(text.indexOf('Quán Nhỏ')).toBeLessThan(text.indexOf('PBH-260926-A001 · 09:05 26/09'))
+    expect(text.indexOf('PBH-260926-A001')).toBeLessThan(text.indexOf('Choco Mint'))
+    expect(text.indexOf('Choco Mint')).toBeLessThan(text.indexOf('Ít đá'))
+    expect(node.querySelector('div[style*="border-top"]')).not.toBeNull()
+    expect(node.style.width).toBe('400px')
+    expect(node.style.height).toBe('240px')
   })
 
-  it('tên khách dừng trước chỗ máy in vẽ số thứ tự dài nhất, kể cả tem 60×40 in 12 tem', () => {
+  it('lề trái rộng hơn các cạnh khác đúng 2 mm = 16 chấm: tem 50×30 lề 9,6 → trái 25,6', () => {
+    const { container } = render(<LabelView {...base} />)
+    const node = tem(container)
+
+    const px = (value: string) => parseFloat(value)
+
+    expect(px(node.style.paddingTop)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingRight)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingBottom)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingLeft)).toBeCloseTo(25.6)
+  })
+
+  it('không còn tên khách trên tem', () => {
+    const { container } = render(<LabelView {...base} />)
+    expect(tem(container).textContent).not.toContain('Chị Lan')
+  })
+
+  it('ly một tem không có dấu phụ trang; ly nhiều tem ghi "tr k/m" ở hàng đáy', () => {
+    const single = render(<LabelView {...base} />)
+    expect(tem(single.container).textContent).not.toMatch(/tr \d/)
+    single.unmount()
+
+    const second = render(<LabelView {...base} page={2} pageCount={2} />)
+    expect(tem(second.container).textContent).toContain('tr 2/2')
+  })
+
+  it('hàng đáy cao đúng hàng số thứ tự 24 chấm và dấu phụ trang dừng trước chỗ máy in vẽ "12/12"', () => {
     const big = { widthMm: 60, heightMm: 40, gapMm: 2 }
-    const { container } = render(<LabelView shop={DEFAULT_SHOP} order={order} line={line('')} size={big} count={12} />)
-    const khách = [...container.querySelectorAll('[data-label] p')].at(-1) as HTMLElement
+    const { container } = render(<LabelView {...base} size={big} count={12} page={2} pageCount={2} />)
+    const mark = [...container.querySelectorAll('[data-label] p')].at(-1) as HTMLElement
+    const row = mark.parentElement as HTMLElement
 
-    // "12/12" phóng đôi: 5 × 48 = 240 chấm → số bắt đầu ở x = 480 − 240 − 8 = 232; tên khách bắt đầu ở
-    // lề 12,8 nên phải dừng trước 232.
-    expect(12.8 + parseFloat(khách.style.maxWidth)).toBeLessThan(232)
+    expect(row.style.height).toBe('24px')
+    // "12/12" = 5 × 16 = 80 chấm → số bắt đầu ở x = 480 − 80 − 8 = 392; dấu phụ trang bắt đầu ở lề trái 28,8
+    // (12,8 + 2 mm).
+    expect(28.8 + parseFloat(mark.style.maxWidth)).toBeLessThan(392)
   })
 
-  it('món không có ghi chú → không thêm dòng trống', () => {
-    const { container } = render(<LabelView shop={DEFAULT_SHOP} order={order} line={line('')} size={size} count={3} />)
-    expect(container.querySelectorAll('[data-label] p')).toHaveLength(3)
+  it('không có thân thì không thêm dòng trống: tên quán, mã đơn, tên món', () => {
+    const { container } = render(<LabelView {...base} />)
+    expect(container.querySelectorAll('[data-label-body] p')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-label] > p')).toHaveLength(3)
   })
 })

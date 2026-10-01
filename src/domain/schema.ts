@@ -7,11 +7,14 @@ import {
   ExpenseSchema,
   ItemGroupSchema,
   ItemSchema,
+  LineToppingSchema,
+  OptionGroupSchema,
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
   SettingRowSchema,
   ShopSettingsSchema,
+  ToppingMenuItemSchema,
 } from '@shared/ledger-schemas'
 
 export {
@@ -22,11 +25,14 @@ export {
   ExpenseSchema,
   ItemGroupSchema,
   ItemSchema,
+  LineToppingSchema,
+  OptionGroupSchema,
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
   SettingRowSchema,
   ShopSettingsSchema,
+  ToppingMenuItemSchema,
 } from '@shared/ledger-schemas'
 
 const Id = z.number().int().positive()
@@ -220,6 +226,9 @@ export type Customer = z.infer<typeof CustomerSchema>
 export type CustomerPrice = z.infer<typeof CustomerPriceSchema>
 export type Order = z.infer<typeof OrderSchema>
 export type OrderLine = z.infer<typeof OrderLineSchema>
+export type LineTopping = z.infer<typeof LineToppingSchema>
+export type OptionGroup = z.infer<typeof OptionGroupSchema>
+export type ToppingMenuItem = z.infer<typeof ToppingMenuItemSchema>
 export type Payment = z.infer<typeof PaymentSchema>
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>
 export type Expense = z.infer<typeof ExpenseSchema>

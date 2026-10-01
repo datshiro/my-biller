@@ -1,5 +1,7 @@
 import { format } from 'date-fns'
+import { toppingAmount, toppingLabel } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
+import { calcUnitPriceWithToppings } from '@/domain/order-total'
 import { owingOf, showsDebtBlock, showsPriorDebtOnly } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
@@ -40,10 +42,15 @@ export function receiptToText({
 
   blocks.push(
     lines
-      .map(
-        (line) =>
-          `${line.name}${line.note ? ` (${line.note})` : ''} — ${formatQty(line.qty)} × ${formatAmount(line.unitPrice)} = ${formatAmount(line.amount)}`,
-      )
+      .map((line) => {
+        const extras = [
+          ...line.options,
+          ...line.toppings.map((t) => `+ ${toppingLabel(t)} ${formatAmount(toppingAmount(t))}`),
+          line.note,
+        ].filter(Boolean)
+        const detail = extras.length > 0 ? ` (${extras.join(', ')})` : ''
+        return `${line.name}${detail} — ${formatQty(line.qty)} × ${formatAmount(calcUnitPriceWithToppings(line))} = ${formatAmount(line.amount)}`
+      })
       .join('\n'),
   )
 

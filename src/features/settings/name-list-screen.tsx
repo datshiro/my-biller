@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { EmptyState, ListSkeleton } from '@/ui/empty-state'
@@ -24,6 +24,8 @@ type Props = {
   onCreate: (name: string) => Promise<unknown>
   onRename: (id: number, name: string) => Promise<unknown>
   onDelete: (id: number) => Promise<unknown>
+  /** Việc phụ của một hàng đã có (ví dụ chỉnh thực đơn của nhóm): nút trong sheet sửa tên, mở sheet riêng. */
+  extra?: { label: string; sheet: (row: NameRow, onClose: () => void) => ReactNode }
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không lưu được. Thử lại.')
@@ -36,6 +38,8 @@ function NameSheet({
   blockedReason,
   onSave,
   onAskDelete,
+  extraLabel,
+  onOpenExtra,
   onClose,
 }: {
   row: NameRow | null
@@ -43,6 +47,8 @@ function NameSheet({
   blockedReason: string | null
   onSave: (name: string) => Promise<unknown>
   onAskDelete: () => void
+  extraLabel: string | undefined
+  onOpenExtra: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(row?.name ?? '')
@@ -88,6 +94,14 @@ function NameSheet({
         error={invalid ?? saveError ?? undefined}
       />
 
+      {row && extraLabel ? (
+        <div className="mt-4">
+          <Button variant="secondary" onClick={onOpenExtra}>
+            {extraLabel} ›
+          </Button>
+        </div>
+      ) : null}
+
       {row ? (
         <div className="mt-6 border-t border-line pt-4">
           <Button variant="danger" disabled={blockedReason !== null} onClick={onAskDelete}>
@@ -112,9 +126,11 @@ export function NameListScreen({
   onCreate,
   onRename,
   onDelete,
+  extra,
 }: Props) {
   // `undefined` = sheet đóng, `null` = đang thêm mới.
   const [editing, setEditing] = useState<NameRow | null | undefined>(undefined)
+  const [extraFor, setExtraFor] = useState<NameRow | null>(null)
   const [confirming, setConfirming] = useState<NameRow | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -176,9 +192,16 @@ export function NameListScreen({
           blockedReason={editing ? blockDelete(editing) : null}
           onSave={(name) => (editing ? onRename(editing.id, name) : onCreate(name))}
           onAskDelete={() => setConfirming(editing)}
+          extraLabel={extra?.label}
+          onOpenExtra={() => {
+            setExtraFor(editing ?? null)
+            setEditing(undefined)
+          }}
           onClose={() => setEditing(undefined)}
         />
       ) : null}
+
+      {extra && extraFor ? extra.sheet(extraFor, () => setExtraFor(null)) : null}
 
       {confirming ? (
         <ConfirmDialog

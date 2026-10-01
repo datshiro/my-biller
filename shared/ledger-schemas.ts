@@ -42,11 +42,36 @@ export const SettingRowSchema = z.discriminatedUnion('key', [
   z.object({ key: z.literal('app'), value: AppStateSchema }),
 ])
 
+/** Một nhóm tuỳ chọn của nhóm món (Đường, Đá…): trong một nhóm chỉ chọn được một lựa chọn. */
+export const OptionGroupSchema = z.object({
+  name: z.string().trim().min(1),
+  choices: z.array(z.string().trim().min(1)).min(1),
+})
+
+/** Topping trong thực đơn của nhóm món; `price` là tiền cộng thêm cho MỖI một phần topping. */
+export const ToppingMenuItemSchema = z.object({
+  name: z.string().trim().min(1),
+  price: Money,
+})
+
+/**
+ * Topping đã chọn trên một dòng đơn. `unitPrice` là giá LÚC BÁN, chép thẳng vào dòng: giá thực đơn đổi
+ * về sau thì đơn cũ không được đổi theo.
+ */
+export const LineToppingSchema = z.object({
+  name: z.string().trim().min(1),
+  unitPrice: Money,
+  qty: z.number().int().positive(),
+})
+
 export const ItemGroupSchema = z.object({
   id: Id.optional(),
   gid: Gid,
   name: z.string().min(1),
   sortOrder: z.number().int(),
+  // Không index nên Dexie không cần bump `version`; `.default` giữ file sao lưu và event cũ đi qua được.
+  optionGroups: z.array(OptionGroupSchema).default(() => []),
+  toppingMenu: z.array(ToppingMenuItemSchema).default(() => []),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })
@@ -120,6 +145,9 @@ export const OrderLineSchema = z.object({
   // `deviceState` và tự chặn app của chính máy đó khi hai bản JS cùng sống (registerType: 'prompt').
   // `.default('')` giữ file sao lưu cũ nhập lại được, và giữ event từ máy chưa cập nhật đi qua.
   note: z.string().default(''),
+  /** Nhãn tuỳ chọn đã chọn (Ít đường, Không đá…). Chỉ lưu nhãn; nhóm và luật loại trừ nằm ở thực đơn. */
+  options: z.array(z.string().trim().min(1)).default(() => []),
+  toppings: z.array(LineToppingSchema).default(() => []),
 })
 
 export const PaymentSchema = z.object({

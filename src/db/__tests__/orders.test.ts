@@ -238,6 +238,8 @@ describe('listOrderLinesOfOrders', () => {
         qty: 1,
         amount: 1_000,
         note: '',
+        options: [],
+        toppings: [],
       })),
     )
 
@@ -311,3 +313,74 @@ describe('ghi chú từng món', () => {
   })
 })
 
+
+describe('createOrder với tuỳ chọn và topping', () => {
+  const cafe = {
+    itemId: null,
+    name: 'Cà phê sữa',
+    unit: 'ly',
+    unitPrice: 20_000,
+    costPrice: 8_000,
+    qty: 2,
+    options: ['Ít đường'],
+    toppings: [
+      { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+      { name: 'Thạch', unitPrice: 3_000, qty: 1 },
+    ],
+    note: 'mang về',
+  }
+
+  it('thành tiền dòng = (giá ly + topping) × số ly; tổng đơn cộng từ thành tiền đã lưu', async () => {
+    const { id } = await createOrder(draft({ lines: [cafe], payment: { amount: 66_000, method: 'cash', note: '' } }))
+
+    const [line] = await getOrderLines(id)
+    expect(line).toMatchObject({ unitPrice: 20_000, qty: 2, amount: 66_000, options: ['Ít đường'], note: 'mang về' })
+    expect(line?.toppings).toEqual(cafe.toppings)
+    expect(await db.orders.get(id)).toMatchObject({ subtotal: 66_000, total: 66_000, status: 'paid' })
+  })
+
+  it('giá topping lưu trên dòng là giá LÚC BÁN, không đọc lại từ đâu khác', async () => {
+    const { id } = await createOrder(draft({ lines: [cafe] }))
+    const stored = await db.orderLines.where('orderId').equals(id).first()
+    expect(stored?.toppings.map((t) => t.unitPrice)).toEqual([5_000, 3_000])
+  })
+
+  it('bản nháp không nói gì về tuỳ chọn/topping thì dòng có mảng rỗng và tiền như cũ', async () => {
+    const { id } = await createOrder(draft())
+    const [line] = await getOrderLines(id)
+    expect(line).toMatchObject({ options: [], toppings: [], amount: 110_000 })
+  })
+
+  it('tiền khách đưa tính cả topping mà sổ thiếu topping thì bị chặn, không ghi đơn nửa vời', async () => {
+    const withoutToppings = { ...cafe, toppings: [] }
+    await expect(
+      createOrder(draft({ lines: [withoutToppings], payment: { amount: 66_000, method: 'cash', note: '' } })),
+    ).rejects.toThrow(/lớn hơn tổng đơn/)
+    expect(await db.orders.count()).toBe(0)
+  })
+})
+
+describe('dòng đơn và nhóm món ghi trước khi có tuỳ chọn/topping', () => {
+  it('đọc ra thành mảng rỗng, không phải undefined — phiếu của đơn cũ không được nổ', async () => {
+    const legacyLine = {
+      gid: testGid(9),
+      orderId: 1,
+      itemId: null,
+      name: 'Phở bò',
+      unit: 'tô',
+      unitPrice: 55_000,
+      costPrice: null,
+      qty: 2,
+      amount: 110_000,
+      note: 'ít hành',
+    }
+    const legacyGroup = { gid: testGid(10), name: 'Đồ uống', sortOrder: 1, createdAt: 1, updatedAt: 1 }
+    const lineId = await db.orderLines.add(legacyLine as never)
+    const groupId = await db.itemGroups.add(legacyGroup as never)
+
+    expect(await db.orderLines.get(lineId)).toMatchObject({ options: [], toppings: [], note: 'ít hành' })
+    expect(await db.orderLines.toArray()).toHaveLength(1)
+    expect((await db.orderLines.where('orderId').equals(1).toArray())[0]?.toppings).toEqual([])
+    expect(await db.itemGroups.get(groupId)).toMatchObject({ optionGroups: [], toppingMenu: [] })
+  })
+})

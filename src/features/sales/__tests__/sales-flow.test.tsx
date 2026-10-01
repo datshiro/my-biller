@@ -9,7 +9,7 @@ import { clearCartDraft, loadCartDraft } from '../cart-draft-storage'
 import { db } from '@/db/db'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
-import { createItem } from '@/db/repositories/items'
+import { createGroup, createItem } from '@/db/repositories/items'
 import { getOrderLines } from '@/db/repositories/orders'
 import { installTestDevice } from '@/test-fixtures'
 
@@ -327,6 +327,137 @@ describe('bán hàng', () => {
     const lines = await getOrderLines(order?.id ?? -1)
     expect(lines.find((line) => line.name === 'Phở bò')?.note).toBe('ít hành')
     expect(lines.find((line) => line.name === 'Trà đá')?.note).toBe('')
+  })
+
+  /**
+   * Cùng lý do với ca ghi chú ngay trên: `options`/`toppings` optional ở bản nháp nên TypeScript không ép
+   * `sales-page` truyền chúng, và quên truyền thì sổ ghi thiếu tiền topping còn màn hình hiện đủ.
+   */
+  describe('tuỳ chọn và topping của nhóm món', () => {
+    const seedCafe = async () => {
+      const groupId = await createGroup({
+        name: 'Đồ uống',
+        sortOrder: 1,
+        optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+        toppingMenu: [
+          { name: 'Trân châu', price: 5_000 },
+          { name: 'Thạch', price: 3_000 },
+        ],
+      })
+      await createItem({ name: 'Cà phê sữa', groupId, unit: 'ly', unitPrice: 20_000, costPrice: 8_000, isActive: 1 })
+      await createItem({ name: 'Phở bò', groupId: null, unit: 'tô', unitPrice: 55_000, costPrice: 30_000, isActive: 1 })
+    }
+    const dialog = () => within(screen.getByRole('dialog'))
+
+    it('sheet hiện nhóm Đá, nhóm của nhóm món và topping; món chưa phân nhóm chỉ có nhóm Đá', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Phở bò')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Phở bò' }))
+      expect(dialog().getByRole('button', { name: 'Đá chung' })).toBeDefined()
+      expect(dialog().queryByRole('button', { name: 'Ít đường' })).toBeNull()
+      expect(dialog().queryByRole('button', { name: 'Thêm Trân châu' })).toBeNull()
+      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+      await pick('Cà phê sữa')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
+      expect(dialog().getByRole('button', { name: 'Ít đường' })).toBeDefined()
+      expect(dialog().getByRole('button', { name: 'Thêm Trân châu' })).toBeDefined()
+    })
+
+    it('chọn tuỳ chọn và topping rồi chốt: dòng xuống sổ kèm giá topping lúc bán, thành tiền đủ', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Ít đường' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Đá riêng' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      expect(dialog().getByText(/Mỗi ly: 33\.000/)).toBeDefined()
+      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+      await openPayment()
+      await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+      await waitFor(async () => expect(await db.orders.count()).toBe(1))
+
+      const [order] = await db.orders.toArray()
+      const [line] = await getOrderLines(order?.id ?? -1)
+      expect(line).toMatchObject({ unitPrice: 20_000, qty: 1, amount: 33_000, options: ['Ít đường', 'Đá riêng'] })
+      expect(line?.toppings).toEqual([
+        { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+        { name: 'Thạch', unitPrice: 3_000, qty: 1 },
+      ])
+      expect(order).toMatchObject({ subtotal: 33_000, total: 33_000, status: 'paid' })
+    })
+
+    it('chọn lại trong cùng nhóm thì thay, bấm lại topping về 0 thì gỡ khỏi dòng', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Ít đường' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Không đường' }))
+      expect(dialog().getByRole('button', { name: 'Ít đường' }).getAttribute('aria-pressed')).toBe('false')
+      expect(dialog().getByRole('button', { name: 'Không đường' }).getAttribute('aria-pressed')).toBe('true')
+
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Bớt Thạch' }))
+      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+      expect(await screen.findByRole('button', { name: 'Sửa Cà phê sữa (Không đường)' })).toBeDefined()
+    })
+
+    it('số lượng lẻ: không thêm được topping mới, topping đang có vẫn hiện, gỡ được và KHÔNG bị bỏ âm thầm khi XONG', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      const qty = dialog().getByLabelText('Số lượng')
+      await userEvent.clear(qty)
+      await userEvent.type(qty, '0,5')
+
+      expect((dialog().getByRole('button', { name: 'Thêm Thạch' }) as HTMLButtonElement).disabled).toBe(true)
+      expect(dialog().queryByLabelText('Số phần Trân châu')).toBeNull()
+      expect(dialog().getByLabelText('Số phần Thạch').textContent).toBe('1')
+      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+      await openPayment()
+      await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+      await waitFor(async () => expect(await db.orders.count()).toBe(1))
+      const [order] = await db.orders.toArray()
+      const [line] = await getOrderLines(order?.id ?? -1)
+      // (20.000 + 3.000) × 0,5 = 11.500: topping giữ nguyên, tiền đúng công thức.
+      expect(line).toMatchObject({ qty: 0.5, amount: 11_500, toppings: [{ name: 'Thạch', unitPrice: 3_000, qty: 1 }] })
+    })
+
+    it('gỡ topping đang có khi số lượng lẻ thì dòng về giá ly', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      const qty = dialog().getByLabelText('Số lượng')
+      await userEvent.clear(qty)
+      await userEvent.type(qty, '0,5')
+      await userEvent.click(dialog().getByRole('button', { name: 'Bớt Thạch' }))
+      expect(dialog().queryByLabelText('Số phần Thạch')).toBeNull()
+      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+
+      await openPayment()
+      await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+      await waitFor(async () => expect(await db.orders.count()).toBe(1))
+      const [order] = await db.orders.toArray()
+      const [line] = await getOrderLines(order?.id ?? -1)
+      expect(line).toMatchObject({ qty: 0.5, amount: 10_000, toppings: [] })
+    })
   })
 
   /**

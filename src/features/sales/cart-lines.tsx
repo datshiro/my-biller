@@ -1,14 +1,22 @@
 import { useRef, useState } from 'react'
-import { calcLineAmount } from '@/domain/order-total'
+import { calcLineAmount, calcUnitPriceWithToppings } from '@/domain/order-total'
+import { toppingLabel } from '@/domain/line-extras'
 import { formatAmount, formatQty, parseQtyInput } from '@/domain/money'
 import type { CartLine } from '@/domain/cart'
 
+/** Tuỳ chọn, topping rồi ghi chú — cùng thứ tự với tem và phiếu. */
+const extrasOf = (line: CartLine): string[] =>
+  [...line.options, ...line.toppings.map((topping) => `+ ${toppingLabel(topping)}`), line.note].filter(Boolean)
+
 /**
- * Cùng một món giờ tách được thành hai dòng theo ghi chú, nên tên món một mình KHÔNG còn phân biệt
- * được hai dòng: người dùng trình đọc màn hình gặp hai nút y hệt, và `sales.resource` bốc theo
- * `Số lượng %s` sẽ vi phạm strict mode. Dòng không ghi chú giữ nguyên nhãn cũ nên ca cũ không đỏ.
+ * Cùng một món giờ tách được thành hai dòng theo tuỳ chọn, topping và ghi chú, nên tên món một mình KHÔNG
+ * còn phân biệt được hai dòng: người dùng trình đọc màn hình gặp hai nút y hệt, và `sales.resource` bốc
+ * theo `Số lượng %s` sẽ vi phạm strict mode. Dòng không có gì thêm giữ nguyên nhãn cũ nên ca cũ không đỏ.
  */
-const nhãnDòng = (line: CartLine) => `${line.name}${line.note ? ` (${line.note})` : ''}`
+const nhãnDòng = (line: CartLine) => {
+  const extras = extrasOf(line)
+  return `${line.name}${extras.length > 0 ? ` (${extras.join(', ')})` : ''}`
+}
 
 function StepperButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -125,7 +133,7 @@ export function CartLines({
           >
             <span className="block text-[15px] font-semibold">{line.name}</span>
             <span className="block text-[13px] text-muted">
-              {formatAmount(line.unitPrice)}
+              {formatAmount(calcUnitPriceWithToppings(line))}
               {line.unit ? ` / ${line.unit}` : ''}
               {/* Dấu này ở mức TỪNG DÒNG chứ không phải mức đơn: bật SỈ mà khách chỉ có giá riêng cho
                   vài món thì phần còn lại vẫn là giá lẻ, và người bán cần thấy dòng nào là dòng nào. */}
@@ -134,7 +142,7 @@ export function CartLines({
                   sỉ
                 </span>
               ) : null}
-              {line.note ? ` · ${line.note}` : ''}
+              {extrasOf(line).map((extra) => ` · ${extra}`)}
             </span>
           </button>
 

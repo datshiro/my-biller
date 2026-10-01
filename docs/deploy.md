@@ -402,6 +402,8 @@ khác** trên máy, đừng đổi.
 CI **không** dựng Android (quyết định): pipeline chỉ lo Pages/Worker. APK dựng tay trên máy có toolchain
 rồi gửi file cho chủ quán.
 
+**Chỉ dựng và cài APK từ bản đã phát hành**, sau khi workflow phát hành production xanh và `worker:smoke:production` đã qua. CI chặn thứ tự Worker trước Pages nhưng không chặn được APK cài tay: APK dựng từ nhánh chưa phát hành mà chạy trước Worker mới sẽ đẩy trường mới (như `toppings`) lên Worker cũ, và Worker cũ cắt chúng khỏi sổ chung vĩnh viễn.
+
 ### Toolchain (một lần)
 
 Bộ số của Capacitor 8.5.1: compileSdk/targetSdk **36**, minSdk 24, AGP **8.13.0**, Gradle **8.14.3**

@@ -1,6 +1,8 @@
 import { format } from 'date-fns'
 import { RECEIPT_WIDTH } from './share-receipt'
+import { toppingAmount, toppingLabel } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
+import { calcUnitPriceWithToppings } from '@/domain/order-total'
 import { owingOf, showsDebtBlock, showsPriorDebtOnly } from '@/domain/debt'
 import type { Order, OrderLine, Payment, ShopSettings } from '@/domain/schema'
 
@@ -102,12 +104,22 @@ export function ReceiptView({
               <td className="py-1 pr-2">
                 {line.name}
                 {line.unit ? <span> ({line.unit})</span> : null}
-                {/* Ghi chú đứng riêng một dòng dưới tên: bếp đọc "Đá riêng" của ĐÚNG dòng nào, và
-                    tên món không bị đẩy vỡ thêm dòng vì một chuỗi nối đuôi. */}
-                {line.note ? <span className="block text-[10px]">{line.note}</span> : null}
+                {/* Từng topping một dòng kèm giá cho MỘT ly: đơn giá bên phải đã gồm chúng, nên SL × Đ.GIÁ
+                    vẫn ra T.tiền và khách thấy vì sao giá ly cao hơn giá trên bảng. */}
+                {line.toppings.map((topping) => (
+                  <span key={topping.name} className="flex justify-between gap-2 text-[10px]">
+                    <span>+ {toppingLabel(topping)}</span>
+                    <span className="money">{formatAmount(toppingAmount(topping))}</span>
+                  </span>
+                ))}
+                {/* Tuỳ chọn và ghi chú đứng riêng một dòng dưới tên: bếp đọc "Đá riêng" của ĐÚNG dòng nào,
+                    và tên món không bị đẩy vỡ thêm dòng vì một chuỗi nối đuôi. */}
+                {line.options.length > 0 || line.note ? (
+                  <span className="block text-[10px]">{[...line.options, line.note].filter(Boolean).join(', ')}</span>
+                ) : null}
               </td>
               <td className="money py-1 pl-1 text-right">{formatQty(line.qty)}</td>
-              <td className="money py-1 pl-2 text-right">{formatAmount(line.unitPrice)}</td>
+              <td className="money py-1 pl-2 text-right">{formatAmount(calcUnitPriceWithToppings(line))}</td>
               <td className="money py-1 pl-2 text-right font-semibold">{formatAmount(line.amount)}</td>
             </tr>
           ))}

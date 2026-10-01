@@ -26,8 +26,8 @@ const order = (overrides: Partial<Order> = {}): Order => ({
 })
 
 const lines: OrderLine[] = [
-  { id: 1, gid: testGid(1), orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000, note: 'ít hành' },
-  { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000, note: '' },
+  { id: 1, gid: testGid(1), orderId: 1, itemId: 1, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 2, amount: 110_000, note: 'ít hành', options: [], toppings: [] },
+  { id: 2, gid: testGid(2), orderId: 1, itemId: 2, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 1, amount: 3_000, note: '', options: [], toppings: [] },
 ]
 
 /**
@@ -224,3 +224,37 @@ describe('receiptToText', () => {
   })
 })
 
+describe('receiptToText với tuỳ chọn và topping', () => {
+  const cafe: OrderLine = {
+    id: 3,
+    gid: testGid(3),
+    orderId: 1,
+    itemId: 3,
+    name: 'Cà phê sữa',
+    unit: 'ly',
+    unitPrice: 20_000,
+    costPrice: null,
+    qty: 2,
+    amount: 66_000,
+    note: 'mang về',
+    options: ['Ít đường', 'Đá riêng'],
+    toppings: [
+      { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+      { name: 'Thạch', unitPrice: 3_000, qty: 1 },
+    ],
+  }
+
+  it('tuỳ chọn, từng topping kèm giá, rồi ghi chú; đơn giá đã gồm topping nên SL × giá ra thành tiền', () => {
+    const text = receiptToText({
+      shop: DEFAULT_SHOP,
+      order: order({ subtotal: 66_000, total: 66_000 }),
+      lines: [cafe],
+      payments: [],
+      ...khongNo(66_000),
+    })
+
+    expect(text).toContain(
+      'Cà phê sữa (Ít đường, Đá riêng, + Trân châu x2 10.000, + Thạch 3.000, mang về) — 2 × 33.000 = 66.000',
+    )
+  })
+})

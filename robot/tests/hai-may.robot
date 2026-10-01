@@ -399,6 +399,46 @@ Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
     ...    Ghi chú bị cắt trên đường qua sổ chung — máy B không thấy thứ máy A đã ghi.
     Should Be Equal    ${có_ghi_chú}[0][name]    Cà phê sữa
 
+Tuỳ chọn, topping và thực đơn của nhóm món đi qua sổ chung và tới máy kia nguyên vẹn
+    [Documentation]    Cùng cửa tử với ca ghi chú ngay trên, nhưng tiền hơn: Worker thay payload bằng bản
+    ...    đã parse nên Worker chạy schema cũ XOÁ `toppings` và thực đơn khỏi sổ chung mà máy A vẫn
+    ...    thấy đủ. Đọc `amount` ở máy B để chắc con số tiền đi cùng topping chứ không chỉ chữ.
+    Chọn Máy A
+    Cài Thực Đơn Đồ Uống
+    Click    ${NAV_BAN}
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Điền Ô    Số lượng    2
+    Chọn Chip    Ít đường
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Thạch"]
+    Điền Ô    Ghi chú    mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Hai Bảng Phải Hội Tụ    itemGroups
+    Hai Bảng Phải Hội Tụ    orderLines
+
+    Chọn Máy B
+    ${nhóm_b}=    Đọc Bảng    itemGroups    ${MÁY_B_PAGE}
+    ${đồ_uống}=    Evaluate    [g for g in $nhóm_b if g['name'] == 'Đồ uống'][0]
+    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [{'name': 'Đường', 'choices': ['Ít đường', 'Không đường']}] }}
+    ...    Thực đơn tuỳ chọn của nhóm bị cắt trên đường qua sổ chung.
+    ${menu_b}=    Evaluate    [(t['name'], t['price']) for t in $đồ_uống['toppingMenu']]
+    Should Be Equal    ${menu_b}    ${{ [('Trân châu', 5000), ('Thạch', 3000)] }}
+
+    ${dòng_b}=    Đọc Bảng    orderLines    ${MÁY_B_PAGE}
+    ${của_a}=    Evaluate    [d for d in $dòng_b if d.get('note') == 'mang về']
+    Length Should Be    ${của_a}    1    Dòng có topping không tới máy B.
+    ${ly}=    Set Variable    ${của_a}[0]
+    Should Be Equal    ${ly}[options]    ${{ ['Ít đường'] }}    Tuỳ chọn bị cắt trên đường qua sổ chung.
+    ${topping_b}=    Evaluate    [(t['name'], t['unitPrice'], t['qty']) for t in $ly['toppings']]
+    Should Be Equal    ${topping_b}    ${{ [('Trân châu', 5000, 2), ('Thạch', 3000, 1)] }}
+    ...    Topping bị cắt trên đường qua sổ chung — máy B thiếu thứ khách đã trả tiền.
+    Should Be Equal As Integers    ${ly}[amount]    66000    Thành tiền ở máy B lệch máy A.
+
 Màn Đối soát của hai máy nói cùng một con số
     [Documentation]    (a) Ca chỉ khoá TRẠNG THÁI CUỐI: hai máy cùng hiện "✓ Khớp sổ chung" với cùng số #,
     ...    bốn tổng bằng nhau, bảng payments giống nhau. (b) Nhánh "Còn N thay đổi chưa về máy này" cố tình

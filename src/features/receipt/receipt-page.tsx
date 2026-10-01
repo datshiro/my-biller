@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import './receipt.css'
-import { LabelView } from './label-view'
+import { LabelSheet } from './label-sheet'
 import { ReceiptView } from './receipt-view'
 import { receiptToText } from './receipt-text'
 import { canShareReceipt, downloadReceipt, renderReceiptPng, shareReceipt } from './share-receipt'
@@ -36,7 +36,7 @@ export function ReceiptPage() {
   // trong cùng nhịp lọt cả hai → hai phiếu (đã thấy trên SPR02 thật). Ref đặt ngay, cú thứ hai thấy liền.
   const printLock = useRef(false)
   const [askPrint, setAskPrint] = useState(false)
-  const labelRefs = useRef<(HTMLDivElement | null)[]>([])
+  const labelRefs = useRef<HTMLElement[][]>([])
   const labelLock = useRef(false)
   const [askLabel, setAskLabel] = useState(false)
   const [inTem, setInTem] = useState<{ busy: boolean; message: string | null; error: boolean; needConfig?: boolean }>({
@@ -175,7 +175,7 @@ export function ReceiptPage() {
   }
 
   // Như onPrintThermal: đọc lại cấu hình lúc gửi, khoá ref chống bấm-đúp (bấm đúp = in gấp đôi số tem).
-  const onPrintLabels = async (lines: readonly OrderLine[], count: number) => {
+  const onPrintLabels = async (lines: readonly OrderLine[]) => {
     if (labelLock.current) return
     const cfg = readLabelPrinterConfig()
     if (!cfg) {
@@ -184,8 +184,8 @@ export function ReceiptPage() {
     }
     const copies = labelCopies(lines)
     const items = lines.flatMap((_, i) => {
-      const node = labelRefs.current[i]
-      return node ? [{ node, copies: copies[i] ?? 0 }] : []
+      const nodes = labelRefs.current[i]
+      return nodes?.length ? [{ nodes, copies: copies[i] ?? 0 }] : []
     })
     if (items.length !== lines.length) {
       setInTem({ busy: false, message: 'Chưa dựng xong tem — thử lại sau giây lát.', error: true })
@@ -195,7 +195,11 @@ export function ReceiptPage() {
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
       await nativeSink(await buildLabelJob(items, cfg), cfg)
-      setInTem({ busy: false, message: `Đã gửi ${count} tem tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+      // Ghi chú dài ra thêm tem tiếp nên số tờ thật có thể nhiều hơn số ly; nói rõ để người bán không đếm lệch.
+      const cups = copies.reduce((sum, n) => sum + n, 0)
+      const sheets = items.reduce((sum, { nodes, copies }) => sum + nodes.length * copies, 0)
+      const extra = sheets > cups ? ` (${sheets} tờ giấy, ${sheets - cups} tờ là phần ghi chú dài)` : ''
+      setInTem({ busy: false, message: `Đã gửi ${cups} tem${extra} tới máy in ${cfg.host}:${cfg.port}.`, error: false })
     } catch (error) {
       setInTem({
         busy: false,
@@ -271,15 +275,15 @@ export function ReceiptPage() {
           {showLabels ? (
             <div className="no-print -mt-4 h-0 overflow-hidden" aria-hidden="true">
               {data.lines.map((line, index) => (
-                <LabelView
+                <LabelSheet
                   key={line.id}
                   shop={shop}
                   order={order}
                   line={line}
                   size={labelCfg ?? DEFAULT_LABEL_SIZE}
                   count={labels}
-                  innerRef={(node) => {
-                    labelRefs.current[index] = node
+                  onNodes={(nodes) => {
+                    labelRefs.current[index] = nodes
                   }}
                 />
               ))}
@@ -460,7 +464,7 @@ export function ReceiptPage() {
               confirmVariant="primary"
               onConfirm={() => {
                 setAskLabel(false)
-                void onPrintLabels(data.lines, labels)
+                void onPrintLabels(data.lines)
               }}
               onCancel={() => setAskLabel(false)}
             />

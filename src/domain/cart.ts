@@ -1,6 +1,6 @@
 import { calcLineAmount, calcOrderTotals, type OrderTotals } from './order-total'
 import { resolveUnitPrice, type PriceBook, type PriceMode } from './wholesale-price'
-import type { Item } from './schema'
+import type { Item, LineTopping } from './schema'
 
 /** Một dòng trong giỏ. Giá và tên đã tách khỏi `items` ngay lúc thêm — sửa giá tại đây không đụng danh mục. */
 export type CartLine = {
@@ -24,6 +24,10 @@ export type CartLine = {
   priceSource: 'catalog' | 'manual'
   costPrice: number | null
   qty: number
+  /** Nhãn tuỳ chọn đã chọn (Ít đường, Không đá…). */
+  options: string[]
+  /** Topping kèm giá LÚC CHỌN, cộng lên giá ly — không đọc lại từ thực đơn. */
+  toppings: LineTopping[]
   note: string
 }
 
@@ -42,7 +46,11 @@ export type CartAction =
   | { type: 'addItem'; item: Item; qty?: number; book: PriceBook }
   | {
       type: 'addLine'
-      line: Omit<CartLine, 'key' | 'note' | 'priceSource' | 'retailPrice'> & { note?: string }
+      line: Omit<CartLine, 'key' | 'note' | 'priceSource' | 'retailPrice' | 'options' | 'toppings'> & {
+        note?: string
+        options?: string[]
+        toppings?: LineTopping[]
+      }
       book: PriceBook
     }
   /**
@@ -58,7 +66,15 @@ export type CartAction =
   | { type: 'setUnitPrice'; key: string; unitPrice: number }
   | { type: 'setLineNote'; key: string; note: string }
   /** Sửa cả dòng một nhát. Đổi giá làm đổi khoá dòng, nên sửa từng phần rời sẽ trượt khoá. */
-  | { type: 'updateLine'; key: string; qty: number; unitPrice: number; note: string }
+  | {
+      type: 'updateLine'
+      key: string
+      qty: number
+      unitPrice: number
+      options: string[]
+      toppings: LineTopping[]
+      note: string
+    }
   | { type: 'removeLine'; key: string }
   | { type: 'setCustomer'; customerId: number | null; customerName: string }
   | { type: 'setDiscount'; discount: number }
@@ -88,17 +104,24 @@ export const emptyCart = (): Cart => ({
  * 38.000 → dòng catalog trùng khoá dòng manual → gộp thành 1 dòng `manual` qty 4. Tắt SỈ không đụng dòng
  * manual, nên 4 tô bán 38.000 thay vì 1×38.000 + 3×55.000: **mất 51.000đ, không một lỗi nào hiện ra**.
  *
+ * `options` và `toppings` nằm trong khoá vì cùng lý do: hai ly cùng món cùng giá nhưng khác topping là hai
+ * dòng khác tiền, gộp nhầm là bán thiếu hoặc thừa tiền topping mà không lỗi nào hiện ra. Chúng được sắp
+ * lại theo một thứ tự chuẩn để "trân châu, thạch" và "thạch, trân châu" vẫn là một dòng.
+ *
  * `note` nằm CUỐI khoá để 3 ly đá chung và 2 ly đá riêng của cùng một món cùng một giá tách được thành
- * hai dòng. Đặt cuối và ngăn bằng `~` là đủ chống nhập nhằng: mọi trường phía trước có khuôn cố định và
- * `priceSource` là enum không chứa `~`, nên ghi chú tự do không lấn được sang trường nào.
+ * hai dòng. Đặt cuối và ngăn bằng `~` là đủ chống nhập nhằng: mọi trường phía trước có khuôn cố định (phần
+ * tuỳ chọn và topping là JSON tự đóng ngoặc) và `priceSource` là enum không chứa `~`, nên ghi chú tự do
+ * không lấn được sang trường nào.
  */
 const lineKey = (
-  itemId: number | null,
-  name: string,
-  unitPrice: number,
-  priceSource: CartLine['priceSource'],
-  note: string,
-) => `${itemId ?? `x:${name}`}@${unitPrice}#${priceSource}~${note}`
+  line: Pick<CartLine, 'itemId' | 'name' | 'unitPrice' | 'priceSource' | 'options' | 'toppings' | 'note'>,
+) => {
+  const extras = JSON.stringify([
+    [...line.options].sort(),
+    line.toppings.map((t) => JSON.stringify([t.name, t.unitPrice, t.qty])).sort(),
+  ])
+  return `${line.itemId ?? `x:${line.name}`}@${line.unitPrice}#${line.priceSource}+${extras}~${line.note}`
+}
 
 function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const at = lines.findIndex((line) => line.key === incoming.key)
@@ -146,26 +169,6 @@ function mapLineRekey(
   })
 }
 
-/** Tách ghi chú thành từng nhãn. Khớp NGUYÊN phần tử — `includes` sẽ coi "Đá chung nhiều" là có nhãn
- *  "Đá chung" và làm hỏng luật loại trừ ở sheet sửa dòng. */
-const noteTokens = (note: string): string[] =>
-  note
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-
-/**
- * Bật/tắt một nhãn trong ghi chú dòng, giữ nguyên phần người bán tự gõ. Là toggle **thuần**: nó không
- * biết luật nghiệp vụ nào (ví dụ hai nhãn đá loại trừ nhau) — luật đó thuộc về chỗ dựng giao diện.
- */
-export function toggleNoteToken(note: string, token: string): string {
-  const tokens = noteTokens(note)
-  const next = tokens.includes(token) ? tokens.filter((part) => part !== token) : [...tokens, token]
-  return next.join(', ')
-}
-
-export const hasNoteToken = (note: string, token: string): boolean => noteTokens(note).includes(token)
-
 /**
  * Người bán tự đặt giá cho một dòng ⇒ dòng đó thành `manual` và từ đó `applyPriceMode` không đụng vào
  * nữa. Chỉ đổi khi giá **thật sự khác**: mở sheet sửa rồi bấm lưu mà không đổi giá thì dòng vẫn là giá
@@ -177,7 +180,7 @@ function withPrice(line: CartLine, unitPrice: number): CartLine {
     ...line,
     unitPrice,
     priceSource,
-    key: lineKey(line.itemId, line.name, unitPrice, priceSource, line.note),
+    key: lineKey({ ...line, unitPrice, priceSource }),
   }
 }
 
@@ -197,7 +200,15 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       return {
         ...cart,
         lines: upsert(cart.lines, {
-          key: lineKey(item.id, item.name, unitPrice, 'catalog', ''),
+          key: lineKey({
+            itemId: item.id,
+            name: item.name,
+            unitPrice,
+            priceSource: 'catalog',
+            options: [],
+            toppings: [],
+            note: '',
+          }),
           itemId: item.id,
           name: item.name,
           unit: item.unit,
@@ -206,6 +217,8 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
           priceSource: 'catalog',
           costPrice: item.costPrice,
           qty,
+          options: [],
+          toppings: [],
           note: '',
         }),
       }
@@ -230,17 +243,16 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       const unitPrice = resolveUnitPrice({ itemId: line.itemId, retailPrice }, cart.priceMode, book)
       // Món ngoài danh mục không có giá riêng nào để tra, và cũng không có giá lẻ để quay về.
       const priceSource = line.itemId === null ? 'manual' : 'catalog'
-      return {
-        ...cart,
-        lines: upsert(cart.lines, {
-          ...line,
-          key: lineKey(line.itemId, line.name, unitPrice, priceSource, line.note ?? ''),
-          unitPrice,
-          retailPrice,
-          priceSource,
-          note: line.note ?? '',
-        }),
-      }
+      const incoming = {
+        ...line,
+        unitPrice,
+        retailPrice,
+        priceSource,
+        options: line.options ?? [],
+        toppings: line.toppings ?? [],
+        note: line.note ?? '',
+      } as const
+      return { ...cart, lines: upsert(cart.lines, { ...incoming, key: lineKey(incoming) }) }
     }
 
     case 'applyPriceMode': {
@@ -250,11 +262,7 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
         if (line.priceSource === 'manual' || line.itemId === null) return [...acc, line]
 
         const unitPrice = resolveUnitPrice(line, mode, book)
-        return upsert(acc, {
-          ...line,
-          unitPrice,
-          key: lineKey(line.itemId, line.name, unitPrice, 'catalog', line.note),
-        })
+        return upsert(acc, { ...line, unitPrice, key: lineKey({ ...line, unitPrice, priceSource: 'catalog' }) })
       }, [])
 
       return { ...cart, priceMode: mode, lines }
@@ -295,7 +303,10 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       return {
         ...cart,
         lines: mapLineRekey(cart.lines, action.key, (line) => ({
-          ...withPrice({ ...line, note: action.note }, action.unitPrice),
+          ...withPrice(
+            { ...line, options: action.options, toppings: action.toppings, note: action.note },
+            action.unitPrice,
+          ),
           qty: action.qty,
         })),
       }
@@ -321,11 +332,10 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       // sau vào đúng món đúng giá lại đẻ ra dòng thứ hai thay vì cộng dồn.
       return {
         ...action.cart,
-        lines: action.cart.lines.map((line) => ({
-          ...line,
-          note: line.note ?? '',
-          key: lineKey(line.itemId, line.name, line.unitPrice, line.priceSource, line.note ?? ''),
-        })),
+        lines: action.cart.lines.map((line) => {
+          const restored = { ...line, options: line.options ?? [], toppings: line.toppings ?? [], note: line.note ?? '' }
+          return { ...restored, key: lineKey(restored) }
+        }),
       }
 
     case 'clear':

@@ -151,3 +151,33 @@ Tìm không ra thì báo rõ chứ không để danh sách trống trơn
     Mở Màn    /
     Click    css=button:has-text("Đồ ăn")
     Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trà đá")    visible
+
+Thực đơn tuỳ chọn của nhóm: lựa chọn trùng nhóm Đá có sẵn bị chặn kèm lý do, sổ không ghi gì
+    [Documentation]    Nhãn lựa chọn lưu phẳng trên dòng đơn nên mỗi nhãn chỉ được thuộc một nhóm; "Đá riêng"
+    ...    đã nằm ở nhóm Đá có sẵn. Chặn ở màn cài đặt thay vì để bấm nhóm này gỡ nhầm lựa chọn nhóm kia.
+    Mở Màn    /them/nhom-mat-hang
+    Click    css=button:has-text("Đồ uống")
+    Bấm Nút    Tuỳ chọn & topping
+    Bấm Nút    ＋ Thêm nhóm tuỳ chọn
+    Điền Ô    Tên nhóm tuỳ chọn 1    Kiểu đá
+    Điền Ô    Các lựa chọn của nhóm 1    Đá riêng
+    Click    css=[role=dialog] >> css=button:text-is("LƯU")
+    Chờ Thấy Chữ    chỉ thuộc một nhóm
+    ${nhóm}=    Đọc Bảng    itemGroups
+    ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
+    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [] }}    Lựa chọn trùng vẫn ghi xuống sổ.
+
+Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có topping, món ngoài nhóm thì không
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Chờ Thấy Chữ    Trân châu
+    Chọn Chip    Ít đường
+    Bấm Nút    XONG
+
+    Chọn Món    Phở bò
+    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Chờ Thấy Chữ    Đá chung
+    Get Element Count    css=button[aria-label="Thêm Trân châu"]    ==    0
+    Get Element Count    css=button[aria-pressed]:text-is("Ít đường")    ==    0

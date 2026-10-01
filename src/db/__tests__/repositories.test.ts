@@ -10,10 +10,18 @@ import {
   listExpenseCategories,
   listExpensesBetween,
 } from '../repositories/expenses'
-import { createGroup, createItem, deactivateItem, deleteGroup, listActiveItems } from '../repositories/items'
+import {
+  createGroup,
+  createItem,
+  deactivateItem,
+  deleteGroup,
+  getGroup,
+  listActiveItems,
+  updateGroup,
+} from '../repositories/items'
 import { createOrder } from '../repositories/orders'
 import { getShop, saveShop } from '../repositories/settings'
-import { installTestDevice } from '@/test-fixtures'
+import { installTestDevice, testGid } from '@/test-fixtures'
 
 const soldAt = new Date(2026, 7, 7, 10, 0).getTime()
 
@@ -142,5 +150,68 @@ describe('expenses', () => {
     await ensureDefaultExpenseCategories()
 
     expect(await db.expenseCategories.count()).toBe(1)
+  })
+})
+
+describe('thực đơn tuỳ chọn và topping của nhóm món', () => {
+  it('lưu và đọc lại nguyên vẹn; đổi tên nhóm không làm mất thực đơn', async () => {
+    const id = await createGroup({ name: 'Đồ uống', sortOrder: 1 })
+    expect((await getGroup(id))?.optionGroups).toEqual([])
+
+    await updateGroup(id, {
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    })
+    await updateGroup(id, { name: 'Nước uống' })
+
+    expect(await getGroup(id)).toMatchObject({
+      name: 'Nước uống',
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
+      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
+    })
+  })
+
+  it('từ chối nhóm tuỳ chọn không có lựa chọn và topping giá âm hay lẻ', async () => {
+    const id = await createGroup({ name: 'Đồ uống', sortOrder: 1 })
+    await expect(updateGroup(id, { optionGroups: [{ name: 'Đường', choices: [] }] })).rejects.toThrow()
+    await expect(updateGroup(id, { toppingMenu: [{ name: 'Thạch', price: -1 }] })).rejects.toThrow()
+    await expect(updateGroup(id, { toppingMenu: [{ name: 'Thạch', price: 1.5 }] })).rejects.toThrow()
+  })
+
+  it('đổi tên nhóm ghi từ trước khi có thực đơn KHÔNG thêm hai trường thực đơn vào hàng (để Worker giữ bản đã lưu)', async () => {
+    const legacy = { gid: testGid(7), name: 'Đồ uống', sortOrder: 1, createdAt: 1, updatedAt: 1 }
+    const id = await db.itemGroups.add(legacy as never)
+
+    await updateGroup(id, { name: 'Nước uống' })
+
+    const raw = await db.itemGroups.where(':id').equals(id).raw().first()
+    expect(raw).toMatchObject({ name: 'Nước uống' })
+    expect(raw).not.toHaveProperty('optionGroups')
+    expect(raw).not.toHaveProperty('toppingMenu')
+    expect(await getGroup(id)).toMatchObject({ optionGroups: [], toppingMenu: [] })
+  })
+
+  it('chỉ trường người dùng đang sửa được ghi; xoá chủ ý ([]) cũng được ghi', async () => {
+    const legacy = { gid: testGid(8), name: 'Đồ uống', sortOrder: 1, createdAt: 1, updatedAt: 1 }
+    const id = await db.itemGroups.add(legacy as never)
+
+    await updateGroup(id, { toppingMenu: [{ name: 'Thạch', price: 3_000 }] })
+    const set = await db.itemGroups.where(':id').equals(id).raw().first()
+    expect(set).toMatchObject({ toppingMenu: [{ name: 'Thạch', price: 3_000 }] })
+    expect(set).not.toHaveProperty('optionGroups')
+
+    await updateGroup(id, { toppingMenu: [], optionGroups: [] })
+    expect(await db.itemGroups.where(':id').equals(id).raw().first()).toMatchObject({ toppingMenu: [], optionGroups: [] })
+  })
+
+  it('nhóm tạo bằng bản này đã có hai trường nên đổi tên giữ nguyên chúng', async () => {
+    const id = await createGroup({ name: 'Đồ uống', sortOrder: 1, toppingMenu: [{ name: 'Thạch', price: 3_000 }] })
+    await updateGroup(id, { name: 'Nước uống' })
+
+    expect(await db.itemGroups.where(':id').equals(id).raw().first()).toMatchObject({
+      name: 'Nước uống',
+      toppingMenu: [{ name: 'Thạch', price: 3_000 }],
+      optionGroups: [],
+    })
   })
 })

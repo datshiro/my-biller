@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Cart } from '@/domain/cart'
+import { LineToppingSchema } from '@/domain/schema'
 
 const KEY = 'my-biller:cart-draft'
 
@@ -39,6 +40,9 @@ const CartLineSchema = z
     priceSource: z.enum(['catalog', 'manual']).default('manual'),
     costPrice: z.number().int().nonnegative().nullable(),
     qty: z.number().positive(),
+    // Nháp do bản build cũ ghi không có hai trường này; thiếu thì rơi về rỗng chứ không bỏ cả nháp.
+    options: z.array(z.string()).default(() => []),
+    toppings: z.array(LineToppingSchema).default(() => []),
     note: z.string(),
   })
   .transform((line) => ({ ...line, retailPrice: line.retailPrice ?? line.unitPrice }))
