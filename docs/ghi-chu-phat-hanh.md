@@ -1,6 +1,6 @@
 # Ghi chú phát hành
 
-## Chưa phát hành — tem ghi chú dài in tiếp; tuỳ chọn và topping có giá theo nhóm món
+## 2.8.0 — tem ghi chú dài in tiếp, lề trái rộng hơn; tuỳ chọn và topping có giá theo nhóm món (1/10/2026)
 
 > **Deploy Worker TRƯỚC Pages/APK, và cập nhật mọi máy đã ghép trong cùng ngày.** Dòng đơn và nhóm món có
 > thêm trường mới (không đổi schema IndexedDB, không di trú, không bump version Dexie). Zod bỏ khoá lạ
@@ -46,7 +46,7 @@
   vẫn là last-write-wins: máy đang chậm (chưa kéo về thực đơn mới) mà bạn lưu lại thực đơn trên máy đó sẽ đè lên
   thực đơn vừa đặt ở máy khác. Nên cài thực đơn sau khi các máy đã cập nhật và đồng bộ.
 - Báo cáo lãi tính giá vốn trên ly, không có giá vốn topping: lãi các đơn có topping **cao hơn thật**.
-- Chưa in thử tem trên XP-365B thật: font "3" 16×24 chấm theo tài liệu TSPL và phép chia trang đo trên Chrome.
+- Đã in thử trên XP-365B thật (1/10): tem in được, lề trái 3,2 mm hết sát mép giấy. Chưa ghi nhận lần thử riêng cho ca ghi chú rất dài ra nhiều tem trên máy thật; phép chia trang đo trên Chrome.
 
 ## 2.7.1 — rollback trả đúng đơn giá, hàng in chung theo máy in, job in treo không kẹt cả hàng (1/10/2026)
 
