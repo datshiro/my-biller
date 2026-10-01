@@ -34,19 +34,30 @@ function paginateOnProbe(probe: HTMLElement, blocks: readonly LabelBlock[], size
   }
 }
 
-function useFontsReady(): boolean {
-  const [ready, setReady] = useState(() => !document.fonts || document.fonts.status === 'loaded')
+const LABEL_FONT_WEIGHTS = [400, 600, 700]
+
+/**
+ * Chờ đúng các mặt chữ tem sẽ vẽ, không chỉ hỏi `document.fonts.status`: trạng thái đó đã là 'loaded' khi
+ * không còn gì đang tải, trong khi subset tiếng Việt của một độ đậm chưa dùng (tên món và topping là 700)
+ * chỉ bắt đầu nạp khi tem mồi vẽ ký tự đầu tiên. Đo trước lúc đó là đo bằng font thay thế, rồi ảnh chụp lại
+ * dùng font thật và `overflow-hidden` cắt cuối ghi chú mà không báo gì. Trả về true khi mọi mặt chữ cho
+ * ĐÚNG đoạn chữ này đã nạp; đổi chữ thì chờ lại.
+ */
+function useLabelFontsReady(sample: string): boolean {
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
   useEffect(() => {
-    if (ready) return
+    if (!document.fonts) return
     let live = true
-    void document.fonts.ready.then(() => {
-      if (live) setReady(true)
+    void Promise.all(
+      LABEL_FONT_WEIGHTS.map((weight) => document.fonts.load(`${weight} 20px "Be Vietnam Pro"`, sample)),
+    ).then(() => {
+      if (live) setLoadedFor(sample)
     })
     return () => {
       live = false
     }
-  }, [ready])
-  return ready
+  }, [sample])
+  return !document.fonts || loadedFor === sample
 }
 
 /**
@@ -68,8 +79,9 @@ export function LabelSheet({
   count: number
   onNodes: (nodes: HTMLElement[]) => void
 }) {
-  const fontsReady = useFontsReady()
   const blocks = useMemo(() => lineBlocks(line), [line])
+  const sample = [shop.name, order.code, line.name, ...blocks.map((block) => block.text), '0123456789/:· tr'].join(' ')
+  const fontsReady = useLabelFontsReady(sample)
   // Mọi thứ làm đổi chỗ chữ trên tem đều nằm trong khoá: đổi thì chia lại từ đầu.
   const key = JSON.stringify([blocks, size, shop.name, order.code, line.name, count, fontsReady])
   const [measured, setMeasured] = useState<{ key: string; pages: LabelBlock[][] } | null>(null)

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LabelSheet } from '../label-sheet'
 import { DEFAULT_SHOP, type Order, type OrderLine } from '@/domain/schema'
@@ -86,6 +86,43 @@ describe('LabelSheet', () => {
     expect(nodes.length).toBeGreaterThan(1)
     expect(bodies.flat().join(' ')).toBe('Ít đường, Đá riêng + Trân châu x2 mang về gói kỹ giúp em nhé')
     expect(bodies[0]?.[0]).toBe('Ít đường, Đá riêng')
+  })
+
+  describe('font tem', () => {
+    afterEach(() => {
+      Reflect.deleteProperty(document, 'fonts')
+    })
+
+    it('chờ nạp đủ ba độ đậm cho đúng chữ trên tem rồi mới coi là sẵn sàng, xong thì đo lại', async () => {
+      const loaded: string[] = []
+      let release: () => void = () => {}
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      Object.defineProperty(document, 'fonts', {
+        configurable: true,
+        value: {
+          load: (spec: string, text: string) => {
+            loaded.push(`${spec}|${text}`)
+            return gate.then(() => [])
+          },
+        },
+      })
+
+      const { onNodes } = renderSheet('mang về gói kỹ')
+      const before = onNodes.mock.calls.length
+      expect(loaded.map((entry) => entry.split('|')[0])).toEqual([
+        '400 20px "Be Vietnam Pro"',
+        '600 20px "Be Vietnam Pro"',
+        '700 20px "Be Vietnam Pro"',
+      ])
+      expect(loaded[0]).toContain('Trà sữa')
+      expect(loaded[0]).toContain('mang về gói kỹ')
+
+      release()
+      await waitFor(() => expect(onNodes.mock.calls.length).toBeGreaterThan(before))
+      expect(onNodes.mock.calls.at(-1)?.[0].length).toBe(1)
+    })
   })
 
   it('đổi ghi chú thì chia lại trang', () => {

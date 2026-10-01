@@ -39,12 +39,12 @@
   ghi chú, nên phiếu và tem ở quầy pha chạy bản cũ sẽ không còn "Đá riêng" — cập nhật quầy pha trước.
   Máy cũ nhận đơn có topping trong lúc chưa cập nhật lưu dòng đó thiếu tuỳ chọn và topping **vĩnh viễn trên
   máy đó**, kể cả sau khi cập nhật; muốn phiếu và tem in lại đúng thì bấm Cài đặt › **Kéo lại từ đầu** một
-  lần sau khi cập nhật. Với dòng đơn thì bỏ qua không lệch tiền, nhưng với thực đơn nhóm món thì **không được
-  bỏ qua** (xem dòng dưới).
-- **Chỉ cài Tuỳ chọn & topping sau khi mọi máy đã lên bản mới.** Máy lên muộn mà đã nhận thực đơn khi còn bản
-  cũ sẽ có nhóm món thiếu thực đơn; app đọc ra mảng rỗng và lần đổi tên nhóm sau đó đẩy `[]` rõ ràng, Worker
-  coi là xoá chủ ý và xoá thực đơn trên mọi máy mà không báo lỗi. Máy nào lên muộn phải bấm **Kéo lại từ đầu**
-  trước khi đổi tên hay sắp xếp nhóm món.
+  lần sau khi cập nhật; không làm thì không lệch tiền, chỉ phiếu và tem của các đơn nhận lúc còn bản cũ thiếu phần
+  topping.
+- **Thực đơn nhóm món:** đổi tên nhóm trên máy mà hàng nhóm chưa có thực đơn (ghi từ bản cũ) không còn ghi `[]` đè
+  lên thực đơn của sổ chung — chỉ khi bạn mở "Tuỳ chọn & topping" và lưu thì hai trường mới được ghi. Thực đơn
+  vẫn là last-write-wins: máy đang chậm (chưa kéo về thực đơn mới) mà bạn lưu lại thực đơn trên máy đó sẽ đè lên
+  thực đơn vừa đặt ở máy khác. Nên cài thực đơn sau khi các máy đã cập nhật và đồng bộ.
 - Báo cáo lãi tính giá vốn trên ly, không có giá vốn topping: lãi các đơn có topping **cao hơn thật**.
 - Chưa in thử tem trên XP-365B thật: font "3" 16×24 chấm theo tài liệu TSPL và phép chia trang đo trên Chrome.
 

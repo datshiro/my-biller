@@ -82,12 +82,25 @@ export async function appendGroup(name: string): Promise<number> {
   return createGroup({ name, sortOrder: (last?.sortOrder ?? 0) + 1 })
 }
 
+const MENU_FIELDS = ['optionGroups', 'toppingMenu'] as const
+
+/**
+ * Hàng nhóm ghi trước khi có thực đơn không có hai trường thực đơn, nhưng hook đọc của Dexie điền `[]` cho
+ * chúng — và zod điền thêm một lần nữa lúc parse. Đẩy `[]` đó lên là nói "xoá hết thực đơn" thay cho "không
+ * biết", và Worker (đúng) coi nó là xoá chủ ý nên xoá thực đơn trên mọi máy. Vì vậy chỉ ghi hai trường khi
+ * người dùng đang sửa chúng hoặc hàng gốc thật sự có chúng; còn lại bỏ khoá để Worker giữ bản đã lưu.
+ */
 export async function updateGroup(id: number, patch: Partial<ItemGroupInput>): Promise<void> {
   const current = await db.itemGroups.get(id)
   if (!current) throw new Error(`Không tìm thấy nhóm #${id}`)
-  await syncTransaction(() =>
-    db.itemGroups.put(ItemGroupSchema.parse({ ...current, ...patch, id, updatedAt: now() })),
-  )
+  const stored = await db.itemGroups.where(':id').equals(id).raw().first()
+  await syncTransaction(() => {
+    const row: Record<string, unknown> = ItemGroupSchema.parse({ ...current, ...patch, id, updatedAt: now() })
+    for (const field of MENU_FIELDS) {
+      if (!(field in patch) && stored && !(field in stored)) delete row[field]
+    }
+    return db.itemGroups.put(row as ItemGroup)
+  })
 }
 
 export function countItemsInGroup(id: number): Promise<number> {
