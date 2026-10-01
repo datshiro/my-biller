@@ -26,6 +26,18 @@ describe('LabelView', () => {
     expect(node.style.height).toBe('240px')
   })
 
+  it('lề trái rộng hơn các cạnh khác đúng 2 mm = 16 chấm: tem 50×30 lề 9,6 → trái 25,6', () => {
+    const { container } = render(<LabelView {...base} />)
+    const node = tem(container)
+
+    const px = (value: string) => parseFloat(value)
+
+    expect(px(node.style.paddingTop)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingRight)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingBottom)).toBeCloseTo(9.6)
+    expect(px(node.style.paddingLeft)).toBeCloseTo(25.6)
+  })
+
   it('không còn tên khách trên tem', () => {
     const { container } = render(<LabelView {...base} />)
     expect(tem(container).textContent).not.toContain('Chị Lan')
@@ -47,8 +59,9 @@ describe('LabelView', () => {
     const row = mark.parentElement as HTMLElement
 
     expect(row.style.height).toBe('24px')
-    // "12/12" = 5 × 16 = 80 chấm → số bắt đầu ở x = 480 − 80 − 8 = 392; dấu phụ trang bắt đầu ở lề 12,8.
-    expect(12.8 + parseFloat(mark.style.maxWidth)).toBeLessThan(392)
+    // "12/12" = 5 × 16 = 80 chấm → số bắt đầu ở x = 480 − 80 − 8 = 392; dấu phụ trang bắt đầu ở lề trái 28,8
+    // (12,8 + 2 mm).
+    expect(28.8 + parseFloat(mark.style.maxWidth)).toBeLessThan(392)
   })
 
   it('không có thân thì không thêm dòng trống: tên quán, mã đơn, tên món', () => {

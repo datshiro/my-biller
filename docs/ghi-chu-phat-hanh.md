@@ -10,7 +10,7 @@
 ### Người bán thấy gì
 
 - **Tem mới:** tên quán, mã đơn + giờ, một vạch kẻ ngang, tên món, rồi tuỳ chọn → topping (đậm, có dấu +) →
-  ghi chú khách (nghiêng). Tên khách ở góc dưới trái đã bỏ; số thứ tự `i/n` góc dưới phải nhỏ hơn (font
+  ghi chú khách (nghiêng). Lề trái tem rộng thêm 2 mm (tổng 3,2 mm trên tem 50×30) cho khỏi sát mép giấy. Tên khách ở góc dưới trái đã bỏ; số thứ tự `i/n` góc dưới phải nhỏ hơn (font
   16×24 chấm, không còn phóng đôi trên tem cao từ 40 mm).
 - **Ghi chú dài không còn bị cắt:** phần thừa sang tem kế, mỗi tem lặp đầu tem và tên món, có dấu phụ trang
   `tr 1/2`, `tr 2/2` ở góc dưới trái. Các tem của một ly đi liền nhau; số `i/n` đếm theo **ly**, nên các tem

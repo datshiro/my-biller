@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { COUNTER_HEIGHT, counterBox, labelDots, type LabelSize } from '@/domain/tspl/encode'
 import type { LabelBlock } from '@/domain/label-pages'
 import type { Order, OrderLine, ShopSettings } from '@/domain/schema'
-import { labelBodyStyle, labelUnit } from './label-layout'
+import { labelBodyStyle, labelPadding, labelPaddingLeft, labelUnit } from './label-layout'
 
 /**
  * DOM của một tem, 1px = 1 chấm máy in nên chụp ra đúng khổ. Một ly có ghi chú dài ra nhiều tem: mỗi tem
@@ -33,14 +33,15 @@ export function LabelView({
 }) {
   const { width, height } = labelDots(size)
   const unit = labelUnit(size)
-  const padding = unit * 0.4
+  const padding = labelPadding(size)
+  const paddingLeft = labelPaddingLeft(size)
 
   return (
     <div
       ref={innerRef}
       data-label
       className="flex flex-col overflow-hidden bg-white leading-tight text-ink"
-      style={{ width, height, padding }}
+      style={{ width, height, padding, paddingLeft }}
     >
       {shop.name ? (
         <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
@@ -67,7 +68,7 @@ export function LabelView({
         {pageCount > 1 ? (
           <p
             className="truncate font-semibold"
-            style={{ fontSize: unit * 0.75, maxWidth: counterBox(size, count).x - padding - 4 }}
+            style={{ fontSize: unit * 0.75, maxWidth: counterBox(size, count).x - paddingLeft - 4 }}
           >
             tr {page}/{pageCount}
           </p>

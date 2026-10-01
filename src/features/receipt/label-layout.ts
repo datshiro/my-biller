@@ -2,9 +2,18 @@ import type { CSSProperties } from 'react'
 import { toppingLabel } from '@/domain/line-extras'
 import type { LabelBlock } from '@/domain/label-pages'
 import type { OrderLine } from '@/domain/schema'
-import { labelDots, type LabelSize } from '@/domain/tspl/encode'
+import { DOTS_PER_MM, labelDots, type LabelSize } from '@/domain/tspl/encode'
 
 export const labelUnit = (size: LabelSize) => labelDots(size).height / 10
+
+/** Lề các cạnh của tem. */
+export const labelPadding = (size: LabelSize) => labelUnit(size) * 0.4
+
+/**
+ * Lề trái thêm 2 mm: đầu in và cuộn tem lệch nhau vài phần mm nên chữ sát mép trái bị sát cạnh giấy. Chỉ cạnh
+ * trái cần — số thứ tự bên phải do máy in vẽ cách mép phải 8 chấm và đã in ổn.
+ */
+export const labelPaddingLeft = (size: LabelSize) => labelPadding(size) + 2 * DOTS_PER_MM
 
 /**
  * Ba hạng mục của thân tem, đúng thứ tự người pha đọc: tuỳ chọn, topping, ghi chú khách. Phân biệt bằng
