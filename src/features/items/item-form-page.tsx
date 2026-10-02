@@ -45,13 +45,17 @@ function ItemForm({ item }: { item: Item | null }) {
   const [confirming, setConfirming] = useState(false)
   const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
 
-  // Chỉ nhắc chứ không chặn: món đã từng bán không xoá được, nên thay món bằng một món mới cùng tên
-  // rồi ngừng bán món cũ là đường hợp lệ.
+  // Chỉ xét khi tên đã đổi: món đã trùng tên từ trước khi có luật này vẫn phải sửa được giá.
   const comparableName = name.trim().toLocaleLowerCase('vi')
-  const duplicate = comparableName
-    ? allItems.find(
-        (other) => other.id !== item?.id && other.name.trim().toLocaleLowerCase('vi') === comparableName,
-      )
+  const renamed = comparableName !== (item?.name ?? '').trim().toLocaleLowerCase('vi')
+  const duplicate =
+    comparableName && renamed
+      ? allItems.find(
+          (other) => other.id !== item?.id && other.name.trim().toLocaleLowerCase('vi') === comparableName,
+        )
+      : undefined
+  const duplicateError = duplicate
+    ? `Đã có món “${duplicate.name}”${duplicate.isActive === 1 ? '' : ' (đang ngừng bán)'}. Đặt tên khác để phiếu và báo cáo không lẫn hai món.`
     : undefined
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
@@ -70,7 +74,7 @@ function ItemForm({ item }: { item: Item | null }) {
       ...(unitPrice === null ? { unitPrice: 'Nhập giá bán.' } : {}),
     }
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0 || unitPrice === null) return
+    if (Object.keys(nextErrors).length > 0 || unitPrice === null || duplicateError) return
 
     void run(async () => {
       const payload = { name: trimmed, unitPrice, costPrice, unit: unit.trim(), groupId, note: note.trim() }
@@ -117,15 +121,9 @@ function ItemForm({ item }: { item: Item | null }) {
         value={name}
         autoFocus={!item}
         onChange={(event) => setName(event.target.value)}
-        error={errors.name}
+        error={errors.name ?? duplicateError}
         placeholder="Ví dụ: Phở bò đặc biệt"
       />
-      {duplicate ? (
-        <p className="-mt-3 text-[13px] font-semibold text-warn">
-          Đã có món “{duplicate.name}”{duplicate.isActive === 1 ? '' : ' (đang ngừng bán)'}. Vẫn lưu được nếu
-          đúng là hai món khác nhau.
-        </p>
-      ) : null}
 
       <MoneyInput
         label="Giá bán *"
