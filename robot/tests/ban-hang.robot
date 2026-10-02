@@ -769,7 +769,7 @@ Món có thực đơn riêng: chạm là mở sheet chọn, đóng sheet mà kh�
     Chọn Món    Cà phê sữa
     Wait For Elements State    ${SHEET} >> css=button:has-text("THÊM")    visible
     Click    ${SHEET} >> css=button[aria-label="Đóng"]
-    Wait For Elements State    ${NÚT_THU_TIỀN}    detached
+    Wait For Elements State    ${SHEET}    detached
 
     Chọn Món    Cơm tấm
     Chờ Thấy Chữ    Xem đơn · 1 món
@@ -806,6 +806,49 @@ Chip ghi chú lấy từ ghi chú đã bán gần đây và ghi đúng cụm đ�
     ${dòng}=    Đọc Bảng    orderLines
     ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]][0]
     Should Be Equal    ${trà}[note]    mang về    Chip ghi chú không xuống sổ đúng cụm đã chạm.
+
+Ghi chú gõ trùng chữ một lựa chọn thì không thành chip ghi chú
+    [Documentation]    Bản trước 2.8.0 ghi "Đá riêng" thẳng vào ghi chú dòng. Thành chip ghi chú thì nó nằm
+    ...    ngay dưới chip tuỳ chọn Đá riêng cùng chữ, chạm nhầm là lách luật loại trừ của nhóm Đá.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    Đá riêng, mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Mở Màn    /
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Cơm tấm sườn
+    Wait For Elements State    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("mang về")    visible
+    Get Element Count    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("Đá riêng")    ==    0
+
+Bỏ món trong sheet sửa rồi bấm Hoàn lại thì dòng về nguyên vẹn cả giá riêng lẫn ghi chú
+    [Documentation]    Nút "Bỏ món" nằm sát XONG ở chân sheet nên dễ chạm nhầm; nó đi chung đường Hoàn lại
+    ...    với gõ 0. Hoàn lại phải đặt lại đúng dòng cũ — đối chiếu sổ chứ không chỉ con số trên màn.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Phở bò đặc biệt
+    Bấm Nút    Đổi giá
+    Điền Ô    Đơn giá riêng cho đơn này    40000
+    Điền Ô    Ghi chú    ít hành
+    Bấm Nút    XONG
+
+    Sửa Dòng    Phở bò đặc biệt (ít hành)
+    Click    ${SHEET} >> css=button:text-is("Bỏ món")
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+    Bấm Nút    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${phở}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Phở bò đặc biệt'][0]
+    Should Be Equal As Numbers    ${phở}[qty]    1    Hoàn lại không đưa đúng số lượng về.
+    Should Be Equal As Integers    ${phở}[unitPrice]    40000    Hoàn lại làm mất giá riêng của dòng.
+    Should Be Equal    ${phở}[note]    ít hành    Hoàn lại làm mất ghi chú của dòng.
 
 Hai ly cùng món khác topping là hai dòng riêng; thêm topping cho ly trơn thì gộp vào dòng cùng topping
     [Documentation]    Gộp nhầm hai ly khác topping là bán thiếu hoặc thừa tiền topping mà không lỗi nào

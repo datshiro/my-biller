@@ -630,17 +630,45 @@ describe('bán hàng', () => {
 })
 
 describe('sheet sửa dòng', () => {
-  it('Bỏ món trong sheet sửa có Hoàn lại, bấm là dòng về nguyên vẹn', async () => {
+  it('Bỏ món trong sheet sửa có Hoàn lại, bấm là dòng về nguyên vẹn cả giá riêng lẫn ghi chú', async () => {
     await seedItems()
     renderSales()
     await pick('Phở bò')
     await pick('Trà đá')
     await suaDong('Phở bò')
-    await bam('Bỏ món')
+    const priceBox = await oDonGia()
+    await userEvent.clear(priceBox)
+    await userEvent.type(priceBox, '40000')
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await bam('XONG')
 
+    await suaDong('Phở bò (ít hành)')
+    await bam('Bỏ món')
     expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
     await bam('Hoàn lại')
-    expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
+
+    expect(await dongGio('Phở bò (ít hành)')).toContain('40.000')
+  })
+
+  it('ghi chú cũ trùng chữ một lựa chọn (đá của bản trước 2.8.0) không thành chip ghi chú', async () => {
+    await seedItems()
+    await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: null, name: 'Trà', unit: 'ly', unitPrice: 5_000, costPrice: null, qty: 1, note: 'Đá riêng, mang về' }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { method: 'cash', amount: 5_000, note: '' },
+    })
+    renderSales()
+    await pick('Phở bò')
+    await suaDong('Phở bò')
+
+    const chips = within(await screen.findByRole('group', { name: 'Ghi chú gần đây' }))
+    expect(chips.getByRole('button', { name: 'mang về' })).toBeDefined()
+    expect(chips.queryByRole('button', { name: 'Đá riêng' })).toBeNull()
   })
 
   it('nút − + trên số lượng lẻ không đẻ số thập phân rác', async () => {

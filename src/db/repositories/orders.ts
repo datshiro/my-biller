@@ -78,8 +78,9 @@ export async function getOrderLines(orderId: number): Promise<OrderLine[]> {
 }
 
 /**
- * Ghi chú của các dòng hàng bán gần nhất trên máy này, mới nhất trước — nguồn cho chip ghi chú nhanh.
- * Đọc theo khoá chính giảm dần và dừng ở `limit` dòng, không quét cả bảng.
+ * Ghi chú của các dòng hàng vào sổ máy này gần nhất — nguồn cho chip ghi chú nhanh. Thứ tự là thứ tự dòng về
+ * tới sổ (khoá chính giảm dần), không phải giờ bán: gồm cả dòng máy khác đồng bộ về và dòng của đơn đã huỷ.
+ * Đủ cho một danh sách gợi ý; dừng ở `limit` dòng, không quét cả bảng.
  */
 export async function listRecentLineNotes(limit: number): Promise<string[]> {
   const lines = await db.orderLines.reverse().limit(limit).toArray()

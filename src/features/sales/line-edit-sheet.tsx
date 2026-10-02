@@ -25,21 +25,6 @@ const NOTE_CHIPS = 6
 const STEPPER =
   'h-11 w-11 shrink-0 rounded-btn border border-line bg-white text-[20px] font-bold leading-none active:bg-surface disabled:opacity-40'
 
-function NoteChip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: string }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={`h-10 shrink-0 whitespace-nowrap rounded-full border px-3.5 text-[15px] font-semibold ${
-        selected ? 'border-brand bg-brand-tint text-brand' : 'border-line bg-white text-ink'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
 function ToppingRow({
   item,
   chosen,
@@ -125,13 +110,13 @@ export function LineEditSheet({
   const [options, setOptions] = useState(line.options)
   const [toppings, setToppings] = useState(line.toppings)
   const [note, setNote] = useState(line.note)
-  const [recent, setRecent] = useState<string[]>([])
+  const [recentNotes, setRecentNotes] = useState<string[]>([])
 
   useEffect(() => {
     let alive = true
     listRecentLineNotes(RECENT_LINES)
       .then((notes) => {
-        if (alive) setRecent(recentNotePhrases(notes, NOTE_CHIPS))
+        if (alive) setRecentNotes(notes)
       })
       // Không có chip gợi ý thì người bán vẫn gõ được ghi chú; không đáng chặn sheet vì lượt đọc này.
       .catch((caught: unknown) => console.error('Không đọc được ghi chú gần đây:', caught))
@@ -143,6 +128,7 @@ export function LineEditSheet({
   const qty = parseQtyInput(qtyText)
   const invalid = qty === null || unitPrice === null || (adding && qty <= 0)
   const groups = optionGroupsFor(menu)
+  const recent = recentNotePhrases(recentNotes, NOTE_CHIPS, groups.flatMap((group) => group.choices))
   const stray = orphanOptions(options, groups)
   const toppingMenu = menu?.toppingMenu ?? []
   // Topping tính theo ly nên chỉ THÊM được khi số ly nguyên. Số lượng lẻ có thể đã gõ ở ô trong giỏ trên một
@@ -181,16 +167,16 @@ export function LineEditSheet({
             <button type="button" aria-label="Thêm một" onClick={() => bump(1)} className={STEPPER}>
               +
             </button>
-            <Button className="h-14 flex-1 text-[17px] font-bold" disabled={invalid} onClick={apply}>
+            <Button size="cta" className="flex-1" disabled={invalid} onClick={apply}>
               THÊM{amount !== null ? ` · ${formatAmount(amount)}` : ''}
             </Button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <Button variant="danger" className="h-14 shrink-0" onClick={onRemove}>
+            <Button variant="danger" className="shrink-0" onClick={onRemove}>
               Bỏ món
             </Button>
-            <Button className="h-14 flex-1 text-[17px] font-bold" disabled={invalid} onClick={apply}>
+            <Button size="cta" className="flex-1" disabled={invalid} onClick={apply}>
               XONG
             </Button>
           </div>
@@ -294,13 +280,13 @@ export function LineEditSheet({
           {recent.length > 0 ? (
             <div role="group" aria-label="Ghi chú gần đây" className="flex flex-wrap gap-2">
               {recent.map((phrase) => (
-                <NoteChip
+                <SelectChip
                   key={phrase}
                   selected={hasNotePhrase(note, phrase)}
                   onClick={() => setNote(toggleNotePhrase(note, phrase))}
                 >
                   {phrase}
-                </NoteChip>
+                </SelectChip>
               ))}
             </div>
           ) : null}

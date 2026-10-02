@@ -110,4 +110,9 @@ describe('recentNotePhrases', () => {
     expect(recentNotePhrases(notes, 2)).toEqual(['Mang về', 'ít đá'])
     expect(recentNotePhrases([], 6)).toEqual([])
   })
+
+  it('bỏ cụm trùng một lựa chọn đã có chip riêng (ghi chú đá của bản cũ) trước khi cắt giới hạn', () => {
+    const notes = ['Đá riêng', 'đá riêng, mang về', 'Đá chung', 'ít hành']
+    expect(recentNotePhrases(notes, 2, ['Đá chung', 'Đá riêng'])).toEqual(['mang về', 'ít hành'])
+  })
 })

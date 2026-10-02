@@ -375,8 +375,8 @@ export function SalesPage() {
                 type="button"
                 aria-pressed={on}
                 onClick={() => pickMode(mode)}
-                className={`h-10 rounded-[9px] px-4 font-semibold ${
-                  on ? 'bg-white text-brand shadow-[0_0_0_1px_var(--color-line)]' : 'text-muted'
+                className={`h-12 rounded-[9px] border px-4 font-semibold ${
+                  on ? 'border-line bg-white text-brand' : 'border-transparent text-muted'
                 }`}
               >
                 {label}
