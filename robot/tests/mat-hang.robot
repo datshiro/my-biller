@@ -206,3 +206,23 @@ Gõ giá bán vượt 999.999.999 thì ô giữ số cũ, bán món đó không 
     Chọn Món    Mâm cỗ    2
     Chờ Thấy Chữ    1.999.999.998 đ
     Không Được Thấy Chữ    App đang gặp lỗi
+
+Đặt tên trùng một món có sẵn thì app nhắc trước khi lưu, vẫn lưu được
+    [Documentation]    So không phân biệt hoa thường và bỏ dấu cách hai đầu. Chỉ nhắc chứ không chặn: món
+    ...    đã từng bán không xoá được, nên thay bằng món mới cùng tên rồi ngừng bán món cũ là đường hợp lệ.
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    ${SPACE}phở BÒ đặc biệt${SPACE}
+    Chờ Thấy Chữ    Đã có món “Phở bò đặc biệt”
+    Điền Ô    Giá bán *    60000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    5    Lời nhắc trùng tên đã chặn luôn việc lưu món.
+
+Sửa chính một món thì không bị nhắc trùng với tên của nó
+    ${mặt_hàng}=    Đọc Bảng    items
+    ${phở}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Phở bò đặc biệt')
+    Mở Màn    /them/mat-hang/${phở}[id]
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Điền Ô    Tên mặt hàng *    PHỞ BÒ ĐẶC BIỆT
+    Không Được Thấy Chữ    Đã có món

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { useItem, useItemGroups } from './use-items'
+import { useItem, useItemGroups, useItems } from './use-items'
 import { createItem, deactivateItem, deleteItem, updateItem } from '@/db/repositories/items'
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
@@ -28,6 +28,7 @@ function ItemForm({ item }: { item: Item | null }) {
   const navigate = useNavigate()
   const { state } = useLocation()
   const groups = useItemGroups() ?? []
+  const allItems = useItems() ?? []
 
   // Tên điền sẵn là mốc so, không phải chữ "chưa lưu": người bán chưa gõ gì trên màn này, hỏi lại
   // lúc họ bấm ✕ là hỏi về chữ của chính app.
@@ -43,6 +44,15 @@ function ItemForm({ item }: { item: Item | null }) {
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
   const [confirming, setConfirming] = useState(false)
   const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
+
+  // Chỉ nhắc chứ không chặn: món đã từng bán không xoá được, nên thay món bằng một món mới cùng tên
+  // rồi ngừng bán món cũ là đường hợp lệ.
+  const comparableName = name.trim().toLocaleLowerCase('vi')
+  const duplicate = comparableName
+    ? allItems.find(
+        (other) => other.id !== item?.id && other.name.trim().toLocaleLowerCase('vi') === comparableName,
+      )
+    : undefined
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
   const dirty =
@@ -110,6 +120,12 @@ function ItemForm({ item }: { item: Item | null }) {
         error={errors.name}
         placeholder="Ví dụ: Phở bò đặc biệt"
       />
+      {duplicate ? (
+        <p className="-mt-3 text-[13px] font-semibold text-warn">
+          Đã có món “{duplicate.name}”{duplicate.isActive === 1 ? '' : ' (đang ngừng bán)'}. Vẫn lưu được nếu
+          đúng là hai món khác nhau.
+        </p>
+      ) : null}
 
       <MoneyInput
         label="Giá bán *"
