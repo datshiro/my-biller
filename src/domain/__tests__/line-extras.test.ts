@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hasNotePhrase,
+  hasOwnMenu,
   ICE_OPTION_GROUP,
   optionGroupsFor,
   orphanOptions,
+  recentNotePhrases,
   setToppingQty,
+  toggleNotePhrase,
   toggleOption,
   toppingAmount,
   toppingLabel,
@@ -68,5 +72,42 @@ describe('nhãn topping', () => {
     expect(toppingLabel({ name: 'Thạch', qty: 1 })).toBe('Thạch')
     expect(toppingLabel({ name: 'Trân châu', qty: 2 })).toBe('Trân châu x2')
     expect(toppingAmount({ unitPrice: 5_000, qty: 2 })).toBe(10_000)
+  })
+})
+
+describe('hasOwnMenu', () => {
+  it('chỉ nhóm món có tuỳ chọn hay topping riêng mới tính; nhóm Đá có sẵn không tính', () => {
+    expect(hasOwnMenu(undefined)).toBe(false)
+    expect(hasOwnMenu({ optionGroups: [], toppingMenu: [] })).toBe(false)
+    expect(hasOwnMenu({ optionGroups: [duong], toppingMenu: [] })).toBe(true)
+    expect(hasOwnMenu({ optionGroups: [], toppingMenu: [{ name: 'Thạch', price: 3_000 }] })).toBe(true)
+  })
+})
+
+describe('toggleNotePhrase', () => {
+  it('thêm cụm vào cuối, ngăn bằng dấu phẩy', () => {
+    expect(toggleNotePhrase('', 'mang về')).toBe('mang về')
+    expect(toggleNotePhrase('không hành', 'mang về')).toBe('không hành, mang về')
+  })
+
+  it('bấm lại thì gỡ đúng cụm đó, không phân biệt hoa thường, chữ tự gõ còn nguyên', () => {
+    expect(toggleNotePhrase('không hành, Mang về, gói kỹ nhé', 'mang về')).toBe('không hành, gói kỹ nhé')
+    expect(hasNotePhrase('không hành, Mang về', 'mang về')).toBe(true)
+    expect(hasNotePhrase('mang về sau', 'mang về')).toBe(false)
+  })
+
+  it('dấu phẩy thập phân không phải chỗ ngăn cụm', () => {
+    expect(toggleNotePhrase('thêm 1,5 lạng', 'mang về')).toBe('thêm 1,5 lạng, mang về')
+    expect(toggleNotePhrase('thêm 1,5 lạng, mang về', 'mang về')).toBe('thêm 1,5 lạng')
+    expect(recentNotePhrases(['thêm 1,5 lạng'], 6)).toEqual(['thêm 1,5 lạng'])
+  })
+})
+
+describe('recentNotePhrases', () => {
+  it('xếp theo số lần dùng, hoà thì cụm gần hơn đứng trước, giữ cách viết của lần gần nhất', () => {
+    const notes = ['Mang về', 'ít đá', 'không hành, mang về', '', 'ít đá, cay']
+    expect(recentNotePhrases(notes, 6)).toEqual(['Mang về', 'ít đá', 'không hành', 'cay'])
+    expect(recentNotePhrases(notes, 2)).toEqual(['Mang về', 'ít đá'])
+    expect(recentNotePhrases([], 6)).toEqual([])
   })
 })

@@ -55,6 +55,7 @@ Phiếu liệt kê từng dòng hàng kèm số lượng, đơn giá và thành 
     [Documentation]    Chỉ in mỗi số cuối thì khách không biết đã được bớt — tách dòng ra mới thuyết phục.
     Mở Màn    /
     Chọn Món    Phở bò
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Giảm giá    5000
     Bấm Nút    ÁP DỤNG
@@ -315,7 +316,7 @@ Ghi chú từng món hiện trên phiếu dưới tên món
     ...    không quá 2 dòng" chỉ tính phần tên.
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Ghi chú    Đá riêng
     Bấm Nút    XONG
     Mở Sheet Thu Tiền
@@ -529,7 +530,7 @@ In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của
     Mở Màn    /
     Chọn Món    Trà đá
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Sửa Dòng    Cà phê sữa
     Điền Ô    Ghi chú    ${ghi_chú}
     Bấm Nút    XONG
     Mở Sheet Thu Tiền

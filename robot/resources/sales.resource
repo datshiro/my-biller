@@ -8,11 +8,16 @@ ${NÚT_XONG}             css=button:has-text("XONG & XUẤT PHIẾU")
 ${NÚT_CHỌN_KHÁCH_NỢ}    css=button:has-text("CHỌN KHÁCH ĐỂ GHI NỢ")
 ${KHOÁ_NHÁP_GIỎ}        my-biller:cart-draft
 ${NÚT_KHÁCH_TRÊN_ĐẦU}    css=header >> css=button:has-text("KHÁCH")
+# Dòng đơn nằm trong sheet mở từ thanh tổng ở đáy màn Bán; lớp phủ của sheet chặn chạm vào lưới phía sau.
+${SHEET_ĐƠN}            css=[role=dialog][aria-label^="Đơn · "]
+${NÚT_XEM_ĐƠN}          css=button:has-text("Xem đơn")
 
 *** Keywords ***
 Chọn Món
-    [Documentation]    Chạm ô mặt hàng trong lưới. Mỗi lần chạm thêm 1 vào giỏ.
+    [Documentation]    Chạm ô mặt hàng trong lưới. Mỗi lần chạm thêm 1 vào giỏ — với món KHÔNG có thực đơn
+    ...    riêng; món có thực đơn thì chạm là mở sheet chọn (xem `Thêm Món Có Thực Đơn`).
     [Arguments]    ${tên}    ${lần}=1
+    Đóng Đơn
     FOR    ${i}    IN RANGE    ${lần}
         Click    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("${tên}")
     END
@@ -21,8 +26,40 @@ Gõ Vào Ô Tìm Món
     [Arguments]    ${chữ}
     Fill Text    css=input[type=search]    ${chữ}
 
+Mở Đơn
+    [Documentation]    Mở sheet "Xem đơn" nếu chưa mở. Gọi lại khi đang mở thì không làm gì.
+    ${đang_mở}=    Get Element Count    ${SHEET_ĐƠN}
+    IF    ${đang_mở} == 0
+        Click    ${NÚT_XEM_ĐƠN}
+        Wait For Elements State    ${SHEET_ĐƠN}    visible
+    END
+
+Đóng Đơn
+    [Documentation]    Đóng sheet "Xem đơn" nếu đang mở, để chạm được lưới món và công tắc phía sau.
+    ${đang_mở}=    Get Element Count    ${SHEET_ĐƠN}
+    IF    ${đang_mở} > 0
+        Keyboard Key    press    Escape
+        Wait For Elements State    ${SHEET_ĐƠN}    detached
+    END
+
+Sửa Dòng
+    [Documentation]    Mở sheet sửa của một dòng đơn. `${nhãn}` là tên món, kèm phần ngoặc khi dòng có
+    ...    tuỳ chọn, topping hay ghi chú — đúng như `aria-label="Sửa …"` của dòng.
+    [Arguments]    ${nhãn}
+    Mở Đơn
+    Click    ${{ 'css=button[aria-label="Sửa %s"]' % $nhãn }}
+
+Bấm Thêm Vào Đơn
+    [Documentation]    Nút THÊM ở chân sheet chọn món (món có thực đơn riêng). Nhãn kèm thành tiền nên bám
+    ...    theo chữ đầu.
+    Click    ${SHEET} >> css=button:has-text("THÊM")
+    Wait For Elements State    ${SHEET}    detached
+
 Mở Sheet Thu Tiền
-    Click    ${NÚT_THU_TIỀN}
+    [Documentation]    Bấm THU TIỀN ở thanh đáy. Sheet đơn cũng có nút THU TIỀN ở chân, nên đóng nó trước
+    ...    để chỉ còn một nút khớp.
+    Đóng Đơn
+    Click    css=button:text-is("THU TIỀN")
     Wait For Elements State    ${SHEET_THU_TIỀN}    visible
 
 Chọn Hình Thức Trả
@@ -90,6 +127,7 @@ Bật Giá Sỉ Cho Khách
     [Documentation]    Chạm SỈ khi chưa có khách thì app mở màn chọn khách trước — hai bước này
     ...    luôn đi liền nhau.
     [Arguments]    ${tên}
+    Đóng Đơn
     Chọn Chip    SỈ
     Chọn Khách Trong Sheet    ${tên}
 
@@ -140,16 +178,19 @@ Gõ Số Lượng
     ...    `Type Text` gõ TỪNG PHÍM để đi đúng đường commit-theo-phím của app; `Fill Text` chỉ bắn một
     ...    sự kiện `input` nên không đo được đường đó — mà chính đường đó là chỗ "1.000" hoá thành 1.
     [Arguments]    ${tên_món}    ${số}
+    Mở Đơn
     Type Text    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    ${số}    clear=True
 
 Bớt Một
     [Documentation]    `aria-label="Bớt một"` giống nhau ở MỌI dòng giỏ, nên phải neo theo ô số lượng
     ...    của đúng dòng đó — bốc thẳng theo nhãn là strict-mode violation ngay khi giỏ có hai món.
     [Arguments]    ${tên_món}
+    Mở Đơn
     Click    ${{ 'css=li:has(input[aria-label="Số lượng %s"]) button[aria-label="Bớt một"]' % $tên_món }}
 
 Đọc Số Lượng
     [Arguments]    ${tên_món}
+    Mở Đơn
     ${giá_trị}=    Get Property    ${{ 'css=input[aria-label="Số lượng %s"]' % $tên_món }}    value
     RETURN    ${giá_trị}
 
@@ -181,16 +222,17 @@ Nhóm Đồ Uống Phải Có Thực Đơn
 
 Bán Hai Ly Cà Phê Có Topping
     [Documentation]    Hai ly cà phê sữa (20.000) + Ít đường + trân châu ×2 + thạch + ghi chú "mang về":
-    ...    mỗi ly 33.000, thành tiền 66.000. Cần đã cài thực đơn qua `Cài Thực Đơn Đồ Uống`.
+    ...    mỗi ly 33.000, thành tiền 66.000. Cần đã cài thực đơn qua `Cài Thực Đơn Đồ Uống` — nhóm có thực
+    ...    đơn riêng nên chạm món là mở sheet chọn, chọn xong mới vào giỏ.
     Mở Màn    /
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
-    Điền Ô    Số lượng    2
+    Click    ${SHEET} >> css=button[aria-label="Thêm một"]
     Chọn Chip    Ít đường
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Thạch"]
     Điền Ô    Ghi chú    mang về
-    Bấm Nút    XONG
+    Click    ${SHEET} >> css=button:has-text("THÊM · 66.000")
+    Wait For Elements State    ${SHEET}    detached
     Mở Sheet Thu Tiền
     Chốt Đơn

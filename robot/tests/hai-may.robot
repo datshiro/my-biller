@@ -382,7 +382,7 @@ Ghi chú từng món đi qua sổ chung và tới máy kia nguyên vẹn
     Chọn Máy A
     Click    ${NAV_BAN}
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Sửa Dòng    Cà phê sữa
     Điền Ô    Ghi chú    ít đường
     Bấm Nút    XONG
     Mở Sheet Thu Tiền
@@ -407,14 +407,13 @@ Tuỳ chọn, topping và thực đơn của nhóm món đi qua sổ chung và t
     Cài Thực Đơn Đồ Uống
     Click    ${NAV_BAN}
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
-    Điền Ô    Số lượng    2
+    Click    ${SHEET} >> css=button[aria-label="Thêm một"]
     Chọn Chip    Ít đường
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Thạch"]
     Điền Ô    Ghi chú    mang về
-    Bấm Nút    XONG
+    Bấm Thêm Vào Đơn
     Mở Sheet Thu Tiền
     Chốt Đơn
 

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CartLines } from './cart-lines'
+import { CartSheet } from './cart-sheet'
+import { leaveFocusThen } from './leave-focus'
 import { CustomerPickerSheet } from './customer-picker-sheet'
 import { ItemGrid } from './item-grid'
 import { LineEditSheet } from './line-edit-sheet'
 import { PaymentSheet, type PaymentChoice, type PayMethod } from './payment-sheet'
 import { useCart } from './use-cart'
-import { useToday } from './use-today'
 import { buildPriceBook, listPriceBook } from '@/db/repositories/customer-prices'
 import { getCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
@@ -14,6 +15,7 @@ import { useItemGroups, useItems } from '@/features/items/use-items'
 import { BackupBanner } from '@/features/settings/backup-banner'
 import { useDeviceIdentity } from '@/features/settings/use-settings'
 import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
+import { hasOwnMenu } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import { normalizeName, readOrderText } from '@/domain/order-draft/parse-order-text'
 import { resolveUnitPrice, type PriceBook, type PriceMode } from '@/domain/wholesale-price'
@@ -26,7 +28,7 @@ import { useSubmitOnce } from '@/ui/use-submit-once'
 import { AdjustSheet } from './adjust-sheet'
 
 /** `customer-for-debt` là màn chọn khách mở TỪ sheet thu tiền — chọn xong phải quay lại đúng chỗ cũ. */
-type OpenSheet = 'none' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
+type OpenSheet = 'none' | 'cart' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
 
 const KHONG_CO_GIA_RIENG: PriceBook = new Map()
 
@@ -34,7 +36,6 @@ export function SalesPage() {
   const navigate = useNavigate()
   const items = useItems()
   const groups = useItemGroups()
-  const today = useToday()
   const deviceIdentity = useDeviceIdentity()
   const { cart, dispatch, reset, restored } = useCart()
 
@@ -43,6 +44,8 @@ export function SalesPage() {
   const [sheet, setSheet] = useState<OpenSheet>('none')
   const [payMethod, setPayMethod] = useState<PayMethod>('cash')
   const [editing, setEditing] = useState<CartLine | null>(null)
+  /** Món có thực đơn riêng vừa chạm: chọn tuỳ chọn, topping, ghi chú trong sheet rồi mới vào giỏ. */
+  const [adding, setAdding] = useState<Item | null>(null)
   const { submitting, error: saveError, setError: setSaveError, run } = useSubmitOnce('Không lưu được đơn. Thử lại.')
 
   /** Bảng giá của khách đang chọn. Nạp một lần mỗi lần đổi khách hoặc đổi chế độ, **không** `useLiveQuery`. */
@@ -178,10 +181,20 @@ export function SalesPage() {
     void applyMode(mode, customerId)
   }
 
+  const menuOf = (groupId: number | null | undefined) => groups?.find((group) => group.id === groupId)
+
   const addItem = (item: Item) => {
-    dispatch({ type: 'addItem', item, book })
     setQuery('')
+    if (hasOwnMenu(menuOf(item.groupId))) {
+      setAdding(item)
+      return
+    }
+    dispatch({ type: 'addItem', item, book })
   }
+
+  // Giỏ hết dòng (gõ 0 hay Bỏ món dòng cuối) thì không còn gì để xem: đóng sheet đơn thay vì để một sheet rỗng.
+  // Đặt lại ngay trong render (khuôn "điều chỉnh state khi prop đổi" của React), không qua effect.
+  if (count === 0 && sheet === 'cart') setSheet('none')
 
   /** Mở thu tiền cho một lượt mới — chỉ ở đây mới được đặt lại hình thức và số tiền khách đưa. */
   const openPayment = () => {
@@ -287,64 +300,101 @@ export function SalesPage() {
     dispatch({ type: 'setQty', key, qty })
   }
 
+  const noticeBanner = notice ? (
+    <p className="flex items-start gap-2 bg-warn-tint px-4 py-2 text-[13px] font-semibold text-warn">
+      <span className="min-w-0 flex-1">{notice.text}</span>
+      {/*
+        "Hoàn lại" đứng CẠNH "Đã hiểu", không thay chỗ nó. Bỏ món bằng cách gõ `0` thường là cố ý,
+        và banner sống tới hết đơn — nếu nút duy nhất để dọn banner lại là nút chèn dòng thì người
+        bán bấm theo quán tính, và `restoreLine` cộng dồn qty vào dòng họ vừa chạm lại.
+      */}
+      {undo ? (
+        <button
+          type="button"
+          onClick={() => {
+            dispatch({ type: 'restoreLine', line: undo })
+            setNotice(null)
+          }}
+          className="shrink-0 underline"
+        >
+          Hoàn lại
+        </button>
+      ) : null}
+      <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
+        Đã hiểu
+      </button>
+    </p>
+  ) : null
+
+  /** Cảnh báo và phân tách tổng — hiện ở cả thanh đáy lẫn chân sheet đơn, hai chỗ người bán nhìn tổng. */
+  const totalsNotes = (
+    <>
+      {/* Giảm giá và giá sỉ cộng dồn được, nhưng chồng nhau thì tiền hàng tụt sát giảm giá và
+          `calcOrderTotals` kẹp giảm giá lại **trong im lặng** — đủ để ra một đơn 0đ ghi là trả đủ.
+          Cảnh báo đặt cạnh tổng vì đây là chỗ duy nhất thấy được ở CẢ HAI thứ tự thao tác. */}
+      {wholesale && cart.discount > 0 ? (
+        <p className="mb-2 text-[13px] font-semibold text-warn">
+          Đang bán giá sỉ mà vẫn còn giảm giá {formatAmount(cart.discount)} — kiểm lại tổng trước khi thu.
+        </p>
+      ) : null}
+      {repricing ? (
+        <p className="mb-2 text-[13px] text-muted">Đang tính lại giá theo bảng giá của khách…</p>
+      ) : null}
+      {totals.discount > 0 || totals.surcharge > 0 ? (
+        <p className="mb-1 text-[13px] text-muted">
+          Hàng {formatAmount(totals.subtotal)}
+          {totals.discount > 0 ? ` · giảm ${formatAmount(totals.discount)}` : ''}
+          {totals.surcharge > 0 ? ` · phụ thu ${formatAmount(totals.surcharge)}` : ''}
+        </p>
+      ) : null}
+    </>
+  )
+
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+      {/* Khách và giá Lẻ / SỈ chung một hàng: cả hai cùng nói "đơn này bán cho ai, theo giá nào". Doanh thu
+          trong ngày không nằm đây nữa — nó có ở tab Đơn và Báo cáo, còn ở đây nó chỉ đẩy lưới món xuống. */}
+      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-2">
         <button type="button" onClick={() => setSheet('customer')} className="min-w-0 text-left">
           <span className="label-xs block text-muted">KHÁCH</span>
           <span className="block truncate text-[17px] font-bold">
             {cart.customerName || KHACH_LE} <span className="text-muted">▾</span>
           </span>
         </button>
-        <div className="shrink-0 text-right">
-          <span className="label-xs block text-muted">HÔM NAY</span>
-          <span className="money block text-[17px] font-bold">
-            {today ? formatAmount(today.revenue) : '…'}
-          </span>
+        <div role="group" aria-label="Giá bán" className="flex shrink-0 rounded-btn border border-line bg-surface p-1">
+          {(
+            [
+              ['retail', 'Lẻ'],
+              ['wholesale', 'SỈ'],
+            ] as const
+          ).map(([mode, label]) => {
+            const on = (mode === 'wholesale') === wholesale
+            return (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={on}
+                onClick={() => pickMode(mode)}
+                className={`h-10 rounded-[9px] px-4 font-semibold ${
+                  on ? 'bg-white text-brand shadow-[0_0_0_1px_var(--color-line)]' : 'text-muted'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       </header>
 
-      {/* Hàng riêng chứ không nhét vào header: header ở 320px đã kín, và công tắc này cần chạm to. */}
-      <div role="group" aria-label="Giá bán" className="flex gap-2 border-b border-line px-4 py-2">
-        <SelectChip selected={!wholesale} onClick={() => pickMode('retail')}>
-          Lẻ
-        </SelectChip>
-        <SelectChip selected={wholesale} onClick={() => pickMode('wholesale')}>
-          SỈ
-        </SelectChip>
-        {wholesale ? (
-          <p className="min-w-0 flex-1 self-center text-[13px] text-muted">
-            Giá của <span className="font-semibold text-ink">{cart.customerName || KHACH_LE}</span>
-            {priced > 0 ? ` · ${priced} món lấy giá riêng` : ' · chưa món nào có giá riêng'}
-          </p>
-        ) : null}
-      </div>
-
-      {notice ? (
-        <p className="flex items-start gap-2 bg-warn-tint px-4 py-2 text-[13px] font-semibold text-warn">
-          <span className="min-w-0 flex-1">{notice.text}</span>
-          {/*
-            "Hoàn lại" đứng CẠNH "Đã hiểu", không thay chỗ nó. Bỏ món bằng cách gõ `0` thường là cố ý,
-            và banner sống tới hết đơn — nếu nút duy nhất để dọn banner lại là nút chèn dòng thì người
-            bán bấm theo quán tính, và `restoreLine` cộng dồn qty vào dòng họ vừa chạm lại.
-          */}
-          {undo ? (
-            <button
-              type="button"
-              onClick={() => {
-                dispatch({ type: 'restoreLine', line: undo })
-                setNotice(null)
-              }}
-              className="shrink-0 underline"
-            >
-              Hoàn lại
-            </button>
-          ) : null}
-          <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
-            Đã hiểu
-          </button>
+      {wholesale ? (
+        <p className="border-b border-line px-4 py-2 text-[13px] text-muted">
+          Giá của <span className="font-semibold text-ink">{cart.customerName || KHACH_LE}</span>
+          {priced > 0 ? ` · ${priced} món lấy giá riêng` : ' · chưa món nào có giá riêng'}
         </p>
       ) : null}
+
+      {/* Sheet đơn đang mở thì banner hiện trong sheet; hiện cả ở đây là hai bản cùng một câu. */}
+      {sheet === 'cart' ? null : noticeBanner}
 
       <BackupBanner />
 
@@ -403,69 +453,70 @@ export function SalesPage() {
             items={visible}
             qtyOf={qtyOf}
             priceOf={priceOf}
+            hasMenu={(item) => hasOwnMenu(menuOf(item.groupId))}
             onPick={addItem}
             onAdd={() => void navigate('/them/mat-hang/moi')}
           />
         )}
 
-        {count > 0 ? (
-          <>
-            <h2 className="label-xs px-4 pb-2 pt-4 text-muted">TRONG ĐƠN</h2>
-            <CartLines
-              lines={cart.lines}
-              onBump={(key, delta) => {
-                // `bumpQty` xuống 0 đi thẳng vào `removeLine` TRONG reducer, không qua handler dựng
-                // banner. `money.ts` đã viết `0` "cùng ngữ nghĩa với nút − bấm ở qty 1" — cùng ngữ
-                // nghĩa thì phải cùng lối về, nhất là khi nút − là ô 44px nằm sát ô số lượng ở 320px.
-                const target = cart.lines.find((line) => line.key === key)
-                if (delta < 0 && target?.qty === 1) setQtyWithUndo(key, 0)
-                else dispatch({ type: 'bumpQty', key, delta })
-              }}
-              onEdit={setEditing}
-              onSetQty={setQtyWithUndo}
-              onUnreadableQty={(name, restored) =>
-                setNotice({
-                  text: `Số lượng của ${name} không đọc được — đã giữ nguyên ${formatQty(restored)}.`,
-                })
-              }
-            />
-            <div className="px-4 py-3">
-              <Button variant="secondary" onClick={() => setSheet('adjust')}>
-                Giảm giá / phụ thu
-              </Button>
-            </div>
-          </>
-        ) : null}
       </div>
 
       {count > 0 ? (
-        <div className="border-t border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {/* Giảm giá và giá sỉ cộng dồn được, nhưng chồng nhau thì tiền hàng tụt sát giảm giá và
-              `calcOrderTotals` kẹp giảm giá lại **trong im lặng** — đủ để ra một đơn 0đ ghi là trả đủ.
-              Cảnh báo đặt ở thanh tổng vì đây là chỗ duy nhất thấy được ở CẢ HAI thứ tự thao tác. */}
-          {wholesale && cart.discount > 0 ? (
-            <p className="mb-2 text-[13px] font-semibold text-warn">
-              Đang bán giá sỉ mà vẫn còn giảm giá {formatAmount(cart.discount)} — kiểm lại tổng trước khi thu.
-            </p>
-          ) : null}
-          {repricing ? (
-            <p className="mb-2 text-[13px] text-muted">Đang tính lại giá theo bảng giá của khách…</p>
-          ) : null}
-          {totals.discount > 0 || totals.surcharge > 0 ? (
-            <p className="mb-1 text-[13px] text-muted">
-              Hàng {formatAmount(totals.subtotal)}
-              {totals.discount > 0 ? ` · giảm ${formatAmount(totals.discount)}` : ''}
-              {totals.surcharge > 0 ? ` · phụ thu ${formatAmount(totals.surcharge)}` : ''}
-            </p>
-          ) : null}
-          <div className="mb-3 flex items-baseline justify-between">
-            <span className="label-xs text-muted">TỔNG CỘNG</span>
+        <div className="border-t border-line bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {sheet === 'cart' ? null : totalsNotes}
+          <button
+            type="button"
+            onClick={() => setSheet('cart')}
+            className="mb-2 flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span className="text-[15px] font-semibold text-brand">Xem đơn · {formatQty(count)} món ▴</span>
             <span className="money money-xl">{formatVnd(totals.total)}</span>
-          </div>
+          </button>
           <Button size="cta" disabled={repricing} onClick={openPayment}>
-            THU TIỀN · {count} món
+            THU TIỀN
           </Button>
         </div>
+      ) : null}
+
+      {sheet === 'cart' && count > 0 && !editing ? (
+        <CartSheet
+          customerName={cart.customerName || KHACH_LE}
+          summary={`${cart.lines.length} dòng · ${formatQty(count)} món`}
+          notice={noticeBanner}
+          totals={
+            <>
+              {totalsNotes}
+              <div className="mb-3 flex items-baseline justify-between">
+                <span className="label-xs text-muted">TỔNG CỘNG</span>
+                <span className="money money-xl">{formatVnd(totals.total)}</span>
+              </div>
+            </>
+          }
+          payLabel={`THU TIỀN · ${formatQty(count)} món`}
+          payDisabled={repricing}
+          onAdjust={() => setSheet('adjust')}
+          onPay={openPayment}
+          onClose={() => setSheet('none')}
+        >
+          <CartLines
+            lines={cart.lines}
+            onBump={(key, delta) => {
+              // `bumpQty` xuống 0 đi thẳng vào `removeLine` TRONG reducer, không qua handler dựng
+              // banner. `money.ts` đã viết `0` "cùng ngữ nghĩa với nút − bấm ở qty 1" — cùng ngữ
+              // nghĩa thì phải cùng lối về, nhất là khi nút − là ô 44px nằm sát ô số lượng ở 320px.
+              const target = cart.lines.find((line) => line.key === key)
+              if (delta < 0 && target?.qty === 1) setQtyWithUndo(key, 0)
+              else dispatch({ type: 'bumpQty', key, delta })
+            }}
+            onEdit={leaveFocusThen(setEditing)}
+            onSetQty={setQtyWithUndo}
+            onUnreadableQty={(name, restored) =>
+              setNotice({
+                text: `Số lượng của ${name} không đọc được — đã giữ nguyên ${formatQty(restored)}.`,
+              })
+            }
+          />
+        </CartSheet>
       ) : null}
 
       {sheet === 'payment' ? (
@@ -519,16 +570,17 @@ export function SalesPage() {
           onApply={({ discount, surcharge }) => {
             dispatch({ type: 'setDiscount', discount })
             dispatch({ type: 'setSurcharge', surcharge })
-            setSheet('none')
+            setSheet('cart')
           }}
-          onClose={() => setSheet('none')}
+          onClose={() => setSheet('cart')}
         />
       ) : null}
 
       {editing ? (
         <LineEditSheet
           line={editing}
-          menu={groups?.find((group) => group.id === items?.find((item) => item.id === editing.itemId)?.groupId)}
+          menu={menuOf(items?.find((item) => item.id === editing.itemId)?.groupId)}
+          subtitle={`Dòng ${cart.lines.findIndex((line) => line.key === editing.key) + 1} trong đơn`}
           onApply={({ qty, unitPrice, options, toppings, note }) => {
             // `updateLine` với qty 0 cũng gỡ dòng, nhưng lặng lẽ. Đẩy nhánh đó qua cùng handler với ô
             // số lượng trong giỏ để người bán có đúng một đường hoàn lại, dù bỏ món từ chỗ nào.
@@ -537,13 +589,55 @@ export function SalesPage() {
             setEditing(null)
           }}
           onRemove={() => {
-            // CỐ Ý đứng ngoài luật "bỏ món thì phải có lối về": nhãn nút đã tự nói ra ý định, và phải
-            // mở sheet mới bấm được. Lối về sinh ra cho bề mặt LỠ TAY (gõ `0` — phím đầu của `0,5` —
-            // và chạm nhầm nút −), không phải cho một nút tên là "Bỏ món này khỏi đơn".
-            dispatch({ type: 'removeLine', key: editing.key })
+            // "Bỏ món" nằm sát XONG ở chân sheet — đúng kiểu bề mặt LỠ TAY mà lối Hoàn lại sinh ra để đỡ,
+            // nên đi chung đường với gõ `0` và nút −.
+            setQtyWithUndo(editing.key, 0)
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {adding ? (
+        <LineEditSheet
+          mode="add"
+          line={{
+            key: '',
+            itemId: adding.id ?? null,
+            name: adding.name,
+            unit: adding.unit,
+            unitPrice: priceOf(adding),
+            retailPrice: adding.unitPrice,
+            priceSource: 'catalog',
+            costPrice: adding.costPrice,
+            qty: 1,
+            options: [],
+            toppings: [],
+            note: '',
+          }}
+          subtitle={`${formatAmount(priceOf(adding))}${adding.unit ? ` / ${adding.unit}` : ''}`}
+          menu={menuOf(adding.groupId)}
+          onApply={({ qty, options, toppings, note }) => {
+            // Đi qua `addLine` để giá vẫn resolve theo chế độ Lẻ / SỈ đang chốt, như đường chạm món thường.
+            // Đơn giá không sửa được ở đây: sheet thêm không có ô đơn giá.
+            dispatch({
+              type: 'addLine',
+              line: {
+                itemId: adding.id ?? null,
+                name: adding.name,
+                unit: adding.unit,
+                unitPrice: adding.unitPrice,
+                costPrice: adding.costPrice,
+                qty,
+                options,
+                toppings,
+                note,
+              },
+              book,
+            })
+            setAdding(null)
+          }}
+          onClose={() => setAdding(null)}
         />
       ) : null}
     </div>

@@ -44,3 +44,55 @@ export const toppingLabel = (topping: Pick<LineTopping, 'name' | 'qty'>): string
 
 /** Tiền của một topping cho MỘT ly (giá lúc bán × số phần) — con số hiện cạnh tên topping trên phiếu. */
 export const toppingAmount = (topping: Pick<LineTopping, 'unitPrice' | 'qty'>): number => topping.unitPrice * topping.qty
+
+/**
+ * Nhóm món có thực đơn RIÊNG (tuỳ chọn hay topping do chủ quán cài). Nhóm Đá có sẵn cho mọi món nên không
+ * tính: tính nó thì món nào chạm vào cũng bật sheet hỏi, và Trà đá mất đường một chạm là vào đơn.
+ */
+export const hasOwnMenu = (
+  menu: { optionGroups: readonly OptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined,
+): boolean => (menu?.optionGroups.length ?? 0) > 0 || (menu?.toppingMenu.length ?? 0) > 0
+
+/**
+ * Cụm ghi chú ngăn bằng "dấu phẩy + khoảng trắng", không phải dấu phẩy trần: dấu phẩy trần là dấu thập phân
+ * ("thêm 1,5 lạng"), tách ở đó là chẻ đôi chữ người bán tự gõ — chữ in lên tem và phiếu.
+ */
+const NOTE_SEPARATOR = ','
+const phrasesOf = (note: string): string[] =>
+  note
+    .split(/,\s+/)
+    .map((phrase) => phrase.trim())
+    .filter(Boolean)
+const sameKey = (phrase: string) => phrase.toLocaleLowerCase('vi')
+
+export const hasNotePhrase = (note: string, phrase: string): boolean =>
+  phrasesOf(note).some((part) => sameKey(part) === sameKey(phrase))
+
+/**
+ * Chip ghi chú chỉ thêm hay gỡ ĐÚNG cụm của nó trong ô ghi chú, chữ người bán tự gõ ở các cụm khác giữ
+ * nguyên. Ghi chú vẫn là một chuỗi trên dòng, không có trường thứ hai để tem và phiếu phải đọc thêm.
+ */
+export function toggleNotePhrase(note: string, phrase: string): string {
+  const parts = phrasesOf(note)
+  const kept = parts.filter((part) => sameKey(part) !== sameKey(phrase))
+  return (kept.length === parts.length ? [...parts, phrase.trim()] : kept).join(`${NOTE_SEPARATOR} `)
+}
+
+/**
+ * Các cụm ghi chú hay dùng nhất trong những ghi chú cho trước (mới nhất trước). Nhiều lần hơn thì đứng
+ * trước, hoà thì cụm dùng gần hơn đứng trước; hiện theo cách viết của lần dùng gần nhất.
+ */
+export function recentNotePhrases(notesNewestFirst: readonly string[], limit: number): string[] {
+  const seen = new Map<string, { label: string; count: number; firstAt: number }>()
+  notesNewestFirst.forEach((note, index) => {
+    for (const phrase of phrasesOf(note)) {
+      const entry = seen.get(sameKey(phrase))
+      if (entry) entry.count += 1
+      else seen.set(sameKey(phrase), { label: phrase, count: 1, firstAt: index })
+    }
+  })
+  return [...seen.values()]
+    .sort((a, b) => b.count - a.count || a.firstAt - b.firstAt)
+    .slice(0, limit)
+    .map((entry) => entry.label)
+}

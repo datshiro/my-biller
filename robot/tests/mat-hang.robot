@@ -171,13 +171,12 @@ Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có toppin
     Cài Thực Đơn Đồ Uống
     Mở Màn    /
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
     Chờ Thấy Chữ    Trân châu
     Chọn Chip    Ít đường
-    Bấm Nút    XONG
+    Bấm Thêm Vào Đơn
 
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Chờ Thấy Chữ    Đá chung
     Get Element Count    css=button[aria-label="Thêm Trân châu"]    ==    0
     Get Element Count    css=button[aria-pressed]:text-is("Ít đường")    ==    0
