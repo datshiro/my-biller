@@ -301,6 +301,34 @@ Máy in web Android: IN THỬ QUA RAWBT hỏi xác nhận; nút In thử là lin
     Should Be Equal As Integers    ${đo}[w]    576
     Should Be True    ${đo}[h] > 180
 
+Máy đã có tên đổi được tên và chữ cái từ Cài đặt, mã phiếu mới mang chữ mới
+    [Documentation]    Trang tên máy từng chỉ tới được khi máy chưa có tên, và mở bằng URL thì hai ô trống:
+    ...    form lấy giá trị đầu lúc `useLiveQuery` còn `undefined`. Ghép máy báo trùng chữ cái mà không có
+    ...    đường nào để đổi.
+    [Tags]    regression
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Máy bán hàng")
+    Chờ Thấy Chữ    Máy mẫu · chữ A
+    Bấm Nút    Đổi tên hoặc chữ cái
+    Chờ Thấy Chữ    Tên máy bán hàng
+    ${tên}=    Đọc Ô    Tên dễ nhận ra
+    ${chữ}=    Đọc Ô    Chữ cái của máy
+    Should Be Equal    ${tên}    Máy mẫu    Trang đổi tên mở ra không điền sẵn tên máy đang dùng.
+    Should Be Equal    ${chữ}    A    Trang đổi tên mở ra không điền sẵn chữ cái đang dùng.
+
+    Điền Ô    Chữ cái của máy    B
+    Bấm Nút    LƯU TÊN MÁY
+    Chờ Thấy Chữ    Máy mẫu · chữ B
+    ${máy}=    Đọc Bảng    deviceState
+    ${danh_tính}=    Evaluate    next(row for row in $máy if row['key'] == 'identity')
+    Should Be Equal    ${danh_tính}[letter]    B    Sổ máy chưa ghi chữ cái mới.
+
+    Mở Màn    /
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    Should Match Regexp    ${đơn}[code]    -B\\d{3}$    Đơn mới chưa mang chữ cái mới của máy.
 
 *** Keywords ***
 Theo Dõi Yêu Cầu Tải
