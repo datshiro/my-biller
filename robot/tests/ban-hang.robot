@@ -824,6 +824,27 @@ Ghi chú gõ trùng chữ một lựa chọn thì không thành chip ghi chú
     Wait For Elements State    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("mang về")    visible
     Get Element Count    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("Đá riêng")    ==    0
 
+Lời dặn dài cả câu không thành chip ghi chú làm sheet tràn ngang
+    [Documentation]    Chip không xuống dòng, nên một ghi chú dài không có ", " thành chip rộng hơn khổ màn và
+    ...    đẩy sheet tràn ngang. Cụm quá dài không lên chip; cụm ngắn vẫn lên.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    không lấy ống hút để đá riêng ra túi nylon gói kỹ giúp em, cay
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Mở Màn    /
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Cơm tấm sườn
+    Wait For Elements State    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("cay")    visible
+    Get Element Count    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button    ==    1
+    # Đo mép từng chip với mép sheet: thân sheet tự cuộn nên `scrollWidth` của dialog không lộ phần tràn.
+    ${lọt}=    Evaluate JavaScript    ${SHEET}
+    ...    (sheet) => [...sheet.querySelectorAll('[aria-label="Ghi chú gần đây"] button')].every((chip) => chip.getBoundingClientRect().right <= sheet.getBoundingClientRect().right + 0.5)
+    Should Be True    ${lọt}    Chip ghi chú thò ra ngoài mép sheet.
+
 Bỏ món trong sheet sửa rồi bấm Hoàn lại thì dòng về nguyên vẹn cả giá riêng lẫn ghi chú
     [Documentation]    Nút "Bỏ món" nằm sát XONG ở chân sheet nên dễ chạm nhầm; nó đi chung đường Hoàn lại
     ...    với gõ 0. Hoàn lại phải đặt lại đúng dòng cũ — đối chiếu sổ chứ không chỉ con số trên màn.

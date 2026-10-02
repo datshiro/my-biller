@@ -21,6 +21,8 @@ import { Sheet } from '@/ui/sheet'
 /** Đủ để thấy thói quen của quán mà không quét cả bảng dòng hàng mỗi lần mở sheet. */
 const RECENT_LINES = 300
 const NOTE_CHIPS = 6
+/** Chip chữ 15px đậm cùng lề 32px: 24 ký tự vẫn lọt khổ 320px trừ lề màn. */
+const NOTE_CHIP_MAX_LENGTH = 24
 
 const STEPPER =
   'h-11 w-11 shrink-0 rounded-btn border border-line bg-white text-[20px] font-bold leading-none active:bg-surface disabled:opacity-40'
@@ -128,7 +130,12 @@ export function LineEditSheet({
   const qty = parseQtyInput(qtyText)
   const invalid = qty === null || unitPrice === null || (adding && qty <= 0)
   const groups = optionGroupsFor(menu)
-  const recent = recentNotePhrases(recentNotes, NOTE_CHIPS, groups.flatMap((group) => group.choices))
+  const recent = recentNotePhrases(
+    recentNotes,
+    NOTE_CHIPS,
+    groups.flatMap((group) => group.choices),
+    NOTE_CHIP_MAX_LENGTH,
+  )
   const stray = orphanOptions(options, groups)
   const toppingMenu = menu?.toppingMenu ?? []
   // Topping tính theo ly nên chỉ THÊM được khi số ly nguyên. Số lượng lẻ có thể đã gõ ở ô trong giỏ trên một

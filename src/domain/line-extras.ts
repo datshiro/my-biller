@@ -85,17 +85,21 @@ export function toggleNotePhrase(note: string, phrase: string): string {
  * `exclude` là các lựa chọn đã có chip tuỳ chọn riêng. Bản trước 2.8.0 ghi "Đá riêng" / "Đá chung" thẳng vào
  * ghi chú và không được di trú, nên không lọc thì chip ghi chú "Đá riêng" nằm ngay dưới chip tuỳ chọn cùng
  * chữ — chạm nhầm là lách luật loại trừ của nhóm Đá và dòng không gộp với dòng đá riêng thật.
+ *
+ * `maxLength` bỏ cụm quá dài: chip không xuống dòng, một lời dặn cả câu thành chip rộng hơn màn 320px và đẩy
+ * sheet tràn ngang — mà lời dặn dài như vậy cũng không phải thứ chạm lại nhanh.
  */
 export function recentNotePhrases(
   notesNewestFirst: readonly string[],
   limit: number,
   exclude: readonly string[] = [],
+  maxLength = Number.POSITIVE_INFINITY,
 ): string[] {
   const excluded = new Set(exclude.map(sameKey))
   const seen = new Map<string, { label: string; count: number; firstAt: number }>()
   notesNewestFirst.forEach((note, index) => {
     for (const phrase of phrasesOf(note)) {
-      if (excluded.has(sameKey(phrase))) continue
+      if (excluded.has(sameKey(phrase)) || phrase.length > maxLength) continue
       const entry = seen.get(sameKey(phrase))
       if (entry) entry.count += 1
       else seen.set(sameKey(phrase), { label: phrase, count: 1, firstAt: index })

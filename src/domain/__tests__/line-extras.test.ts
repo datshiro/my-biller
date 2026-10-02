@@ -115,4 +115,9 @@ describe('recentNotePhrases', () => {
     const notes = ['Đá riêng', 'đá riêng, mang về', 'Đá chung', 'ít hành']
     expect(recentNotePhrases(notes, 2, ['Đá chung', 'Đá riêng'])).toEqual(['mang về', 'ít hành'])
   })
+
+  it('bỏ cụm dài hơn giới hạn chip trước khi cắt số lượng', () => {
+    const notes = ['không lấy ống hút để đá riêng ra túi nylon gói kỹ giúp em', 'cay', 'mang về']
+    expect(recentNotePhrases(notes, 2, [], 24)).toEqual(['cay', 'mang về'])
+  })
 })
