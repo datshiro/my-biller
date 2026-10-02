@@ -167,7 +167,7 @@ export function LineEditSheet({
             <button type="button" aria-label="Thêm một" onClick={() => bump(1)} className={STEPPER}>
               +
             </button>
-            <Button size="cta" className="flex-1" disabled={invalid} onClick={apply}>
+            <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
               THÊM{amount !== null ? ` · ${formatAmount(amount)}` : ''}
             </Button>
           </div>
@@ -176,7 +176,7 @@ export function LineEditSheet({
             <Button variant="danger" className="shrink-0" onClick={onRemove}>
               Bỏ món
             </Button>
-            <Button size="cta" className="flex-1" disabled={invalid} onClick={apply}>
+            <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
               XONG
             </Button>
           </div>
