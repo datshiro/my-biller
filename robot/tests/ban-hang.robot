@@ -1063,6 +1063,7 @@ Phụ thu gõ thừa số 0 không đẩy tổng đơn vượt trần làm sập
     [Tags]    regression
     Mở Màn    /
     Chọn Món    Phở bò
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Phụ thu    999999999
     ${ô_phụ_thu}=    Ô Theo Nhãn    Phụ thu
