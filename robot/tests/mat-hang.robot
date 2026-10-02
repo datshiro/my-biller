@@ -180,3 +180,91 @@ Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có toppin
     Chờ Thấy Chữ    Đá chung
     Get Element Count    css=button[aria-label="Thêm Trân châu"]    ==    0
     Get Element Count    css=button[aria-pressed]:text-is("Ít đường")    ==    0
+
+Gõ giá bán vượt 999.999.999 thì ô giữ số cũ, bán món đó không làm sập màn Bán hàng
+    [Documentation]    Giá bán từng không có trần: lưu được 5.000.000.000.000.000 đ, chạm món hai lần là
+    ...    `đơn giá × qty` vượt số nguyên an toàn, `assertMoney` ném trong render và ErrorBoundary nuốt cả
+    ...    màn Bán hàng cùng đơn đang lên dở. Giờ phím làm vượt trần bị bỏ, ô giữ số cũ.
+    [Tags]    regression
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Mâm cỗ
+    Điền Ô    Giá bán *    999999999
+    ${ô_giá}=    Ô Theo Nhãn    Giá bán *
+    Type Text    ${ô_giá}    0    clear=${False}
+    Chờ Thấy Chữ    Tối đa 999.999.999 đ.
+    ${giá}=    Đọc Ô    Giá bán *
+    Should Be Equal    ${giá}    999.999.999    Phím thứ mười vẫn lọt vào ô giá bán.
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+
+    ${mặt_hàng}=    Đọc Bảng    items
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Mâm cỗ')
+    Should Be Equal As Integers    ${món}[unitPrice]    999999999    Sổ ghi sai giá của món vừa thêm.
+
+    Mở Màn    /
+    Chọn Món    Mâm cỗ    2
+    Chờ Thấy Chữ    1.999.999.998 đ
+    Không Được Thấy Chữ    App đang gặp lỗi
+
+Đặt tên trùng một món có sẵn thì bị chặn, sổ không ghi món thứ hai
+    [Documentation]    So không phân biệt hoa thường và bỏ dấu cách hai đầu. Món trùng đang ngừng bán cũng
+    ...    tính: phiếu cũ của nó vẫn mang tên đó.
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    ${SPACE}phở BÒ đặc biệt${SPACE}
+    Chờ Thấy Chữ    Đã có món “Phở bò đặc biệt”
+    Điền Ô    Giá bán *    60000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    Thêm mặt hàng
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    4    Tên trùng vẫn lọt vào sổ thành món thứ hai.
+
+    Điền Ô    Tên mặt hàng *    Phở bò tái
+    Không Được Thấy Chữ    Đã có món
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+
+Sửa chính một món thì không bị chặn vì trùng tên của nó
+    ${mặt_hàng}=    Đọc Bảng    items
+    ${phở}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Phở bò đặc biệt')
+    Mở Màn    /them/mat-hang/${phở}[id]
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Điền Ô    Tên mặt hàng *    PHỞ BÒ ĐẶC BIỆT
+    Không Được Thấy Chữ    Đã có món
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    PHỞ BÒ ĐẶC BIỆT
+    ${sau}=    Đọc Bảng    items
+    ${món}=    Evaluate    next(row for row in $sau if row['id'] == ${phở}[id])
+    Should Be Equal    ${món}[name]    PHỞ BÒ ĐẶC BIỆT    Đổi hoa thường tên của chính món bị chặn nhầm.
+
+Món đã trùng tên từ trước khi có luật chặn vẫn sửa được giá
+    [Documentation]    Luật chặn trùng chỉ xét khi tên đổi. Xét cả lúc tên giữ nguyên thì sổ cũ đã có hai
+    ...    món cùng tên sẽ kẹt: không sửa giá, không đổi nhóm được nữa. Giao diện không còn tạo được
+    ...    món trùng, nên ca ghi thẳng bản trùng vào IndexedDB như một sổ cũ.
+    ${id}=    Evaluate JavaScript    ${None}
+    ...    async () => {
+    ...        const db = await new Promise((resolve, reject) => {
+    ...            const open = indexedDB.open('my-biller')
+    ...            open.onsuccess = () => resolve(open.result)
+    ...            open.onerror = () => reject(open.error)
+    ...        })
+    ...        const now = Date.now()
+    ...        const id = await new Promise((resolve, reject) => {
+    ...            const request = db.transaction('items', 'readwrite').objectStore('items').add({
+    ...                gid: crypto.randomUUID(), name: 'Trà đá', groupId: null, unit: 'ly', unitPrice: 4000,
+    ...                costPrice: null, isActive: 1, note: '', createdAt: now, updatedAt: now,
+    ...            })
+    ...            request.onsuccess = () => resolve(request.result)
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...        db.close()
+    ...        return id
+    ...    }
+    Mở Màn    /them/mat-hang/${id}
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Không Được Thấy Chữ    Đã có món
+    Điền Ô    Giá bán *    5000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+    ${mặt_hàng}=    Đọc Bảng    items
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id})
+    Should Be Equal As Integers    ${món}[unitPrice]    5000    Món trùng tên từ trước không sửa được giá.

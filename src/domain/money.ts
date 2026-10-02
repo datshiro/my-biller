@@ -23,6 +23,14 @@ export function formatAmount(amount: number): string {
   return GROUPED.format(amount)
 }
 
+/**
+ * Trần một ô nhập tiền, dưới 1 tỷ — dư cho một món, một khoản phụ thu hay tiền khách đưa ở quán.
+ * Không có trần thì gõ thừa vài số 0 là `đơn giá × qty` hay tiền hàng + phụ thu vượt số nguyên an
+ * toàn: tổng hiện lệch vài đồng rồi `assertMoney` ném trong render, ErrorBoundary nuốt cả màn Bán hàng
+ * và đơn đang lên dở. Ở trần này, 999.999 phần × 999.999.999 đ vẫn còn cách vùng đó cả nghìn lần.
+ */
+export const MAX_MONEY_INPUT = 999_999_999
+
 const PLAIN_DIGITS = /^\d+$/
 // Dấu phân nhóm phải đủ 3 chữ số và dùng nhất quán một loại dấu: "1.250.000" đúng, "1.250,000" sai.
 const GROUPED_DIGITS = /^\d{1,3}(?:([.,])\d{3})(?:\1\d{3})*$/

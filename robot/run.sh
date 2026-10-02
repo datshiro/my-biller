@@ -8,6 +8,8 @@
 #   ./robot/run.sh                                  chạy hết
 #   ./robot/run.sh robot/tests/ban-hang.robot       chạy một suite
 #   ./robot/run.sh -i regression robot/tests        chỉ chạy ca gắn thẻ regression
+#   ROBOT_HEADED=1 ./robot/run.sh robot/tests/ban-hang.robot      mở cửa sổ Chrome, chậm cỡ người xem
+#   ROBOT_HEADED=1 ROBOT_SLOW_MO=1s ./robot/run.sh ...            chỉnh độ trễ mỗi thao tác
 #   ROBOT_APP_MODE=recovery ./robot/run.sh robot/recovery
 #   ROBOT_REMOTE=1 BASE_URL=https://... WORKER_URL=https://... \
 #     ROBOT_WORKER_ADMIN_SECRET="$STAGING_ADMIN_SECRET" ./robot/run.sh robot/tests/hai-may.robot
@@ -26,6 +28,7 @@ VENV="${ROBOT_VENV:-.venv-robot}"
 EXPECTED_TITLE="<title>my-biller — Bán hàng</title>"
 STAGING_WORKER_URL="https://my-biller-sync-staging.datshiro.workers.dev"
 HEALTH_TIMEOUT=2
+HEADED="${ROBOT_HEADED:-0}"
 
 if [[ "${APP_MODE}" != "normal" ]] && [[ "${APP_MODE}" != "recovery" ]]; then
   echo "ROBOT_APP_MODE chỉ nhận normal hoặc recovery." >&2
@@ -34,6 +37,17 @@ fi
 if [[ "${REMOTE_MODE}" == "1" ]] && [[ "${APP_MODE}" == "recovery" ]]; then
   echo "Recovery Robot chỉ chạy artifact local; không dùng remote mode." >&2
   exit 1
+fi
+if [[ "${HEADED}" != "0" ]] && [[ "${HEADED}" != "1" ]]; then
+  echo "ROBOT_HEADED chỉ nhận 0 hoặc 1." >&2
+  exit 1
+fi
+if [[ "${HEADED}" == "1" ]]; then
+  HEADLESS=False
+  SLOW_MO="${ROBOT_SLOW_MO:-500ms}"
+else
+  HEADLESS=True
+  SLOW_MO="${ROBOT_SLOW_MO:-0s}"
 fi
 if [[ "${APP_MODE}" == "recovery" ]]; then
   EXPECTED_TITLE="<title>my-biller — Phục hồi chỉ đọc</title>"
@@ -291,4 +305,6 @@ export ROBOT_WORKER_ADMIN_SECRET="${WORKER_ADMIN_SECRET}"
   --outputdir robot/results \
   --variable "BASE_URL:${BASE_URL}" \
   --variable "WORKER_URL:${WORKER_URL}" \
+  --variable "HEADLESS:${HEADLESS}" \
+  --variable "SLOW_MO:${SLOW_MO}" \
   "$@"

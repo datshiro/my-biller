@@ -115,7 +115,12 @@ function PairForm() {
       <p className="text-[15px] font-semibold">
         {identity.label} · chữ {identity.letter}
       </p>
-      <p className="mt-2 text-[13px] text-muted">
+      <div className="mt-3">
+        <Button variant="secondary" disabled={busy} onClick={() => void navigate('/cai-dat-may')}>
+          Đổi tên hoặc chữ cái
+        </Button>
+      </div>
+      <p className="mt-4 text-[13px] text-muted">
         Dán mã từ một máy đã ghép. Mã chỉ dùng một lần và hết hạn sau 5 phút.
       </p>
       {deviceNotice ? (
