@@ -10,7 +10,7 @@ import { db } from '@/db/db'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
 import { createGroup, createItem } from '@/db/repositories/items'
-import { getOrderLines } from '@/db/repositories/orders'
+import { createOrder, getOrderLines } from '@/db/repositories/orders'
 import { installTestDevice } from '@/test-fixtures'
 
 /**
@@ -87,16 +87,32 @@ function boDauPhienKhoiNhap() {
 }
 
 /** Chạm ô trong lưới mặt hàng. Phải giới hạn trong lưới vì tên món còn hiện lại ở dòng giỏ. */
+/** Lớp phủ của sheet đơn chặn chạm vào lưới phía sau như trên máy thật, nên đóng nó trước. */
+const dongDon = async () => {
+  if (screen.queryByRole('dialog', { name: /^Đơn · / })) await userEvent.keyboard('{Escape}')
+}
+
 const pick = async (name: string) => {
+  await dongDon()
   const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
   await userEvent.click(within(grid).getByRole('button', { name: new RegExp(name) }))
 }
-const openPayment = async () =>
-  userEvent.click(await screen.findByRole('button', { name: /THU TIỀN/ }))
+const openPayment = async () => {
+  await dongDon()
+  await userEvent.click(await screen.findByRole('button', { name: 'THU TIỀN' }))
+}
+
+/** Dòng đơn nằm trong sheet "Xem đơn" mở từ thanh đáy; mở nó nếu chưa mở. */
+const moDon = async () => {
+  if (screen.queryByRole('dialog', { name: /^Đơn · / })) return
+  await userEvent.click(await screen.findByRole('button', { name: /Xem đơn/ }))
+}
 
 /** Dòng trong giỏ — đơn giá nằm ngay trong nút "Sửa <tên>". */
-const dongGio = async (name: string) =>
-  (await screen.findByRole('button', { name: `Sửa ${name}` })).textContent ?? ''
+const dongGio = async (name: string) => {
+  await moDon()
+  return (await screen.findByRole('button', { name: `Sửa ${name}` })).textContent ?? ''
+}
 
 const oTrongLuoi = async (name: string) => {
   const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
@@ -106,9 +122,34 @@ const oTrongLuoi = async (name: string) => {
 const chonKhach = async (name: string | RegExp) =>
   userEvent.click(await screen.findByRole('button', { name }))
 
-const moChonKhach = async () => userEvent.click(await screen.findByRole('button', { name: /^KHÁCH/ }))
+const moChonKhach = async () => {
+  await dongDon()
+  await userEvent.click(await screen.findByRole('button', { name: /^KHÁCH/ }))
+}
 
-const bam = async (label: string) => userEvent.click(await screen.findByRole('button', { name: label }))
+/** Nút nằm ngoài sheet đơn đang mở (công tắc SỈ, thanh đáy) thì đóng sheet trước, như người bán phải làm. */
+const bam = async (label: string) => {
+  const button = await screen.findByRole('button', { name: label })
+  const cart = screen.queryByRole('dialog', { name: /^Đơn · / })
+  if (cart && !cart.contains(button)) {
+    await dongDon()
+    await userEvent.click(await screen.findByRole('button', { name: label }))
+    return
+  }
+  await userEvent.click(button)
+}
+
+const suaDong = async (label: string) => {
+  await moDon()
+  await bam(`Sửa ${label}`)
+}
+
+/** Đơn giá riêng nằm sau nút "Đổi giá" trong sheet sửa dòng. */
+const oDonGia = async () => {
+  const dialog = within(screen.getByRole('dialog'))
+  await userEvent.click(dialog.getByRole('button', { name: /Đổi giá/ }))
+  return dialog.getByLabelText(/Đơn giá riêng/)
+}
 
 describe('bán hàng', () => {
   it('đã có món rồi vẫn thêm được món mới ngay từ lưới', async () => {
@@ -286,9 +327,9 @@ describe('bán hàng', () => {
     renderSales()
 
     await pick('Phở bò')
-    await userEvent.click(await screen.findByRole('button', { name: 'Sửa Phở bò' }))
+    await suaDong('Phở bò')
 
-    const priceBox = within(screen.getByRole('dialog')).getByLabelText(/Đơn giá riêng/)
+    const priceBox = await oDonGia()
     await userEvent.clear(priceBox)
     await userEvent.type(priceBox, '40000')
     await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
@@ -314,7 +355,7 @@ describe('bán hàng', () => {
 
     await pick('Phở bò')
     await pick('Trà đá')
-    await userEvent.click(await screen.findByRole('button', { name: 'Sửa Phở bò' }))
+    await suaDong('Phở bò')
     await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
     await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
 
@@ -349,36 +390,42 @@ describe('bán hàng', () => {
     }
     const dialog = () => within(screen.getByRole('dialog'))
 
-    it('sheet hiện nhóm Đá, nhóm của nhóm món và topping; món chưa phân nhóm chỉ có nhóm Đá', async () => {
+    const them = () => userEvent.click(dialog().getByRole('button', { name: /^THÊM/ }))
+
+    it('món chưa phân nhóm vào giỏ ngay, sửa dòng chỉ có nhóm Đá; món có thực đơn chạm vào là mở sheet chọn', async () => {
       await seedCafe()
       renderSales()
 
       await pick('Phở bò')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Phở bò' }))
+      expect(screen.queryByRole('dialog')).toBeNull()
+      await suaDong('Phở bò')
       expect(dialog().getByRole('button', { name: 'Đá chung' })).toBeDefined()
       expect(dialog().queryByRole('button', { name: 'Ít đường' })).toBeNull()
       expect(dialog().queryByRole('button', { name: 'Thêm Trân châu' })).toBeNull()
       await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Đóng' }))
 
       await pick('Cà phê sữa')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
       expect(dialog().getByRole('button', { name: 'Ít đường' })).toBeDefined()
       expect(dialog().getByRole('button', { name: 'Thêm Trân châu' })).toBeDefined()
+      // Đóng sheet mà không bấm THÊM thì món không vào giỏ.
+      await userEvent.click(screen.getByRole('button', { name: 'Đóng' }))
+      expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
     })
 
-    it('chọn tuỳ chọn và topping rồi chốt: dòng xuống sổ kèm giá topping lúc bán, thành tiền đủ', async () => {
+    it('chọn tuỳ chọn và topping ngay lúc chạm món rồi chốt: dòng xuống sổ kèm giá topping lúc bán, thành tiền đủ', async () => {
       await seedCafe()
       renderSales()
 
       await pick('Cà phê sữa')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Ít đường' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Đá riêng' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
       expect(dialog().getByText(/Mỗi ly: 33\.000/)).toBeDefined()
-      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+      expect(dialog().getByRole('button', { name: 'THÊM · 33.000' })).toBeDefined()
+      await them()
 
       await openPayment()
       await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
@@ -394,12 +441,24 @@ describe('bán hàng', () => {
       expect(order).toMatchObject({ subtotal: 33_000, total: 33_000, status: 'paid' })
     })
 
+    it('số lượng chọn ở chân sheet thêm: hai ly cùng tuỳ chọn vào một dòng', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm một' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      await them()
+
+      expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
+      expect(await dongGio('Cà phê sữa (+ Thạch)')).toContain('23.000')
+    })
+
     it('chọn lại trong cùng nhóm thì thay, bấm lại topping về 0 thì gỡ khỏi dòng', async () => {
       await seedCafe()
       renderSales()
 
       await pick('Cà phê sữa')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Ít đường' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Không đường' }))
       expect(dialog().getByRole('button', { name: 'Ít đường' }).getAttribute('aria-pressed')).toBe('false')
@@ -407,9 +466,39 @@ describe('bán hàng', () => {
 
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Bớt Thạch' }))
-      await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+      await them()
 
+      await moDon()
       expect(await screen.findByRole('button', { name: 'Sửa Cà phê sữa (Không đường)' })).toBeDefined()
+    })
+
+    it('chip ghi chú lấy từ ghi chú đã bán gần đây; chạm chip là ghi đúng cụm đó lên dòng', async () => {
+      await seedCafe()
+      await createOrder({
+        customerId: null,
+        customerName: 'Khách lẻ',
+        lines: [{ itemId: null, name: 'Trà', unit: 'ly', unitPrice: 5_000, costPrice: null, qty: 1, note: 'mang về' }],
+        discount: 0,
+        surcharge: 0,
+        soldAt: Date.now(),
+        note: '',
+        payment: { method: 'cash', amount: 5_000, note: '' },
+      })
+      renderSales()
+
+      await pick('Cà phê sữa')
+      const chip = await within(screen.getByRole('group', { name: 'Ghi chú gần đây' })).findByRole('button', { name: 'mang về' })
+      await userEvent.click(chip)
+      expect(chip.getAttribute('aria-pressed')).toBe('true')
+      expect((dialog().getByLabelText('Ghi chú') as HTMLInputElement).value).toBe('mang về')
+      await them()
+
+      await openPayment()
+      await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
+      await waitFor(async () => expect(await db.orders.count()).toBe(2))
+      const orders = await db.orders.orderBy('id').toArray()
+      const [line] = await getOrderLines(orders[1]?.id ?? -1)
+      expect(line?.note).toBe('mang về')
     })
 
     it('số lượng lẻ: không thêm được topping mới, topping đang có vẫn hiện, gỡ được và KHÔNG bị bỏ âm thầm khi XONG', async () => {
@@ -417,8 +506,9 @@ describe('bán hàng', () => {
       renderSales()
 
       await pick('Cà phê sữa')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      await them()
+      await suaDong('Cà phê sữa (+ Thạch)')
       const qty = dialog().getByLabelText('Số lượng')
       await userEvent.clear(qty)
       await userEvent.type(qty, '0,5')
@@ -427,6 +517,8 @@ describe('bán hàng', () => {
       expect(dialog().queryByLabelText('Số phần Trân châu')).toBeNull()
       expect(dialog().getByLabelText('Số phần Thạch').textContent).toBe('1')
       await userEvent.click(screen.getByRole('button', { name: 'XONG' }))
+      // Số món lẻ in theo kiểu Việt (dấu phẩy), như mọi số lượng khác trên màn.
+      expect(await screen.findByRole('button', { name: /Xem đơn · 0,5 món/ })).toBeDefined()
 
       await openPayment()
       await userEvent.click(screen.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }))
@@ -442,8 +534,9 @@ describe('bán hàng', () => {
       renderSales()
 
       await pick('Cà phê sữa')
-      await userEvent.click(await screen.findByRole('button', { name: 'Sửa Cà phê sữa' }))
       await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      await them()
+      await suaDong('Cà phê sữa (+ Thạch)')
       const qty = dialog().getByLabelText('Số lượng')
       await userEvent.clear(qty)
       await userEvent.type(qty, '0,5')
@@ -494,7 +587,7 @@ describe('bán hàng', () => {
     renderSales()
 
     expect(await screen.findByText(/Đã khôi phục đơn đang lên dở/)).toBeDefined()
-    expect(await screen.findByRole('button', { name: /THU TIỀN · 1 món/ })).toBeDefined()
+    expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
   })
 
   /**
@@ -512,7 +605,7 @@ describe('bán hàng', () => {
     first.unmount()
     renderSales()
 
-    expect(await screen.findByRole('button', { name: /THU TIỀN · 1 món/ })).toBeDefined()
+    expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
     expect(screen.queryByText(/Đã khôi phục đơn đang lên dở/)).toBeNull()
   })
 
@@ -532,7 +625,65 @@ describe('bán hàng', () => {
 
     await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra da{Enter}')
 
-    expect(await screen.findByRole('button', { name: /THU TIỀN · 2 món/ })).toBeDefined()
+    expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
+  })
+})
+
+describe('sheet sửa dòng', () => {
+  it('Bỏ món trong sheet sửa có Hoàn lại, bấm là dòng về nguyên vẹn cả giá riêng lẫn ghi chú', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await pick('Trà đá')
+    await suaDong('Phở bò')
+    const priceBox = await oDonGia()
+    await userEvent.clear(priceBox)
+    await userEvent.type(priceBox, '40000')
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await bam('XONG')
+
+    await suaDong('Phở bò (ít hành)')
+    await bam('Bỏ món')
+    expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
+    await bam('Hoàn lại')
+
+    expect(await dongGio('Phở bò (ít hành)')).toContain('40.000')
+  })
+
+  it('ghi chú cũ trùng chữ một lựa chọn (đá của bản trước 2.8.0) không thành chip ghi chú', async () => {
+    await seedItems()
+    await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: null, name: 'Trà', unit: 'ly', unitPrice: 5_000, costPrice: null, qty: 1, note: 'Đá riêng, mang về' }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { method: 'cash', amount: 5_000, note: '' },
+    })
+    renderSales()
+    await pick('Phở bò')
+    await suaDong('Phở bò')
+
+    const chips = within(await screen.findByRole('group', { name: 'Ghi chú gần đây' }))
+    expect(chips.getByRole('button', { name: 'mang về' })).toBeDefined()
+    expect(chips.queryByRole('button', { name: 'Đá riêng' })).toBeNull()
+  })
+
+  it('nút − + trên số lượng lẻ không đẻ số thập phân rác', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await suaDong('Phở bò')
+    const dialog = within(screen.getByRole('dialog'))
+    const qty = dialog.getByLabelText('Số lượng') as HTMLInputElement
+    await userEvent.clear(qty)
+    await userEvent.type(qty, '1,3')
+    await userEvent.click(dialog.getByRole('button', { name: 'Bớt một' }))
+
+    expect(qty.value).toBe('0,3')
+    expect(dialog.queryByText(/không đọc được/)).toBeNull()
   })
 })
 
@@ -553,8 +704,8 @@ describe('công tắc Lẻ/SỈ', () => {
     await pick('Trà đá')
 
     // Trà đá thành dòng gõ tay — `applyPriceMode` không được đụng vào nó.
-    await bam('Sửa Trà đá')
-    const priceBox = within(screen.getByRole('dialog')).getByLabelText(/Đơn giá riêng/)
+    await suaDong('Trà đá')
+    const priceBox = await oDonGia()
     await userEvent.clear(priceBox)
     await userEvent.type(priceBox, '2000')
     await bam('XONG')
@@ -606,7 +757,7 @@ describe('công tắc Lẻ/SỈ', () => {
     await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 pho{Enter}')
 
     await waitFor(async () => expect(await db.orders.count()).toBe(0))
-    expect(await screen.findByRole('button', { name: /THU TIỀN · 3 món/ })).toBeDefined()
+    expect(await screen.findByRole('button', { name: /Xem đơn · 3 món/ })).toBeDefined()
 
     await openPayment()
     await bam('XONG & XUẤT PHIẾU')
@@ -649,17 +800,18 @@ describe('công tắc Lẻ/SỈ', () => {
     renderSales()
 
     await pick('Phở bò')
-    await bam('Sửa Phở bò')
-    const priceBox = within(screen.getByRole('dialog')).getByLabelText(/Đơn giá riêng/)
+    await suaDong('Phở bò')
+    const priceBox = await oDonGia()
     await userEvent.clear(priceBox)
     await userEvent.type(priceBox, '45000')
     await bam('XONG')
 
     await pick('Phở bò')
-    expect(await screen.findByRole('button', { name: /THU TIỀN · 2 món/ })).toBeDefined()
+    expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
 
     await bam('SỈ')
     await chonKhach(/Cô Bảy/)
+    await moDon()
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Sửa Phở bò' })).toHaveLength(2))
 
     await moChonKhach()
@@ -683,6 +835,7 @@ describe('công tắc Lẻ/SỈ', () => {
 
     await pick('Phở bò')
     await db.items.update(phoId, { isActive: 0 })
+    await moDon()
     await waitFor(() => expect(screen.queryByRole('button', { name: /Sửa Phở bò/ })).not.toBeNull())
 
     await bam('SỈ')
@@ -748,6 +901,32 @@ describe('công tắc Lẻ/SỈ', () => {
    * Bấm lọt THU TIỀN trong cửa sổ `await` là `finish` chụp `cart.lines` của render trước → đơn ghi ở
    * giá **trước khi** tính lại, rồi `reset()` xoá sạch giỏ nên không còn gì để đối chiếu.
    */
+  it('món có thực đơn chạm lúc bảng giá SỈ còn đang về: nút THÊM theo giá sỉ khi giá về, tắt SỈ thì về giá lẻ', async () => {
+    const groupId = await createGroup({
+      name: 'Đồ uống',
+      sortOrder: 1,
+      optionGroups: [{ name: 'Đường', choices: ['Ít đường'] }],
+      toppingMenu: [],
+    })
+    const caPhe = await createItem({ name: 'Cà phê sữa', groupId, unit: 'ly', unitPrice: 20_000, costPrice: 8_000, isActive: 1 })
+    const coBay = await createCustomer({ name: 'Cô Bảy', phone: '', address: '', note: '' })
+    await savePriceBook(coBay, [{ itemId: caPhe, unitPrice: 15_000 }])
+    chamTheoKhach.set(coBay, 300)
+    renderSales()
+
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await pick('Cà phê sữa')
+    // Sheet mở khi giá sỉ chưa về; giá về rồi thì con số trên nút phải đổi theo, không giữ số lúc mở.
+    expect(await within(screen.getByRole('dialog')).findByRole('button', { name: 'THÊM · 15.000' }, { timeout: 2_000 })).toBeDefined()
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^THÊM/ }))
+    expect(await dongGio('Cà phê sữa')).toContain('15.000')
+
+    await userEvent.keyboard('{Escape}')
+    await bam('Lẻ')
+    await waitFor(async () => expect(await dongGio('Cà phê sữa')).toContain('20.000'))
+  })
+
   it('nút THU TIỀN bị khoá trong lúc còn đang nạp bảng giá', async () => {
     const { customerId } = await seedGiaSi('Cô Bảy', 45_000)
     chamTheoKhach.set(customerId, 300)
@@ -757,10 +936,10 @@ describe('công tắc Lẻ/SỈ', () => {
     await bam('SỈ')
     await chonKhach(/Cô Bảy/)
 
-    expect((await screen.findByRole('button', { name: /THU TIỀN/ })).hasAttribute('disabled')).toBe(true)
+    expect((await screen.findByRole('button', { name: 'THU TIỀN' })).hasAttribute('disabled')).toBe(true)
 
     await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
-    expect(screen.getByRole('button', { name: /THU TIỀN/ }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'THU TIỀN' }).hasAttribute('disabled')).toBe(false)
   })
 
   it('nháp SỈ khôi phục theo bảng giá HIỆN TẠI, không theo giá đã đóng băng trong nháp', async () => {
@@ -809,6 +988,7 @@ describe('công tắc Lẻ/SỈ', () => {
     renderSales()
 
     await pick('Phở bò')
+    await moDon()
     await bam('Giảm giá / phụ thu')
 
     const box = within(screen.getByRole('dialog')).getByLabelText('Giảm giá')
@@ -820,7 +1000,7 @@ describe('công tắc Lẻ/SỈ', () => {
 
     await waitFor(async () => expect(await dongGio('Phở bò')).toContain('5.000'))
     expect(screen.getByText(/vẫn còn giảm giá/)).toBeDefined()
-    expect(screen.getByRole('button', { name: /THU TIỀN/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'THU TIỀN' })).toBeDefined()
   })
 
   it('đang SỈ mà mở Giảm giá thì sheet nói rõ đơn này đã tính giá sỉ', async () => {
@@ -831,6 +1011,8 @@ describe('công tắc Lẻ/SỈ', () => {
     await bam('SỈ')
     await chonKhach(/Cô Bảy/)
     await waitFor(async () => expect(await dongGio('Phở bò')).toContain('45.000'))
+
+    await moDon()
 
     await bam('Giảm giá / phụ thu')
     expect(within(screen.getByRole('dialog')).getByText(/giảm lần thứ hai/)).toBeDefined()
@@ -900,6 +1082,7 @@ describe('ô số lượng trong giỏ', () => {
     await seedItems()
     renderSales()
     await pick('Phở bò')
+    await moDon()
 
     const o = await oSoLuong('Phở bò')
     await userEvent.clear(o)
@@ -916,6 +1099,7 @@ describe('ô số lượng trong giỏ', () => {
     await seedItems()
     renderSales()
     await pick('Phở bò')
+    await moDon()
     await bam('Thêm một')
 
     const o = await oSoLuong('Phở bò')
@@ -934,6 +1118,7 @@ describe('ô số lượng trong giỏ', () => {
     await seedItems()
     renderSales()
     await pick('Phở bò')
+    await moDon()
 
     const o = await oSoLuong('Phở bò')
     await userEvent.clear(o)
@@ -943,5 +1128,39 @@ describe('ô số lượng trong giỏ', () => {
     // Ô là controlled-text nên phải tự đồng bộ ngược khi giỏ đổi từ chỗ khác; kẹt ở "50" là màn hiện
     // một số mà sổ ghi số khác.
     expect((await oSoLuong('Phở bò')).value).toBe('51')
+  })
+
+  it('gõ dở "1.000" rồi bấm Esc đóng sheet đơn: số lượng vẫn về số lúc vào ô', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await moDon()
+    await bam('Thêm một')
+
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '1.000')
+    // Sheet bị tháo khỏi cây không gọi `onBlur` của ô; "1.0" đã chốt 1 vào giỏ từ giữa chừng.
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
+    expect(screen.getByText(/không đọc được/)).toBeTruthy()
+  })
+
+  it('gõ 0 rồi bấm Esc đóng sheet đơn: món vẫn bị bỏ và có Hoàn lại', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await pick('Trà đá')
+    await moDon()
+
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '0')
+    await userEvent.keyboard('{Escape}')
+
+    expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Hoàn lại' })).toBeDefined()
   })
 })

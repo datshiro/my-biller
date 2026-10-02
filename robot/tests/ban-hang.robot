@@ -26,7 +26,7 @@ Bán tiền mặt trả đủ thì đơn ghi đã thu hết
 Chọn món nhiều lần thì số lượng cộng dồn và tổng tiền nhân lên
     Mở Màn    /
     Chọn Món    Trà đá    3
-    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Thấy Chữ    Xem đơn
     Chờ Thấy Chữ    9.000 đ
     Mở Sheet Thu Tiền
     Chốt Đơn
@@ -115,6 +115,7 @@ Chưa chọn khách thì sheet nói rõ nợ phải có chủ
 Giảm giá và phụ thu đổi đúng tổng cộng
     Mở Màn    /
     Chọn Món    Phở bò
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Giảm giá    5000
     Điền Ô    Phụ thu    2000
@@ -133,6 +134,7 @@ Giảm giá và phụ thu đổi đúng tổng cộng
 Giảm giá lớn hơn tiền hàng thì bị chặn
     Mở Màn    /
     Chọn Món    Trà đá
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Giảm giá    99000
     Chờ Thấy Chữ    Giảm giá không được lớn hơn tiền hàng
@@ -141,8 +143,9 @@ Giảm giá lớn hơn tiền hàng thì bị chặn
 Sửa dòng trong giỏ đổi được số lượng và đơn giá riêng
     Mở Màn    /
     Chọn Món    Trà đá
-    Click    css=button[aria-label="Sửa Trà đá"]
+    Sửa Dòng    Trà đá
     Điền Ô    Số lượng    4
+    Bấm Nút    Đổi giá
     Điền Ô    Đơn giá riêng cho đơn này    5000
     Bấm Nút    XONG
 
@@ -160,15 +163,15 @@ Sửa dòng trong giỏ đổi được số lượng và đơn giá riêng
 Bỏ món khỏi giỏ thì giỏ trống và nút thu tiền biến mất
     Mở Màn    /
     Chọn Món    Trà đá
-    Click    css=button[aria-label="Sửa Trà đá"]
-    Bấm Nút    Bỏ món này khỏi đơn
+    Sửa Dòng    Trà đá
+    Click    ${SHEET} >> css=button:text-is("Bỏ món")
     Wait For Elements State    ${NÚT_THU_TIỀN}    detached
 
 Gõ "2 pho" rồi Enter thì thêm đúng 2 phở
     Mở Màn    /
     Gõ Vào Ô Tìm Món    2 pho
     Keyboard Key    press    Enter
-    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Thấy Chữ    Xem đơn
     Chờ Thấy Chữ    110.000 đ
 
 Lọc theo nhóm chỉ hiện món của nhóm đó
@@ -180,7 +183,7 @@ Lọc theo nhóm chỉ hiện món của nhóm đó
 Đơn đang lên dở sống sót qua một lần tải lại trang
     Mở Màn    /
     Chọn Món    Phở bò
-    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Thấy Chữ    Xem đơn
     Chờ Nháp Giỏ Được Lưu
     Reload
     Chờ Thấy Chữ    Đã khôi phục đơn đang lên dở
@@ -193,7 +196,7 @@ Rời màn Bán hàng rồi quay lại không phải là "khôi phục đơn"
     [Tags]    regression
     Mở Màn    /
     Chọn Món    Phở bò
-    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Thấy Chữ    Xem đơn
     Chờ Nháp Giỏ Được Lưu
 
     # Đi bằng thanh nav như người bán. `Mở Màn` là nạp lại trang, tức mở ra một phiên mới — đúng lúc
@@ -202,7 +205,7 @@ Rời màn Bán hàng rồi quay lại không phải là "khôi phục đơn"
     Chờ Thấy Chữ    4 món
     Click    ${NAV_BAN}
 
-    Chờ Thấy Chữ    TRONG ĐƠN
+    Chờ Thấy Chữ    Xem đơn
     Không Được Thấy Chữ    Đã khôi phục đơn đang lên dở
     Chờ Thấy Chữ    55.000 đ
 
@@ -218,17 +221,9 @@ Bán xong thì nháp biến mất, mở lại không khôi phục đơn vừa b�
 
     Nháp Giỏ Phải Trống
     Mở Màn    /
-    Chờ Thấy Chữ    HÔM NAY
+    Chờ Thấy Chữ    KHÁCH
     Không Được Thấy Chữ    Đã khôi phục đơn đang lên dở
     Wait For Elements State    ${NÚT_THU_TIỀN}    detached
-
-Doanh thu hôm nay trên thanh tiêu đề cộng thêm đơn vừa bán
-    Mở Màn    /
-    ${trước}=    Get Text    css=header:has-text("HÔM NAY") >> css=span.money
-    Bán Nhanh    Phở bò
-    Mở Màn    /
-    ${sau}=    Get Text    css=header:has-text("HÔM NAY") >> css=span.money
-    Should Not Be Equal    ${trước}    ${sau}    Bán xong mà doanh thu hôm nay không đổi.
 
 Chốt đơn xong nhảy thẳng sang phiếu để gửi khách
     Mở Màn    /
@@ -277,6 +272,7 @@ Món khách chưa có giá riêng vẫn bán giá lẻ khi đang SỈ
 Chạm SỈ khi chưa chọn khách thì app bắt chọn khách trước
     Mở Màn    /
     Chọn Món    Phở bò
+    Đóng Đơn
     Chọn Chip    SỈ
     Chờ Thấy Chữ    Chọn khách
 
@@ -297,6 +293,8 @@ Chạm SỈ khi chưa chọn khách thì app bắt chọn khách trước
     Bật Giá Sỉ Cho Khách    Anh Hùng
     Chờ Thấy Chữ    45.000 đ
 
+    Đóng Đơn
+
     Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
     Chọn Khách Trong Sheet    Chị Hoa
     Chờ Thấy Chữ    30.000 đ
@@ -314,6 +312,8 @@ Chọn "Khách lẻ" khi đang SỈ thì công tắc về Lẻ và giỏ về gi
     Chọn Món    Phở bò
     Bật Giá Sỉ Cho Khách    Anh Hùng
     Chờ Thấy Chữ    45.000 đ
+
+    Đóng Đơn
 
     Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
     Chọn Khách Trong Sheet    Khách lẻ
@@ -345,6 +345,7 @@ Giảm giá trước rồi bật SỈ thì thanh tổng cảnh báo tiền hàng
     Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    5000
     Mở Màn    /
     Chọn Món    Phở bò
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Giảm giá    50000
     Bấm Nút    ÁP DỤNG
@@ -363,7 +364,8 @@ Giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt SỈ thì
     Đặt Giá Sỉ    Anh Hùng    Phở bò đặc biệt    45000
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
+    Bấm Nút    Đổi giá
     Điền Ô    Đơn giá riêng cho đơn này    45000
     Bấm Nút    XONG
 
@@ -372,9 +374,12 @@ Giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt SỈ thì
 
     Bật Giá Sỉ Cho Khách    Anh Hùng
     Chờ Thấy Chữ    90.000 đ
+    Mở Đơn
     ${dòng_giỏ}=    Get Element Count    css=button[aria-label="Sửa Phở bò đặc biệt"]
     Should Be Equal As Integers    ${dòng_giỏ}    2
     ...    Dòng gõ tay bị dòng danh mục gộp vào — tắt SỈ sẽ không hoàn nguyên được nữa.
+
+    Đóng Đơn
 
     Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
     Chọn Khách Trong Sheet    Khách lẻ
@@ -500,6 +505,7 @@ Gõ 0 lỡ tay rồi bấm Hoàn lại thì món về nguyên vẹn cả số l�
     Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
 
     Bấm Nút    Hoàn lại
+    Mở Đơn
     Wait For Elements State    css=button[aria-label="Sửa Phở bò đặc biệt"]    visible
 
     Mở Sheet Thu Tiền
@@ -536,6 +542,27 @@ Gõ 1.000 vào ô số lượng trong giỏ thì không âm thầm thành 1 hay 
     Should Be Equal As Numbers    ${của_đơn}[0][qty]    3
     ...    Sổ ghi số commit dở của "1.000" thay vì số lượng thật.
 
+Gõ dở 1.000 rồi bấm Esc đóng sheet đơn thì sổ vẫn ghi số lượng cũ
+    [Documentation]    Ô số lượng nằm trong sheet "Xem đơn". Esc tháo cả sheet khỏi cây mà React không gọi
+    ...    `onBlur` của ô đang gõ, nên bước "1.000 không đọc được thì trả số lúc vào ô" từng bị bỏ qua:
+    ...    "1.0" đã chốt 1 vào giỏ, đóng sheet là sổ ghi 1 ly thay vì 3, không một dòng cảnh báo.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Trà đá    3
+    Gõ Số Lượng    Trà đá    1.000
+    Keyboard Key    press    Escape
+    Wait For Elements State    ${SHEET_ĐƠN}    detached
+    Chờ Thấy Chữ    không đọc được
+    Chờ Thấy Chữ    Xem đơn · 3 món
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id']]
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    3
+    ...    Đóng sheet bằng Esc giữa lúc gõ dở mà sổ ghi số commit dở.
+
 Bấm cộng sau khi đã gõ tay thì ô và sổ cùng nhích lên một
     Mở Màn    /
     Chọn Món    Phở bò
@@ -560,7 +587,7 @@ Gõ 1.000 vào sheet sửa dòng thì báo lỗi chứ không âm thầm thành 
     [Tags]    regression
     Mở Màn    /
     Chọn Món    Trà đá
-    Click    css=button[aria-label="Sửa Trà đá"]
+    Sửa Dòng    Trà đá
     Điền Ô    Số lượng    1.000
     Chờ Thấy Chữ    Số lượng không đọc được
     Nút Phải Bị Khoá    XONG
@@ -599,7 +626,7 @@ Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi 
     Mở Màn    /
     Chọn Món    Phở bò
     Chọn Món    Trà đá
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Ghi chú    ít hành, mang về
     Bấm Nút    XONG
     Mở Sheet Thu Tiền
@@ -622,14 +649,14 @@ Ghi chú từng món theo dòng xuống sổ, dòng không ghi chú là chuỗi 
     Chọn Món    Phở bò
     Gõ Số Lượng    Phở bò đặc biệt    3
     Keyboard Key    press    Tab
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Chọn Chip    Đá chung
     Bấm Nút    XONG
 
     Chọn Món    Phở bò
     Gõ Số Lượng    Phở bò đặc biệt    2
     Keyboard Key    press    Tab
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Chọn Chip    Đá riêng
     Bấm Nút    XONG
 
@@ -652,7 +679,7 @@ Chọn chip đá không đụng vào ô ghi chú: nhãn xuống `options`, chữ
     ...    sổ ghi thiếu — ở đây là nhãn rơi mất hoặc chui nhầm vào `note`.
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Ghi chú    ít đường
     Chọn Chip    Đá riêng
     ${ghi_chú}=    Đọc Ô    Ghi chú
@@ -672,7 +699,7 @@ Chọn chip đá không đụng vào ô ghi chú: nhãn xuống `options`, chữ
 Bấm lại chip đang chọn thì gỡ đúng nhãn đó, ghi chú gõ tay còn nguyên
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Ghi chú    ít đường
     Chọn Chip    Đá riêng
     Chọn Chip    Đá riêng
@@ -687,7 +714,7 @@ Hai chip đá loại trừ nhau: bấm cái này thì cái kia tự tắt
     ...    DÒNG — đúng thứ tính năng này làm, nên hai chip không được phép cùng bật.
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Ghi chú    ít đường
     Chọn Chip    Đá chung
     Chọn Chip    Đá riêng
@@ -707,15 +734,14 @@ Tuỳ chọn và topping của nhóm món xuống sổ: giá ly cộng topping, 
     Cài Thực Đơn Đồ Uống
     Mở Màn    /
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
-    Điền Ô    Số lượng    2
+    Click    ${SHEET} >> css=button[aria-label="Thêm một"]
     Chọn Chip    Ít đường
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Trân châu"]
     Click    css=button[aria-label="Thêm Thạch"]
     Chờ Thấy Chữ    Mỗi ly: 33.000
     Điền Ô    Ghi chú    mang về
-    Bấm Nút    XONG
+    Bấm Thêm Vào Đơn
     Mở Sheet Thu Tiền
     Chốt Đơn
 
@@ -734,17 +760,128 @@ Tuỳ chọn và topping của nhóm món xuống sổ: giá ly cộng topping, 
     Should Be Equal As Integers    ${đơn}[subtotal]    66000
     Should Be Equal As Integers    ${đơn}[total]    66000    Tổng đơn lệch tổng các dòng.
 
+Món có thực đơn riêng: chạm là mở sheet chọn, đóng sheet mà không THÊM thì món không vào đơn
+    [Documentation]    Món thuộc nhóm có tuỳ chọn hay topping (Đồ uống) hỏi trước rồi mới vào giỏ; món của
+    ...    nhóm không có thực đơn riêng (Cơm tấm, nhóm Đồ ăn) vẫn một chạm là vào. Đóng sheet là đổi ý,
+    ...    giỏ và sổ không được có món đó.
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Wait For Elements State    ${SHEET} >> css=button:has-text("THÊM")    visible
+    Click    ${SHEET} >> css=button[aria-label="Đóng"]
+    Wait For Elements State    ${SHEET}    detached
+
+    Chọn Món    Cơm tấm
+    Chờ Thấy Chữ    Xem đơn · 1 món
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d['name'] for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Should Be Equal    ${của_đơn}    ${{ ['Cơm tấm sườn'] }}    Món đóng sheet không THÊM vẫn lọt vào sổ.
+
+Chip ghi chú lấy từ ghi chú đã bán gần đây và ghi đúng cụm đó xuống sổ
+    [Documentation]    Chip là các cụm ghi chú hay dùng trong những dòng đã bán trên máy này. Chạm chip
+    ...    chỉ thêm đúng cụm đó vào ô ghi chú; dòng xuống sổ mang đúng chữ như người bán tự gõ.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    không hành, mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Mở Màn    /
+    Chọn Món    Trà đá
+    Sửa Dòng    Trà đá
+    Click    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("mang về")
+    ${ghi_chú}=    Đọc Ô    Ghi chú
+    Should Be Equal    ${ghi_chú}    mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${trà}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]][0]
+    Should Be Equal    ${trà}[note]    mang về    Chip ghi chú không xuống sổ đúng cụm đã chạm.
+
+Ghi chú gõ trùng chữ một lựa chọn thì không thành chip ghi chú
+    [Documentation]    Bản trước 2.8.0 ghi "Đá riêng" thẳng vào ghi chú dòng. Thành chip ghi chú thì nó nằm
+    ...    ngay dưới chip tuỳ chọn Đá riêng cùng chữ, chạm nhầm là lách luật loại trừ của nhóm Đá.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    Đá riêng, mang về
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Mở Màn    /
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Cơm tấm sườn
+    Wait For Elements State    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("mang về")    visible
+    Get Element Count    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("Đá riêng")    ==    0
+
+Lời dặn dài cả câu không thành chip ghi chú làm sheet tràn ngang
+    [Documentation]    Chip không xuống dòng, nên một ghi chú dài không có ", " thành chip rộng hơn khổ màn và
+    ...    đẩy sheet tràn ngang. Cụm quá dài không lên chip; cụm ngắn vẫn lên.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    không lấy ống hút để đá riêng ra túi nylon gói kỹ giúp em, cay
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Mở Màn    /
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Cơm tấm sườn
+    Wait For Elements State    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button:text-is("cay")    visible
+    Get Element Count    ${SHEET} >> css=[aria-label="Ghi chú gần đây"] >> css=button    ==    1
+    # Đo mép từng chip với mép sheet: thân sheet tự cuộn nên `scrollWidth` của dialog không lộ phần tràn.
+    ${lọt}=    Evaluate JavaScript    ${SHEET}
+    ...    (sheet) => [...sheet.querySelectorAll('[aria-label="Ghi chú gần đây"] button')].every((chip) => chip.getBoundingClientRect().right <= sheet.getBoundingClientRect().right + 0.5)
+    Should Be True    ${lọt}    Chip ghi chú thò ra ngoài mép sheet.
+
+Bỏ món trong sheet sửa rồi bấm Hoàn lại thì dòng về nguyên vẹn cả giá riêng lẫn ghi chú
+    [Documentation]    Nút "Bỏ món" nằm sát XONG ở chân sheet nên dễ chạm nhầm; nó đi chung đường Hoàn lại
+    ...    với gõ 0. Hoàn lại phải đặt lại đúng dòng cũ — đối chiếu sổ chứ không chỉ con số trên màn.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Cơm tấm
+    Sửa Dòng    Phở bò đặc biệt
+    Bấm Nút    Đổi giá
+    Điền Ô    Đơn giá riêng cho đơn này    40000
+    Điền Ô    Ghi chú    ít hành
+    Bấm Nút    XONG
+
+    Sửa Dòng    Phở bò đặc biệt (ít hành)
+    Click    ${SHEET} >> css=button:text-is("Bỏ món")
+    Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
+    Bấm Nút    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${phở}=    Evaluate    [d for d in $dòng if d['orderId'] == $đơn['id'] and d['name'] == 'Phở bò đặc biệt'][0]
+    Should Be Equal As Numbers    ${phở}[qty]    1    Hoàn lại không đưa đúng số lượng về.
+    Should Be Equal As Integers    ${phở}[unitPrice]    40000    Hoàn lại làm mất giá riêng của dòng.
+    Should Be Equal    ${phở}[note]    ít hành    Hoàn lại làm mất ghi chú của dòng.
+
 Hai ly cùng món khác topping là hai dòng riêng; thêm topping cho ly trơn thì gộp vào dòng cùng topping
     [Documentation]    Gộp nhầm hai ly khác topping là bán thiếu hoặc thừa tiền topping mà không lỗi nào
     ...    hiện ra. Khoá dòng gồm cả tuỳ chọn lẫn topping; sửa dòng làm khoá trùng thì cộng số lượng.
     Cài Thực Đơn Đồ Uống
     Mở Màn    /
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
     Click    css=button[aria-label="Thêm Trân châu"]
-    Bấm Nút    XONG
+    Bấm Thêm Vào Đơn
     Chọn Món    Cà phê sữa
-    Chờ Thấy Chữ    Cà phê sữa
+    Bấm Thêm Vào Đơn
+    Chờ Thấy Chữ    Xem đơn · 2 món
 
     Mở Sheet Thu Tiền
     Chốt Đơn
@@ -759,11 +896,11 @@ Thêm topping cho ly trơn đến mức trùng dòng có sẵn thì gộp số l
     Cài Thực Đơn Đồ Uống
     Mở Màn    /
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
     Click    css=button[aria-label="Thêm Trân châu"]
-    Bấm Nút    XONG
+    Bấm Thêm Vào Đơn
     Chọn Món    Cà phê sữa
-    Click    css=button[aria-label="Sửa Cà phê sữa"]
+    Bấm Thêm Vào Đơn
+    Sửa Dòng    Cà phê sữa
     Click    css=button[aria-label="Thêm Trân châu"]
     Bấm Nút    XONG
 
@@ -810,7 +947,7 @@ Gõ 0 trong sheet sửa dòng cũng bỏ món VÀ cũng có đường hoàn lạ
     ...    quy tắc đó có ngoại lệ không ai ghi ở đâu — gỡ nhầm từ sheet là mất dòng không lối về.
     Mở Màn    /
     Chọn Món    Phở bò
-    Click    css=button[aria-label="Sửa Phở bò đặc biệt"]
+    Sửa Dòng    Phở bò đặc biệt
     Điền Ô    Số lượng    0
     Bấm Nút    XONG
     Chờ Thấy Chữ    Đã bỏ Phở bò đặc biệt khỏi đơn
@@ -926,6 +1063,7 @@ Phụ thu gõ thừa số 0 không đẩy tổng đơn vượt trần làm sập
     [Tags]    regression
     Mở Màn    /
     Chọn Món    Phở bò
+    Mở Đơn
     Bấm Nút    Giảm giá / phụ thu
     Điền Ô    Phụ thu    999999999
     ${ô_phụ_thu}=    Ô Theo Nhãn    Phụ thu

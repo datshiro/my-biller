@@ -78,6 +78,16 @@ export async function getOrderLines(orderId: number): Promise<OrderLine[]> {
 }
 
 /**
+ * Ghi chú của các dòng hàng vào sổ máy này gần nhất — nguồn cho chip ghi chú nhanh. Thứ tự là thứ tự dòng về
+ * tới sổ (khoá chính giảm dần), không phải giờ bán: gồm cả dòng máy khác đồng bộ về và dòng của đơn đã huỷ.
+ * Đủ cho một danh sách gợi ý; dừng ở `limit` dòng, không quét cả bảng.
+ */
+export async function listRecentLineNotes(limit: number): Promise<string[]> {
+  const lines = await db.orderLines.reverse().limit(limit).toArray()
+  return lines.flatMap((line) => (line.note ? [line.note] : []))
+}
+
+/**
  * Dòng ghi trước khi `note` có mặt không mang trường này, mà `getOrderLines` trả thẳng row Dexie
  * không qua zod ⇒ kiểu nói `string` trong khi giá trị là `undefined`. Vá tại cửa đọc để kiểu không
  * nói dối. Không có đường di trú nào lấy lại được ghi chú chưa từng được ghi.

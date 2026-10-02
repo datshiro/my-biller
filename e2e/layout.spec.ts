@@ -9,7 +9,7 @@ const NARROW = { width: 320, height: 640 }
 
 /** `[đường dẫn, tên màn, chữ chờ hiện ra]` — chờ đúng nội dung của màn rồi mới đo, không đo lúc đang tải. */
 const ROUTES = [
-  ['/', 'Bán hàng', 'HÔM NAY'],
+  ['/', 'Bán hàng', 'KHÁCH'],
   ['/don', 'Đơn', 'Anh Hùng'],
   ['/chi-phi', 'Chi phí', 'CHI HÔM NAY'],
   ['/bao-cao', 'Báo cáo', 'DOANH THU'],
@@ -115,10 +115,11 @@ test('phiếu bán hàng và chi tiết đơn không tràn ngang ở 320px', asy
 })
 
 test('hàng trong giỏ không tràn ngang ở 320px', async ({ page }) => {
-  // Route `/` ở bảng trên được đo với giỏ RỖNG — `CartLines` chỉ render khi `count > 0`, nên hàng
-  // giỏ (hai nút ±, ô số lượng gõ được, ô thành tiền) chưa từng đi qua cổng 320px lần nào.
+  // Route `/` ở bảng trên được đo với giỏ RỖNG — hàng giỏ (hai nút ±, ô số lượng gõ được, ô thành tiền)
+  // nằm trong sheet "Xem đơn", nên phải mở sheet mới đo được nó ở 320px.
   await page.goto('/')
   await page.getByRole('button', { name: /Phở bò đặc biệt/ }).first().click()
+  await page.getByRole('button', { name: /Xem đơn/ }).click()
   await expect(page.getByRole('textbox', { name: 'Số lượng Phở bò đặc biệt' })).toBeVisible()
   expect(await overflowing(page)).toEqual([])
 

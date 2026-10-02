@@ -19,7 +19,7 @@ import {
   listActiveItems,
   updateGroup,
 } from '../repositories/items'
-import { createOrder } from '../repositories/orders'
+import { createOrder, listRecentLineNotes } from '../repositories/orders'
 import { getShop, saveShop } from '../repositories/settings'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
@@ -213,5 +213,29 @@ describe('thực đơn tuỳ chọn và topping của nhóm món', () => {
       toppingMenu: [{ name: 'Thạch', price: 3_000 }],
       optionGroups: [],
     })
+  })
+})
+
+describe('ghi chú gần đây', () => {
+  // Đơn chưa thu phải có chủ nợ; ca này chỉ đọc ghi chú nên ghi nợ cho một khách là đủ.
+  const sell = async (notes: string[]) =>
+    createOrder({
+      customerId: await createCustomer({ name: 'Anh Hùng', phone: '', address: '', note: '' }),
+      customerName: 'Anh Hùng',
+      lines: notes.map((note) => ({ itemId: null, name: 'Phở', unit: 'tô', unitPrice: 55_000, costPrice: null, qty: 1, note })),
+      discount: 0,
+      surcharge: 0,
+      soldAt,
+      note: '',
+      payment: null,
+    })
+
+  it('trả ghi chú của các dòng bán gần nhất, mới nhất trước, bỏ dòng không ghi chú và dừng ở giới hạn', async () => {
+    await sell(['ít hành', ''])
+    await sell(['mang về'])
+    await sell(['cay'])
+
+    expect(await listRecentLineNotes(10)).toEqual(['cay', 'mang về', 'ít hành'])
+    expect(await listRecentLineNotes(2)).toEqual(['cay', 'mang về'])
   })
 })

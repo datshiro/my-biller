@@ -40,6 +40,25 @@ async function pickCustomer(page: Page, name: string) {
 /** Đơn giá đang hiện trên dòng giỏ — chữ nằm trong nút "Sửa <tên>". */
 const cartLine = (page: Page, name: string) => page.getByRole('button', { name: `Sửa ${name}`, exact: true })
 
+/** Dòng giỏ nằm trong sheet "Xem đơn"; lớp phủ của sheet chặn chạm vào lưới và công tắc phía sau. */
+const cartSheet = (page: Page) => page.getByRole('dialog', { name: /^Đơn · / })
+
+async function openCart(page: Page) {
+  if (!(await cartSheet(page).isVisible())) await page.getByRole('button', { name: /Xem đơn/ }).click()
+  await expect(cartSheet(page)).toBeVisible()
+}
+
+async function closeCart(page: Page) {
+  if (!(await cartSheet(page).isVisible())) return
+  await page.keyboard.press('Escape')
+  await expect(cartSheet(page)).toBeHidden()
+}
+
+async function pay(page: Page) {
+  await closeCart(page)
+  await page.getByRole('button', { name: 'THU TIỀN', exact: true }).click()
+}
+
 test('một đơn sỉ trọn vòng: chỉ món có bảng giá xuống giá, phiếu in đúng đơn giá từng dòng', async ({
   page,
 }) => {
@@ -54,11 +73,12 @@ test('một đơn sỉ trọn vòng: chỉ món có bảng giá xuống giá, ph
   await pickCustomer(page, /Anh Hùng/)
 
   // Món có bảng giá xuống 45.000; món không có vẫn đúng giá lẻ 3.000 — đây là cả cái ý của "2 tầng giá".
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toContainText('45.000')
   await expect(cartLine(page, 'Trà đá')).toContainText('3.000')
-  await expect(page.getByText('48.000 đ')).toBeVisible()
+  await expect(cartSheet(page).getByText('48.000 đ')).toBeVisible()
 
-  await page.getByRole('button', { name: /THU TIỀN/ }).click()
+  await pay(page)
   await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
@@ -81,13 +101,16 @@ test('đổi khách khi đang SỈ: soi từng đơn giá, không chỉ tổng',
 
   await page.getByRole('button', { name: 'SỈ', exact: true }).click()
   await pickCustomer(page, /Anh Hùng/)
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toContainText('45.000')
   await expect(cartLine(page, 'Trà đá')).toContainText('3.000')
 
+  await closeCart(page)
   await page.locator('header').getByRole('button', { name: /KHÁCH/ }).click()
   await pickCustomer(page, /Chị Hoa/)
 
   // Tổng của hai khách có thể trùng nhau do trùng số; đơn giá từng dòng thì không che được.
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toContainText('30.000')
   await expect(cartLine(page, 'Trà đá')).toContainText('2.000')
   await expect(cartLine(page, 'Phở bò đặc biệt')).not.toContainText('45.000')
@@ -104,25 +127,33 @@ test('giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt S�
 
   await page.goto('/')
   await grid(page).getByRole('button', { name: /Phở bò/ }).click()
+  await openCart(page)
   await cartLine(page, 'Phở bò đặc biệt').click()
+  await page.getByRole('dialog').getByRole('button', { name: /Đổi giá/ }).click()
   await page.getByLabel(/Đơn giá riêng/).fill('45000')
   await page.getByRole('button', { name: 'XONG', exact: true }).click()
 
+  await closeCart(page)
   await grid(page).getByRole('button', { name: /Phở bò/ }).click()
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toHaveCount(2)
 
+  await closeCart(page)
   await page.getByRole('button', { name: 'SỈ', exact: true }).click()
   await pickCustomer(page, /Anh Hùng/)
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toHaveCount(2)
-  await expect(page.getByText('90.000 đ')).toBeVisible()
+  await expect(cartSheet(page).getByText('90.000 đ')).toBeVisible()
 
+  await closeCart(page)
   await page.locator('header').getByRole('button', { name: /KHÁCH/ }).click()
   await pickCustomer(page, /Khách lẻ/)
 
+  await openCart(page)
   await expect(cartLine(page, 'Phở bò đặc biệt')).toHaveCount(2)
-  await expect(page.getByText('100.000 đ')).toBeVisible()
+  await expect(cartSheet(page).getByText('100.000 đ')).toBeVisible()
 
-  await page.getByRole('button', { name: /THU TIỀN/ }).click()
+  await pay(page)
   await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
