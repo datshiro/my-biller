@@ -1,8 +1,9 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
-import { formatAmount, parseMoneyInput } from '@/domain/money'
+import { formatAmount, MAX_MONEY_INPUT, parseMoneyInput } from '@/domain/money'
 import { Field } from './text-field'
 
 const QUICK_ADD = [1_000, 5_000, 10_000]
+const OVER_LIMIT = `Tối đa ${formatAmount(MAX_MONEY_INPUT)} đ.`
 
 /** Chỗ đứng trong `text` ngay sau chữ số thứ `count`; dấu phân nhóm không được tính. */
 function afterDigits(text: string, count: number): number {
@@ -52,6 +53,7 @@ export function MoneyInput({
 }) {
   const id = useId()
   const [text, setText] = useState(() => (value === null ? '' : formatAmount(value)))
+  const [overLimit, setOverLimit] = useState(false)
 
   // Đặt lại con trỏ **trước khi màn hình vẽ** nên mắt không kịp thấy nó nhảy.
   const pendingCaret = useRef<{ node: HTMLInputElement; at: number } | null>(null)
@@ -68,6 +70,7 @@ export function MoneyInput({
   if (value !== lastEmitted) {
     setLastEmitted(value)
     setText(value === null ? '' : formatAmount(value))
+    setOverLimit(false)
   }
 
   const emit = (next: number | null) => {
@@ -75,7 +78,16 @@ export function MoneyInput({
     onChange(next)
   }
 
+  // Phím làm vượt trần bị bỏ chứ không đẩy `null` lên cha: `null` ở ô "Khách đưa" nghĩa là chưa
+  // đưa đồng nào, nên một phím thừa không được âm thầm biến đơn trả đủ thành đơn nợ.
+  const rejectOverLimit = (next: number | null) => {
+    const over = next !== null && next > MAX_MONEY_INPUT
+    setOverLimit(over)
+    return over
+  }
+
   const apply = (next: number | null) => {
+    if (rejectOverLimit(next)) return
     setText(next === null ? '' : formatAmount(next))
     emit(next)
   }
@@ -84,6 +96,7 @@ export function MoneyInput({
     const raw = node.value
     const digits = raw.replace(/[^\dk]/gi, '')
     const parsed = digits === '' ? null : parseMoneyInput(digits)
+    if (rejectOverLimit(parsed)) return
     const next = parsed === null ? digits : formatAmount(parsed)
 
     // Chuỗi vẽ lại có dấu chấm ở chỗ khác chuỗi vừa gõ, mà React dựng lại `value` thì trình duyệt ném
@@ -99,7 +112,13 @@ export function MoneyInput({
   }
 
   return (
-    <Field label={label} htmlFor={id} hint={hint} warning={warning} error={error}>
+    <Field
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      warning={warning}
+      error={error ?? (overLimit ? OVER_LIMIT : undefined)}
+    >
       <div className="relative">
         <input
           id={id}
@@ -109,10 +128,10 @@ export function MoneyInput({
           value={text}
           placeholder={placeholder}
           onChange={(event) => handleType(event.currentTarget)}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={error || overLimit ? true : undefined}
           className={`w-full rounded-btn border bg-surface pr-9 text-right money outline-none focus:border-brand ${
             large ? 'h-14 pl-3 text-[24px] font-bold' : 'h-12 pl-3 text-[17px] font-semibold'
-          } ${error ? 'border-danger' : 'border-line'}`}
+          } ${error || overLimit ? 'border-danger' : 'border-line'}`}
         />
         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted">đ</span>
       </div>

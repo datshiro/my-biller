@@ -918,3 +918,42 @@ Gõ cả ô toàn thứ không đọc được thì phải báo, không im lặn
     Gõ Vào Ô Tìm Món    1.000 pho bo
     Keyboard Key    press    Enter
     Chờ Thấy Chữ    Chưa đọc được
+
+Phụ thu gõ thừa số 0 không đẩy tổng đơn vượt trần làm sập màn thu tiền
+    [Documentation]    Phụ thu từng không có trần: 9.007.199.254.740.991 cộng tiền hàng hiện tổng lệch một
+    ...    đồng, bấm THU TIỀN thì `assertMoney` ném và ErrorBoundary nuốt đơn đang lên dở. Ô giờ dừng ở
+    ...    999.999.999; đơn chốt với đúng con số đó.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Bấm Nút    Giảm giá / phụ thu
+    Điền Ô    Phụ thu    999999999
+    ${ô_phụ_thu}=    Ô Theo Nhãn    Phụ thu
+    Type Text    ${ô_phụ_thu}    0    clear=${False}
+    Chờ Thấy Chữ    Tối đa 999.999.999 đ.
+    Bấm Nút    ÁP DỤNG
+    Chờ Thấy Chữ    1.000.054.999 đ
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[surcharge]    999999999    Sổ ghi sai phụ thu.
+    Should Be Equal As Integers    ${đơn}[total]    1000054999    Sổ ghi sai tổng đơn.
+
+Khách đưa gõ thừa số 0 thì ô giữ số cũ, đơn vẫn trả đủ chứ không thành nợ
+    [Documentation]    Ô tiền bỏ phím vượt trần thay vì trả `null`; ở ô Khách đưa, `null` nghĩa là khách chưa
+    ...    đưa đồng nào và đơn trả đủ sẽ âm thầm thành đơn nợ.
+    [Tags]    regression
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Điền Tiền Khách Đưa    999999999
+    ${ô_khách_đưa}=    Ô Theo Nhãn    Khách đưa
+    Type Text    ${ô_khách_đưa}    0    clear=${False}
+    Chờ Thấy Chữ    Tối đa 999.999.999 đ.
+    Chờ Thấy Chữ    999.944.999 đ
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[status]    paid    Phím thừa ở ô Khách đưa biến đơn trả đủ thành đơn nợ.
+    Should Be Equal As Integers    ${đơn}[paidAmount]    ${đơn}[total]    Sổ ghi sai số khách đã trả.

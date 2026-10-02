@@ -181,3 +181,28 @@ Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có toppin
     Chờ Thấy Chữ    Đá chung
     Get Element Count    css=button[aria-label="Thêm Trân châu"]    ==    0
     Get Element Count    css=button[aria-pressed]:text-is("Ít đường")    ==    0
+
+Gõ giá bán vượt 999.999.999 thì ô giữ số cũ, bán món đó không làm sập màn Bán hàng
+    [Documentation]    Giá bán từng không có trần: lưu được 5.000.000.000.000.000 đ, chạm món hai lần là
+    ...    `đơn giá × qty` vượt số nguyên an toàn, `assertMoney` ném trong render và ErrorBoundary nuốt cả
+    ...    màn Bán hàng cùng đơn đang lên dở. Giờ phím làm vượt trần bị bỏ, ô giữ số cũ.
+    [Tags]    regression
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Mâm cỗ
+    Điền Ô    Giá bán *    999999999
+    ${ô_giá}=    Ô Theo Nhãn    Giá bán *
+    Type Text    ${ô_giá}    0    clear=${False}
+    Chờ Thấy Chữ    Tối đa 999.999.999 đ.
+    ${giá}=    Đọc Ô    Giá bán *
+    Should Be Equal    ${giá}    999.999.999    Phím thứ mười vẫn lọt vào ô giá bán.
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    5 món
+
+    ${mặt_hàng}=    Đọc Bảng    items
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Mâm cỗ')
+    Should Be Equal As Integers    ${món}[unitPrice]    999999999    Sổ ghi sai giá của món vừa thêm.
+
+    Mở Màn    /
+    Chọn Món    Mâm cỗ    2
+    Chờ Thấy Chữ    1.999.999.998 đ
+    Không Được Thấy Chữ    App đang gặp lỗi

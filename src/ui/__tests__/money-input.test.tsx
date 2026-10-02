@@ -123,6 +123,35 @@ describe('MoneyInput', () => {
     expect(priceBox().selectionStart).toBe(1)
   })
 
+  it('phím làm vượt trần 999.999.999 bị bỏ, ô giữ số cũ và báo rõ trần', async () => {
+    const onValue = vi.fn()
+    render(<Harness onValue={onValue} />)
+
+    await userEvent.type(priceBox(), '9999999990')
+
+    expect(priceBox().value).toBe('999.999.999')
+    expect(onValue).toHaveBeenLastCalledWith(999_999_999)
+    expect(onValue).not.toHaveBeenCalledWith(null)
+    expect(screen.getByText('Tối đa 999.999.999 đ.')).toBeTruthy()
+
+    await userEvent.type(priceBox(), '{backspace}')
+
+    expect(priceBox().value).toBe('99.999.999')
+    expect(screen.queryByText('Tối đa 999.999.999 đ.')).toBeNull()
+  })
+
+  it('nút +10k không đẩy giá vượt trần', async () => {
+    const onValue = vi.fn()
+    render(<Harness onValue={onValue} />)
+
+    await userEvent.type(priceBox(), '999995000')
+    await userEvent.click(screen.getByRole('button', { name: '+10k' }))
+
+    expect(priceBox().value).toBe('999.995.000')
+    expect(onValue).toHaveBeenLastCalledWith(999_995_000)
+    expect(screen.getByText('Tối đa 999.999.999 đ.')).toBeTruthy()
+  })
+
   it('nút Xoá đưa ô về rỗng và trả null', async () => {
     const onValue = vi.fn()
     render(<Harness onValue={onValue} />)

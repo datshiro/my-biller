@@ -89,7 +89,9 @@ test(`gõ giá giữa danh mục ${ITEMS} món không trễ phím`, async ({ pag
     for (let i = 1; i <= keystrokes; i += 1) {
       // `input` là sự kiện rời rạc nên React 19 commit ngay trong `dispatchEvent` — phép đo này gồm
       // cả lượt render lẫn lượt layout effect, đúng phần mà `memo` chặn.
-      setValue.call(input, '1'.repeat(i))
+      // Ô tiền bỏ phím làm vượt 9 chữ số, nên phím thứ mười sửa chữ số cuối thay vì thêm: phím nào
+      // cũng phải được nhận thì ngưỡng đo cho 10 phím mới còn đúng nghĩa.
+      setValue.call(input, i <= 9 ? '1'.repeat(i) : '111111112')
       input.dispatchEvent(new Event('input', { bubbles: true }))
     }
     return performance.now() - start
@@ -98,6 +100,6 @@ test(`gõ giá giữa danh mục ${ITEMS} món không trễ phím`, async ({ pag
   console.log(`Bảng giá: ${Math.round(elapsed)}ms cho ${KEYSTROKES} phím với ${ITEMS} món`)
 
   // Đo mà ô không nhận chữ thì con số ms vô nghĩa.
-  await expect(page.getByLabel('Món 100')).toHaveValue('1.111.111.111')
+  await expect(page.getByLabel('Món 100')).toHaveValue('111.111.112')
   expect(elapsed).toBeLessThan(BUDGET_MS)
 })
