@@ -18,6 +18,7 @@
     "test:e2e:recovery": "npm run build && npm run build:staging -- --outDir dist-next && npm run build:recovery && npm run test:e2e:recovery:built",
     "test:e2e:recovery:built": "playwright test --config playwright.recovery.config.ts",
     "test:live": "./robot/run.sh",
+    "test:live:headed": "ROBOT_HEADED=1 ./robot/run.sh",
     "test:live:recovery": "npm run build:recovery && ROBOT_APP_MODE=recovery ./robot/run.sh robot/recovery",
     "test:staging": "ROBOT_REMOTE=1 ./robot/run.sh",
     "test:regression": "./robot/run.sh -i regression robot/tests",

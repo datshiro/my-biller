@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { useItem, useItemGroups } from './use-items'
+import { useItem, useItemGroups, useItems } from './use-items'
 import { createItem, deactivateItem, deleteItem, updateItem } from '@/db/repositories/items'
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
@@ -28,6 +28,7 @@ function ItemForm({ item }: { item: Item | null }) {
   const navigate = useNavigate()
   const { state } = useLocation()
   const groups = useItemGroups() ?? []
+  const allItems = useItems() ?? []
 
   // Tên điền sẵn là mốc so, không phải chữ "chưa lưu": người bán chưa gõ gì trên màn này, hỏi lại
   // lúc họ bấm ✕ là hỏi về chữ của chính app.
@@ -43,6 +44,19 @@ function ItemForm({ item }: { item: Item | null }) {
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
   const [confirming, setConfirming] = useState(false)
   const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
+
+  // Chỉ xét khi tên đã đổi: món đã trùng tên từ trước khi có luật này vẫn phải sửa được giá.
+  const comparableName = name.trim().toLocaleLowerCase('vi')
+  const renamed = comparableName !== (item?.name ?? '').trim().toLocaleLowerCase('vi')
+  const duplicate =
+    comparableName && renamed
+      ? allItems.find(
+          (other) => other.id !== item?.id && other.name.trim().toLocaleLowerCase('vi') === comparableName,
+        )
+      : undefined
+  const duplicateError = duplicate
+    ? `Đã có món “${duplicate.name}”${duplicate.isActive === 1 ? '' : ' (đang ngừng bán)'}. Đặt tên khác để phiếu và báo cáo không lẫn hai món.`
+    : undefined
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
   const dirty =
@@ -60,7 +74,7 @@ function ItemForm({ item }: { item: Item | null }) {
       ...(unitPrice === null ? { unitPrice: 'Nhập giá bán.' } : {}),
     }
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0 || unitPrice === null) return
+    if (Object.keys(nextErrors).length > 0 || unitPrice === null || duplicateError) return
 
     void run(async () => {
       const payload = { name: trimmed, unitPrice, costPrice, unit: unit.trim(), groupId, note: note.trim() }
@@ -107,7 +121,7 @@ function ItemForm({ item }: { item: Item | null }) {
         value={name}
         autoFocus={!item}
         onChange={(event) => setName(event.target.value)}
-        error={errors.name}
+        error={errors.name ?? duplicateError}
         placeholder="Ví dụ: Phở bò đặc biệt"
       />
 
