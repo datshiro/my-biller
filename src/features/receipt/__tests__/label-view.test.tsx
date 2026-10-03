@@ -38,6 +38,19 @@ describe('LabelView', () => {
     expect(px(node.style.paddingLeft)).toBeCloseTo(25.6)
   })
 
+  it('logo góc trên phải: đầu tem chừa chỗ ngang và cao bằng logo, kể cả khi quán chưa đặt tên', () => {
+    const { container } = render(<LabelView {...base} shop={DEFAULT_SHOP} cornerLogo />)
+    const head = tem(container).querySelector('[data-label-head]') as HTMLElement
+    expect(head.style.minHeight).toBe('46px')
+    expect(head.style.paddingRight).toBe('50px')
+    expect(head.textContent).toContain('PBH-260926-A001')
+  })
+
+  it('không có logo góc thì đầu tem không bọc thêm gì', () => {
+    const { container } = render(<LabelView {...base} />)
+    expect(tem(container).querySelector('[data-label-head]')).toBeNull()
+  })
+
   it('không còn tên khách trên tem', () => {
     const { container } = render(<LabelView {...base} />)
     expect(tem(container).textContent).not.toContain('Chị Lan')

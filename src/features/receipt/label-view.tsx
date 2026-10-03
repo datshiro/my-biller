@@ -38,7 +38,20 @@ export function LabelView({
   const unit = labelUnit(size)
   const padding = labelPadding(size)
   const paddingLeft = labelPaddingLeft(size)
-  const headRoom = cornerLogo ? { paddingRight: cornerLogoSide(size) + 4 } : undefined
+
+  const head = (
+    <>
+      {shop.name ? (
+        <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
+          {shop.name}
+        </p>
+      ) : null}
+      {/* Không `truncate` mã đơn: nó là thứ khớp ly với đơn, cắt đuôi "…A001" là tem vô dụng. */}
+      <p className="break-all" style={{ fontSize: unit * 0.75 }}>
+        {order.code} · {format(order.soldAt, 'HH:mm dd/MM')}
+      </p>
+    </>
+  )
 
   return (
     <div
@@ -47,15 +60,18 @@ export function LabelView({
       className="flex flex-col overflow-hidden bg-white leading-tight text-ink"
       style={{ width, height, padding, paddingLeft }}
     >
-      {shop.name ? (
-        <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75, ...headRoom }}>
-          {shop.name}
-        </p>
-      ) : null}
-      {/* Không `truncate` mã đơn: nó là thứ khớp ly với đơn, cắt đuôi "…A001" là tem vô dụng. */}
-      <p className="break-all" style={{ fontSize: unit * 0.75, ...headRoom }}>
-        {order.code} · {format(order.soldAt, 'HH:mm dd/MM')}
-      </p>
+      {cornerLogo ? (
+        // Đầu tem cao ít nhất bằng logo góc, kể cả khi quán chưa đặt tên: tên món không được trồi lên dưới logo.
+        <div
+          data-label-head
+          className="shrink-0"
+          style={{ minHeight: cornerLogoSide(size), paddingRight: cornerLogoSide(size) + 4 }}
+        >
+          {head}
+        </div>
+      ) : (
+        head
+      )}
       <div style={{ borderTop: '2px solid currentColor', margin: `${unit * 0.15}px 0` }} />
       {/* Tên món to nhất: người pha nhìn tem biết ly nào là món gì. Dài thì xuống tối đa hai dòng. */}
       <p className="line-clamp-2 font-bold" style={{ fontSize: unit * 1.3 }}>

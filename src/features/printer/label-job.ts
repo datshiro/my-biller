@@ -3,8 +3,8 @@ import type { Bitmap } from '@/domain/escpos/bitmap'
 import { toBitmap } from '@/domain/escpos/threshold'
 import { labelSequence } from '@/domain/label-count'
 import type { LabelWatermark } from '@/domain/schema'
-import { counterBox, encodeLabels, labelDots, type LabelImage, type LabelSize } from '@/domain/tspl/encode'
-import { clearRect, compositeUnder, renderLogoLayer, STRENGTH_CELLS } from '@/domain/watermark'
+import { encodeLabels, labelDots, type LabelImage, type LabelSize } from '@/domain/tspl/encode'
+import { compositeUnder, renderLogoLayer, STRENGTH_CELLS } from '@/domain/watermark'
 import { watermarkBox } from '@/features/receipt/label-layout'
 
 export interface LabelWatermarkJob {
@@ -14,9 +14,10 @@ export interface LabelWatermarkJob {
 
 /**
  * Lớp logo cỡ đúng tem, dựng MỘT lần cho cả lệnh in. Giữa tem in chấm thưa theo mức đậm; logo nhỏ ở góc in đặc vì
- * làm mờ ở cỡ ~6 mm thì không còn nhận ra. Ô số thứ tự `i/n` (máy in tự vẽ đè lên ảnh) được xoá trắng, nới 4 chấm.
+ * làm mờ ở cỡ ~6 mm thì không còn nhận ra. Ô số thứ tự `i/n` không cần xoá: hộp logo không bao giờ xuống tới hàng đó
+ * (`label-layout.test.ts`).
  */
-export function buildWatermarkLayer(size: LabelSize, total: number, watermark: LabelWatermarkJob): Bitmap | null {
+export function buildWatermarkLayer(size: LabelSize, watermark: LabelWatermarkJob): Bitmap | null {
   const { config, logo } = watermark
   if (!config.enabled) return null
   const dots = labelDots(size)
@@ -26,13 +27,7 @@ export function buildWatermarkLayer(size: LabelSize, total: number, watermark: L
     watermarkBox(size, config.position),
     config.position === 'corner' ? { kind: 'solid' } : { kind: 'dither', cells: STRENGTH_CELLS[config.strength] },
   )
-  const counter = counterBox(size, total)
-  return clearRect(layer, {
-    x: counter.x - 4,
-    y: counter.y - 4,
-    width: dots.width - counter.x + 4,
-    height: dots.height - counter.y + 4,
-  })
+  return layer
 }
 
 /**
@@ -47,8 +42,7 @@ export async function buildLabelJob(
 ): Promise<Uint8Array> {
   await document.fonts.ready
   const dots = labelDots(size)
-  const total = items.reduce((sum, { copies }) => sum + Math.max(copies, 0), 0)
-  const layer = watermark ? buildWatermarkLayer(size, total, watermark) : null
+  const layer = watermark ? buildWatermarkLayer(size, watermark) : null
   // Chụp tuần tự như ảnh phiếu: song song thì máy yếu dễ hết bộ nhớ canvas.
   const captured: Bitmap[][] = []
   for (const { nodes, copies } of items) {

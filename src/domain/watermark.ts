@@ -125,14 +125,6 @@ export function renderLogoLayer(
   return out
 }
 
-export function clearRect(b: Bitmap, r: Rect): Bitmap {
-  const out = { ...b, data: b.data.slice() }
-  for (let y = Math.max(0, r.y); y < Math.min(b.height, r.y + r.height); y++) {
-    for (let x = Math.max(0, r.x); x < Math.min(b.width, r.x + r.width); x++) setBit(out, x, y, false)
-  }
-  return out
-}
-
 export function dilate(b: Bitmap, radius: number): Bitmap {
   const out = blank(b.width, b.height)
   for (let y = 0; y < b.height; y++) {

@@ -454,7 +454,7 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
-Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được
+Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được, chặn ảnh quá lớn
     [Documentation]    Logo lưu thành PNG đen trắng trong bản ghi shop của sổ chung (#51), nên đọc thẳng
     ...    IndexedDB chứ không chỉ tin ảnh xem trước: giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
     ...    Trần 40 000 ký tự vì oplog không bao giờ dọn và mỗi lần lưu thông tin quán chép logo hai lần.
@@ -475,6 +475,14 @@ Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ đư�
     Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
     ${logo}=    Đọc Logo Quán
     Should Be Equal As Integers    ${logo}[length]    0    Gỡ logo rồi mà sổ vẫn còn logo.
+
+    # Ảnh chụp camera (vài chục MB) bị chặn trước khi giải mã: giải mã cỡ gốc làm treo máy yếu.
+    ${quá_lớn}=    Set Variable    ${OUTPUT_DIR}/anh-qua-lon.png
+    Evaluate    open($quá_lớn, 'wb').write(bytes(6 * 1024 * 1024))
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${quá_lớn}
+    Chờ Thấy Chữ    Ảnh quá lớn
+    Get Element Count    css=[data-shop-logo-preview]    ==    0
 
 In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
     [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
@@ -566,8 +574,9 @@ In tem: logo đã cài nhưng tắt hình chìm thì tem y hệt khi chưa có l
     Should Be True    $gốc == $sau    TSPL đổi chỉ vì đã cài logo trong khi hình chìm đang tắt.
 
 In tem: logo nhỏ ở góc trên phải in đặc, tên quán vẫn in
-    [Documentation]    Chế độ góc in logo đặc cỡ ~6 mm (làm mờ ở cỡ đó thì không nhận ra) và hai dòng đầu tem
-    ...    chừa chỗ cho nó. Ô góc trên phải tem 50×30 là x 344–390, y 10–56.
+    [Documentation]    Chế độ góc in logo đặc cỡ ~6 mm (làm mờ ở cỡ đó thì không nhận ra) và đầu tem chừa chỗ cho
+    ...    nó, kể cả khi quán chưa đặt tên — không thì tên món trồi lên dưới logo. Ô góc trên phải tem
+    ...    50×30 là x 344–390, y 10–56.
     [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
     ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
     Cài Logo Quán
@@ -579,6 +588,13 @@ In tem: logo nhỏ ở góc trên phải in đặc, tên quán vẫn in
     Should Be True    ${góc_bật} > ${góc_tắt} + 300    Góc trên phải không có logo đặc.
     ${tên_quán}=    Đếm Mực Vùng    ${bật}    20    0    150    30
     Should Be True    ${tên_quán} > 0    Dòng tên quán biến mất khi có logo ở góc.
+
+    # Quán chưa đặt tên: đầu tem vẫn phải cao bằng logo, nếu không tên món trồi lên và bị khoét xuyên logo.
+    Xoá Thông Tin Quán
+    ${không_tên}=    In Tem Của Đơn    ${đơn}
+    ${góc_không_tên}=    Đếm Mực Vùng    ${không_tên}    340    10    392    58
+    Should Be Equal As Integers    ${góc_không_tên}    ${góc_bật}
+    ...    Quán chưa đặt tên thì chữ trên tem lấn vào logo góc.
 
 In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của một ly đi liền nhau và chung số
     [Documentation]    Trước đây ghi chú bị cắt ở hai dòng (`line-clamp`) nên người pha không thấy nửa sau.

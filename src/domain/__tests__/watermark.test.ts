@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bytesPerRow, type Bitmap } from '../escpos/bitmap'
 import {
-  clearRect,
   compositeUnder,
   cropBitmap,
   dilate,
@@ -94,16 +93,7 @@ describe('renderLogoLayer', () => {
   })
 })
 
-describe('clearRect / dilate / compositeUnder', () => {
-  it('clearRect xoá đúng vùng và không sửa bản gốc', () => {
-    const b = solid(10, 10)
-    const cleared = clearRect(b, { x: 2, y: 3, width: 4, height: 5 })
-    expect(countInk(cleared)).toBe(100 - 20)
-    expect(getBit(cleared, 2, 3)).toBe(false)
-    expect(getBit(cleared, 6, 3)).toBe(true)
-    expect(countInk(b)).toBe(100)
-  })
-
+describe('dilate / compositeUnder', () => {
   it('dilate nở đều 8 hướng', () => {
     const dot = withInk(9, 9, (x, y) => x === 4 && y === 4)
     expect(countInk(dilate(dot, 2))).toBe(25)
@@ -125,7 +115,6 @@ describe('clearRect / dilate / compositeUnder', () => {
       renderLogoLayer({ width: 13, height: 4 }, solid(13, 4), { x: 0, y: 0, width: 13, height: 4 }, { kind: 'solid' }),
       dilate(solid(13, 4), 2),
       compositeUnder(blank(13, 4), solid(13, 4), 1),
-      clearRect(solid(13, 4), { x: 0, y: 0, width: 1, height: 1 }),
     ]
     for (const b of results) {
       for (let y = 0; y < b.height; y++) expect(b.data[y * bytesPerRow(13) + 1]! & 0b00000111).toBe(0)

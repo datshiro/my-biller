@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cornerLogoSide, labelBodyStyle, lineBlocks, watermarkBox } from '../label-layout'
 import type { OrderLine } from '@/domain/schema'
-import { COUNTER_HEIGHT, labelDots, type LabelSize } from '@/domain/tspl/encode'
+import { counterBox, labelDots, type LabelSize } from '@/domain/tspl/encode'
 
 const size = { widthMm: 50, heightMm: 30, gapMm: 2 }
 const line = (over: Partial<OrderLine>) => ({ name: 'Cà phê sữa', note: '', options: [], toppings: [], ...over }) as OrderLine
@@ -58,7 +58,7 @@ describe('hộp logo trên tem', () => {
     expect(cornerLogoSide(size)).toBe(46)
   })
 
-  it.each(SIZES)('khổ $widthMm×$heightMm: hộp nằm trọn trong tem, hộp giữa không chạm hàng số thứ tự', (labelSize) => {
+  it.each(SIZES)('khổ $widthMm×$heightMm: hộp nằm trọn trong tem, hộp giữa không xuống tới hàng số thứ tự', (labelSize) => {
     const { width, height } = labelDots(labelSize)
     for (const position of ['center', 'corner'] as const) {
       const box = watermarkBox(labelSize, position)
@@ -69,7 +69,8 @@ describe('hộp logo trên tem', () => {
       expect(box.x + box.width).toBeLessThanOrEqual(width)
       expect(box.y + box.height).toBeLessThanOrEqual(height)
     }
+    // Số `i/n` máy in tự vẽ đè lên ảnh; logo không được xuống tới hàng đó (kể cả nới 4 chấm), nên không cần xoá ô.
     const center = watermarkBox(labelSize, 'center')
-    expect(center.y + center.height).toBeLessThanOrEqual(height - COUNTER_HEIGHT)
+    expect(center.y + center.height).toBeLessThanOrEqual(counterBox(labelSize, 999).y - 4)
   })
 })

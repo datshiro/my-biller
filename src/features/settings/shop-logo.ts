@@ -8,6 +8,11 @@ import { cropBitmap, inkBounds, renderLogoLayer } from '@/domain/watermark'
 /** Cạnh dài của logo đã lưu, theo chấm in. Đủ cho logo giữa tem 72×100 mà PNG đen trắng vẫn chỉ vài KB. */
 export const SHOP_LOGO_LONG_EDGE = 400
 const DECODE_LONG_EDGE = 1024
+/**
+ * Trình duyệt giải mã ảnh ở độ phân giải gốc trước khi co: ảnh chụp camera hàng chục megapixel cần vài trăm MB bộ nhớ
+ * và làm treo app trên máy yếu. Logo thật chỉ vài chục KB.
+ */
+export const SHOP_LOGO_MAX_FILE_BYTES = 5 * 1024 * 1024
 
 function bitmapOf(source: CanvasImageSource, width: number, height: number): Bitmap {
   const canvas = document.createElement('canvas')
@@ -27,6 +32,9 @@ function bitmapOf(source: CanvasImageSource, width: number, height: number): Bit
  * nhiều lề trắng), co cạnh dài về `SHOP_LOGO_LONG_EDGE`. Bản lưu chính là bản xem trước.
  */
 export async function logoDataUrlFromFile(file: Blob): Promise<string> {
+  if (file.size > SHOP_LOGO_MAX_FILE_BYTES) {
+    throw new Error('Ảnh quá lớn — chọn file logo dưới 5 MB, không phải ảnh chụp từ camera.')
+  }
   let image: ImageBitmap
   try {
     image = await createImageBitmap(file)
