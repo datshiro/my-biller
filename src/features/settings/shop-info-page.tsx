@@ -6,6 +6,7 @@ import { saveShop } from '@/db/repositories/settings'
 import type { LabelWatermark, ShopSettings } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { SelectChip } from '@/ui/chip'
+import { logoPlacement, type LogoPlacement } from '@/features/receipt/label-layout'
 import { ListSkeleton } from '@/ui/empty-state'
 import { FormScreen } from '@/ui/form-screen'
 import { TextField } from '@/ui/text-field'
@@ -25,9 +26,10 @@ function ReceiptPreview({ shop }: { shop: ShopSettings }) {
   )
 }
 
-const POSITIONS: { value: LabelWatermark['position']; label: string }[] = [
-  { value: 'center', label: 'Giữa tem' },
-  { value: 'corner', label: 'Góc trên phải' },
+const PLACEMENTS: { value: LogoPlacement; label: string; patch: Partial<LabelWatermark> }[] = [
+  { value: 'center', label: 'Giữa tem', patch: { position: 'center', align: 'center' } },
+  { value: 'right', label: 'Bên phải', patch: { position: 'center', align: 'right' } },
+  { value: 'corner', label: 'Góc trên phải', patch: { position: 'corner' } },
 ]
 
 const STRENGTHS: { value: LabelWatermark['strength']; label: string }[] = [
@@ -116,17 +118,17 @@ function LogoSection({
           {watermark.enabled ? (
             <>
               <div className="flex gap-2 overflow-x-auto">
-                {POSITIONS.map((option) => (
+                {PLACEMENTS.map((option) => (
                   <SelectChip
                     key={option.value}
-                    selected={watermark.position === option.value}
-                    onClick={() => onWatermark({ position: option.value })}
+                    selected={logoPlacement(watermark) === option.value}
+                    onClick={() => onWatermark(option.patch)}
                   >
                     {option.label}
                   </SelectChip>
                 ))}
               </div>
-              {watermark.position === 'center' ? (
+              {logoPlacement(watermark) !== 'corner' ? (
                 <div className="flex gap-2 overflow-x-auto">
                   {STRENGTHS.map((option) => (
                     <SelectChip

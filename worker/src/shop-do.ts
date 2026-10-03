@@ -864,6 +864,7 @@ export class ShopDO extends DurableObject<Env> {
    * Cùng bẫy với thực đơn nhóm món, nhưng nằm sâu một tầng trong `value` của bản ghi `shop`: máy bản cũ bỏ `logo` và
    * `labelWatermark` khi đọc, rồi lưu thông tin quán là đẩy lên cả bản ghi thiếu hai khoá — last-write-wins xoá logo
    * trên mọi máy. Máy mới luôn ghi đủ hai khoá (gỡ logo là `null` tường minh), nên thiếu hẳn khoá chỉ có thể là máy cũ.
+   * Cùng lẽ đó một tầng sâu hơn: bản 2.10.0 bỏ `labelWatermark.align`, lưu là kéo logo bên phải về giữa.
    */
   private preserveShopBranding(raw: SyncEvent, event: SyncEvent): SyncEvent {
     if (event.table !== 'settings' || event.entityKey !== 'shop' || !event.after || !raw.after) return event
@@ -873,6 +874,17 @@ export class ShopDO extends DurableObject<Env> {
     const value = { ...event.after.value }
     for (const field of ['logo', 'labelWatermark']) {
       if (!(field in rawValue) && field in storedValue) value[field] = storedValue[field]
+    }
+    const rawWatermark = rawValue.labelWatermark
+    const storedWatermark = storedValue.labelWatermark
+    if (
+      isRecord(rawWatermark) &&
+      !('align' in rawWatermark) &&
+      isRecord(storedWatermark) &&
+      'align' in storedWatermark &&
+      isRecord(value.labelWatermark)
+    ) {
+      value.labelWatermark = { ...value.labelWatermark, align: storedWatermark.align }
     }
     return { ...event, after: { ...event.after, value } }
   }

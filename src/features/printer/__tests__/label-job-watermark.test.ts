@@ -7,7 +7,12 @@ import { getBit } from '@/domain/watermark'
 import { watermarkBox } from '@/features/receipt/label-layout'
 
 const logo: Bitmap = { width: 40, height: 40, data: new Uint8Array(bytesPerRow(40) * 40).fill(0xff) }
-const on = (position: LabelWatermark['position']): LabelWatermark => ({ enabled: true, position, strength: 'medium' })
+const on = (position: LabelWatermark['position'], align: LabelWatermark['align'] = 'center'): LabelWatermark => ({
+  enabled: true,
+  position,
+  strength: 'medium',
+  align,
+})
 
 function inkIn(b: Bitmap, x0: number, y0: number, x1: number, y1: number): number {
   let ink = 0
@@ -35,6 +40,17 @@ describe('lớp logo của một lệnh in tem', () => {
     const layer = buildWatermarkLayer(size, { logo, config: on('corner') })
     const box = watermarkBox(size, 'corner')
     expect(layer && inkIn(layer, box.x, box.y, box.x + box.width, box.y + box.height)).toBe(box.width * box.height)
+  })
+
+  it('bên phải tem 50×30: chấm thưa chỉ ở nửa phải, nửa trái không có mực logo', () => {
+    const layer = buildWatermarkLayer(tem50x30, { logo, config: on('center', 'right') })
+    const box = watermarkBox(tem50x30, 'right')
+    const center = watermarkBox(tem50x30, 'center')
+    expect(layer && inkIn(layer, 0, 0, center.x + Math.floor(center.width / 2), 240)).toBe(0)
+    const inBox = layer ? inkIn(layer, box.x, box.y, box.x + box.width, box.y + box.height) : 0
+    // Chấm thưa mức Vừa (5/16), không phải in đặc như góc.
+    expect(inBox).toBeGreaterThan(0)
+    expect(inBox).toBeLessThan((box.width * box.height) / 2)
   })
 
   it('tem 72×100: lớp đúng khổ tem', () => {

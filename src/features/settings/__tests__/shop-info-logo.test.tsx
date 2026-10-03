@@ -60,12 +60,25 @@ describe('logo cửa hàng trong Thông tin cửa hàng', () => {
     expect(screen.queryByRole('button', { name: 'Vừa' })).toBeNull()
     await lưu()
     await waitFor(async () =>
-      expect((await getShop()).labelWatermark).toEqual({ enabled: true, position: 'corner', strength: 'light' }),
+      expect((await getShop()).labelWatermark).toEqual({ enabled: true, position: 'corner', strength: 'light', align: 'center' }),
+    )
+  })
+
+  it('bên phải: logo chìm dồn nửa phải, vẫn chọn được mức đậm', async () => {
+    renderPage()
+    await chọnẢnh()
+    await userEvent.click(screen.getByLabelText('In logo chìm trên tem'))
+    await userEvent.click(screen.getByRole('button', { name: 'Bên phải' }))
+    expect(screen.getByRole('button', { name: 'Bên phải' }).getAttribute('aria-pressed')).toBe('true')
+    await userEvent.click(screen.getByRole('button', { name: 'Đậm' }))
+    await lưu()
+    await waitFor(async () =>
+      expect((await getShop()).labelWatermark).toEqual({ enabled: true, position: 'center', strength: 'dark', align: 'right' }),
     )
   })
 
   it('gỡ logo → lưu → sổ không còn logo và hình chìm tắt', async () => {
-    await saveShop({ logo: LOGO, labelWatermark: { enabled: true, position: 'center', strength: 'dark' } })
+    await saveShop({ logo: LOGO, labelWatermark: { enabled: true, position: 'center', strength: 'dark', align: 'center' } })
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Gỡ logo' }))
     expect(screen.queryByAltText('Logo sẽ in (đen trắng)')).toBeNull()

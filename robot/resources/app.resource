@@ -263,8 +263,8 @@ Mở Chi Tiết Đơn Mới Nhất
 
 Cài Logo Quán
     [Documentation]    Chọn ảnh mẫu tổng hợp `logo-mau.png` (repo public — không dùng logo thật của quán) ở
-    ...    Thông tin cửa hàng. `${vị_trí}` = chữ trên nút vị trí ("Giữa tem"/"Góc trên phải") thì bật luôn
-    ...    hình chìm; `${mức}` = "Nhạt"/"Vừa"/"Đậm" (chỉ có ở giữa tem). Lưu xong màn tự lùi — chờ theo URL,
+    ...    Thông tin cửa hàng. `${vị_trí}` = chữ trên nút vị trí ("Giữa tem"/"Bên phải"/"Góc trên phải") thì
+    ...    bật luôn hình chìm; `${mức}` = "Nhạt"/"Vừa"/"Đậm" (không có ở góc trên phải). Lưu xong màn tự lùi — chờ theo URL,
     ...    xem `Xoá Thông Tin Quán`.
     [Arguments]    ${vị_trí}=${None}    ${mức}=${None}
     Mở Màn    /them/cai-dat

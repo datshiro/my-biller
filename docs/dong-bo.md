@@ -37,6 +37,12 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   bỏ hai trường khi đọc rồi lưu thông tin quán là đẩy lên bản ghi thiếu hai khoá, nên Worker chép giá trị
   đang lưu vào (`preserveShopBranding`); máy mới luôn ghi đủ hai khoá, gỡ logo là `null` tường minh. Cả bản
   ghi vẫn là last-write-wins, và gộp sổ lấy cài đặt của sổ A.
+- `labelWatermark.align` (`center`/`right`, mặc định `center`) chọn logo chìm giữa tem hay dồn nửa phải. Là
+  trường riêng chứ không thêm giá trị vào `position`: bản 2.10.0 gặp giá trị enum lạ thì không parse nổi bản ghi
+  shop và kẹt đồng bộ, còn trường lạ chỉ bị bỏ qua (máy 2.10.0 in căn giữa). Cùng guard Worker giữ `align` đang
+  lưu khi máy 2.10.0 lưu cấu hình hình chìm thiếu khoá này. Hệ quả khi các máy chạy lẫn bản: máy 2.10.0 không đưa
+  được logo bên phải về giữa (bấm "Giữa tem" ở đó vẫn giữ `right`) — đổi vị trí từ máy đã cập nhật.
+  `getShop()` trộn mặc định từng trường của `labelWatermark` vì dòng IndexedDB do 2.10.0 ghi không qua schema mới.
 
 ## Đường ghi và đọc
 

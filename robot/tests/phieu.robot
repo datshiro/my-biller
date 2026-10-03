@@ -462,7 +462,7 @@ Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ đư�
     ${logo}=    Đọc Logo Quán
     Should Be True    ${logo}[png]    Logo trong sổ không phải data URL PNG.
     Should Be True    0 < ${logo}[length] < 40000    Logo trong sổ dài ${logo}[length] ký tự.
-    Should Be Equal    ${logo}[watermark]    {"enabled":false,"position":"center","strength":"light"}
+    Should Be Equal    ${logo}[watermark]    {"enabled":false,"position":"center","strength":"light","align":"center"}
 
     Reload
     Mở Màn    /them/cai-dat
@@ -557,6 +557,28 @@ In tem: hình chìm giữa tem thêm logo chấm thưa mà số thứ tự vẫn
     ${tspl}=    Evaluate    base64.b64decode($bật).decode('latin-1')    modules=base64
     Should Contain    ${tspl}    "1/3"
     Should Contain    ${tspl}    "3/3"
+    ${số_tắt}=    Đếm Mực Vùng    ${tắt}    300    200    400    240
+    ${số_bật}=    Đếm Mực Vùng    ${bật}    300    200    400    240
+    Should Be Equal As Integers    ${số_bật}    ${số_tắt}    Logo lấn vào ô số thứ tự.
+
+In tem: hình chìm bên phải chỉ thêm mực ở nửa phải, nửa trái giữ nguyên
+    [Documentation]    Vị trí "Bên phải" là logo chìm chấm thưa dồn về nửa phải vùng chữ, cùng chiều cao với giữa
+    ...    tem. So cùng một đơn in hai lần (logo đã cài nhưng tắt, rồi bật Bên phải mức Vừa): nửa phải thêm mực,
+    ...    nửa trái — nơi tên món và ghi chú bắt đầu — không đổi một chấm; ô số `i/n` không bị logo lấn.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
+    Cài Logo Quán
+    ${tắt}=    In Tem Của Đơn    ${đơn}
+    Cài Logo Quán    Bên phải    Vừa
+    ${bật}=    In Tem Của Đơn    ${đơn}
+
+    ${phải_tắt}=    Đếm Mực Vùng    ${tắt}    220    30    390    190
+    ${phải_bật}=    Đếm Mực Vùng    ${bật}    220    30    390    190
+    Should Be True    ${phải_bật} > ${phải_tắt} + 200
+    ...    Nửa phải tem chỉ thêm ${phải_bật} - ${phải_tắt} chấm mực — logo chìm bên phải không lên tem.
+    ${trái_tắt}=    Đếm Mực Vùng    ${tắt}    0    0    200    240
+    ${trái_bật}=    Đếm Mực Vùng    ${bật}    0    0    200    240
+    Should Be Equal As Integers    ${trái_bật}    ${trái_tắt}    Logo bên phải lấn sang nửa trái tem.
     ${số_tắt}=    Đếm Mực Vùng    ${tắt}    300    200    400    240
     ${số_bật}=    Đếm Mực Vùng    ${bật}    300    200    400    240
     Should Be Equal As Integers    ${số_bật}    ${số_tắt}    Logo lấn vào ô số thứ tự.

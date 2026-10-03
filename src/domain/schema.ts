@@ -245,7 +245,7 @@ export const DEFAULT_SHOP: ShopSettings = {
   address: '',
   footerNote: 'Cảm ơn quý khách!',
   logo: null,
-  labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+  labelWatermark: { enabled: false, position: 'center', strength: 'light', align: 'center' },
 }
 
 export const DEFAULT_APP_STATE: AppState = {
