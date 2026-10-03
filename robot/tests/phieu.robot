@@ -484,6 +484,52 @@ Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ đư�
     Chờ Thấy Chữ    Ảnh quá lớn
     Get Element Count    css=[data-shop-logo-preview]    ==    0
 
+Thông tin quán: tem xem trước đổi theo vị trí và mức đậm của logo chìm
+    [Documentation]    Trước đây ảnh xem trước chỉ có logo đứng một mình nên Giữa tem và Bên phải trông giống hệt
+    ...    nhau (#60). Tem xem trước giờ dựng bằng chính đường in; ca này đọc điểm ảnh của canvas trên Chrome thật,
+    ...    theo vùng, như ca "In tem:" đọc byte TSPL. Tem 50×30 = 400×240 chấm: nửa trái x 0–200, nửa phải
+    ...    x 220–390, ô góc trên phải x 340–392 × y 10–58. So `trái_góc == trái_gốc` tuyệt đối dựa vào việc đầu tem
+    ...    chế độ góc chỉ chừa chỗ bên phải (`label-view.tsx`) mà không làm dịch chữ ở nửa trái — đổi bố cục đầu tem
+    ...    thì sửa phép so này chứ đừng nới nó.
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${CURDIR}/../resources/logo-mau.png
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_gốc}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_gốc}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    ${góc_gốc}=    Đếm Mực Tem Xem Trước    340    10    392    58
+
+    Check Checkbox    css=[data-label-watermark] input[type="checkbox"]
+    Click    css=[data-label-watermark] button:text-is("Giữa tem")
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_giữa}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_giữa}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be True    ${trái_giữa} > ${trái_gốc} + 200    Giữa tem không có logo ở nửa trái.
+    Should Be True    ${phải_giữa} > ${phải_gốc} + 200    Giữa tem không có logo ở nửa phải.
+
+    Click    css=[data-label-watermark] button:text-is("Bên phải")
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_phải}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_phải}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be Equal As Integers    ${trái_phải}    ${trái_gốc}    Bên phải mà nửa trái tem vẫn có logo.
+    Should Be True    ${phải_phải} > ${phải_gốc} + 200    Bên phải không có logo ở nửa phải.
+    Should Be True    ${trái_giữa} > ${trái_phải}    Giữa tem và Bên phải cho cùng một ảnh xem trước.
+
+    Click    css=[data-label-watermark] button:text-is("Nhạt")
+    Chờ Tem Xem Trước Dựng Xong
+    ${phải_nhạt}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Click    css=[data-label-watermark] button:text-is("Đậm")
+    Chờ Tem Xem Trước Dựng Xong
+    ${phải_đậm}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be True    ${phải_đậm} > ${phải_nhạt}    Mức Đậm không nhiều mực hơn mức Nhạt.
+
+    Click    css=[data-label-watermark] button:text-is("Góc trên phải")
+    Chờ Tem Xem Trước Dựng Xong
+    ${góc}=    Đếm Mực Tem Xem Trước    340    10    392    58
+    ${trái_góc}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    Should Be True    ${góc} > ${góc_gốc} + 300    Góc trên phải không có logo đặc.
+    Should Be Equal As Integers    ${trái_góc}    ${trái_gốc}    Logo góc lấn sang nửa trái tem.
+
 In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
     [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
     ...    IN TEM thật và đọc được đúng byte TSPL app định gửi. Số tem đối chiếu với orderLines trong
@@ -741,6 +787,22 @@ In tem: trên web không có nút IN TEM, khổ tem lưu được và còn sau k
     Should Be Equal    ${rộng}    50
 
 *** Keywords ***
+Chờ Tem Xem Trước Dựng Xong
+    [Documentation]    Canvas tem xem trước dựng lại sau mỗi lần đổi cấu hình (có trễ ngắn để khỏi dựng theo từng phím
+    ...    gõ). `data-ready` về false ngay khi cấu hình đổi, nên chờ true là chờ đúng ảnh của cấu hình mới.
+    Wait For Elements State    css=canvas[data-label-preview][data-ready="true"]    attached    timeout=15s
+
+Đếm Mực Tem Xem Trước
+    [Documentation]    Số chấm tối trong vùng [x0, x1) × [y0, y1) của canvas tem xem trước (400×240 chấm).
+    [Arguments]    ${x0}    ${y0}    ${x1}    ${y1}
+    ${mực}=    Evaluate JavaScript    css=canvas[data-label-preview]
+    ...    (canvas, [x0, y0, x1, y1]) => { const { data, width } = canvas.getContext('2d')
+    ...    .getImageData(0, 0, canvas.width, canvas.height); let ink = 0;
+    ...    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (data[(y * width + x) * 4] < 128) ink++
+    ...    return ink }
+    ...    arg=${{ [int($x0), int($y0), int($x1), int($y1)] }}
+    RETURN    ${mực}
+
 Cài Máy In Tem Và Chốt Đơn Ba Ly
     [Documentation]    Máy in tem LAN giả ở 192.168.1.60, khổ mặc định 50×30, rồi chốt một đơn ba ly (Trà đá ×2,
     ...    Cà phê sữa) như ca "In tem: mỗi phần một tem…". Trả về đơn vừa chốt.

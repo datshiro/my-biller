@@ -37,6 +37,22 @@ function setBit(b: Bitmap, x: number, y: number, ink: boolean): void {
   b.data[k] = ink ? (b.data[k] ?? 0) | mask : (b.data[k] ?? 0) & ~mask
 }
 
+/** Bitmap 1-bit → RGBA đen/trắng để vẽ lên canvas: dùng cho ảnh tem xem trước, đúng từng chấm sẽ in. */
+export function bitmapToRgba(b: Bitmap): Uint8ClampedArray<ArrayBuffer> {
+  const out = new Uint8ClampedArray(b.width * b.height * 4)
+  for (let y = 0; y < b.height; y++) {
+    for (let x = 0; x < b.width; x++) {
+      const i = (y * b.width + x) * 4
+      const level = getBit(b, x, y) ? 0 : 255
+      out[i] = level
+      out[i + 1] = level
+      out[i + 2] = level
+      out[i + 3] = 255
+    }
+  }
+  return out
+}
+
 export function inkBounds(b: Bitmap): Rect | null {
   let minX = b.width
   let minY = b.height
