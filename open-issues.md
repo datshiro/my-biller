@@ -229,3 +229,33 @@
   tên món, ghi chú, mã đơn và `i/n` đọc rõ. Máy rơi chấm lẻ → đổi tra Bayer sang `BAYER[y & 3][(x >> 1) & 3]`
   (ô rộng 2 chấm, cùng độ phủ) trong `src/domain/watermark.ts`. In đậm hơn mong đợi → hạ `STRENGTH_CELLS`
   3/5/8 → 2/4/6.
+
+### ISSUE-014 — Lưu file vào Tải về trong APK chưa nghiệm trên máy thật; nhánh API 24–28 chưa nghiệm
+- State: deferred
+- Severity: medium
+- Raised by / Date: lượt thi công #48 (cửa ra file `saveToDownloads`) / 04/10/2026
+- Related task: #48 sao lưu & khôi phục — plugin `DownloadFile` (`android/app/src/main/java/dev/datshiro/mybiller/DownloadFilePlugin.java`)
+- Description: Plugin mới chỉ được chứng là biên dịch (`./gradlew assembleDebug`) và lái bằng cầu nối Capacitor giả
+  trong Robot (`robot/libraries/gia-lap-apk.cjs`). Chưa nghiệm trên máy thật: (a) API 29+ ghi qua `MediaStore.Downloads`
+  (`IS_PENDING`, đọc lại `DISPLAY_NAME` khi trùng tên — One UI trên S25), cả `application/json` lẫn
+  `text/csv;charset=utf-8`; (b) **chưa nghiệm API 24–28**: nhánh ghi thẳng `Download/` với quyền
+  `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion="28"`), hộp xin quyền và câu "Chưa cho phép ghi vào bộ nhớ, nên chưa lưu
+  được file." khi người bán từ chối — không có máy hay emulator API ≤ 28 trong tay.
+- Mitigation: Phase nghiệm thu của #48: S25 sao lưu hai lần ⇒ hai file trong Files › Tải xuống, lần hai bị đổi tên và
+  app hiện đúng tên đó. API 24–28: emulator API 28 nếu dựng được; không thì ghi "chưa nghiệm" trong báo cáo nghiệm
+  thu và giữ issue này.
+
+### ISSUE-015 — Gộp file sao lưu: ba điểm review để sau (mã đổi hai lần, chi phí xem trước, phạm vi cảnh báo Thêm riêng)
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập đường Gộp của #48 (APPROVE-WITH-FIXES) / 04/10/2026
+- Related task: #48 sao lưu & khôi phục — `src/domain/backup-merge.ts`, `src/features/settings/merge-preview-sheet.tsx`
+- Description:
+  (a) Một đơn đã được cấp mã mới ở lần gộp trước, nếu file sau mang bản mới hơn của chính đơn đó (hai máy chưa
+  ghép cùng chữ) thì bị cấp mã lần nữa; mã mới có thể khác lần trước và `originalCode` không giữ mã trung gian.
+  (b) `previewMerge` gộp lại 1 + 3×số xung đột lần mỗi khi đổi một lựa chọn; đo trên Mac: 80 ms với 4.000 đơn và
+  20 xung đột — chưa đo trên S25.
+  (c) Câu "phần dư mất khỏi công nợ" dưới *Thêm riêng* hiện mỗi khi dòng file đã trừ vào một đơn, kể cả khi đơn đó
+  trên máy đã huỷ (khi ấy `recalcAll` đưa khoản thêm về chưa trừ, phần dư không mất) — cảnh báo rộng hơn thực tế.
+- Mitigation: (b) đo trên S25 ở phase nghiệm thu; chậm thì chỉ tính hiệu ứng của một thẻ khi mở thẻ. (a), (c) chờ có
+  ca thật; số tiền không sai trong cả ba trường hợp, báo cáo đối chiếu sau ghi vẫn bắt lệch.

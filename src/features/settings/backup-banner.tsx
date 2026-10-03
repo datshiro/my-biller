@@ -32,7 +32,7 @@ export function BackupBanner() {
       <p className="min-w-0 flex-1 font-semibold">
         {days === null ? 'Chưa sao lưu lần nào.' : `Đã ${days} ngày chưa sao lưu.`} Mất máy là mất
         sạch dữ liệu.{' '}
-        <Link to="/them/cai-dat" className="underline">
+        <Link to="/them/sao-luu" className="underline">
           Sao lưu ngay
         </Link>
       </p>

@@ -1,4 +1,6 @@
+import { format } from 'date-fns'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { getRestoreBlock } from '@/db/backup'
 import { getLedgerOverview, getSyncAnchor } from '@/db/doi-soat-snapshot'
 import { getAppState, getShop } from '@/db/repositories/settings'
 import {
@@ -44,4 +46,17 @@ export function useSyncAnchor() {
 
 export function useLedgerOverview() {
   return useLiveQuery(() => getLedgerOverview())
+}
+
+/** Dòng "lần sao lưu cuối" — dùng chung cho màn Sao lưu & khôi phục và dòng dẫn tới nó ở Cài đặt. */
+export function useLastBackupLine(): string {
+  const state = useAppState()
+  if (state === undefined) return '…'
+  if (state.lastBackupAt === null) return 'Chưa sao lưu lần nào'
+  return `Lần cuối: ${format(state.lastBackupAt, "HH:mm 'ngày' d/M/yyyy")}`
+}
+
+/** Vì sao máy này không khôi phục từ file được; `undefined` khi chưa đọc xong, `null` khi không bị chặn. */
+export function useRestoreBlock() {
+  return useLiveQuery(() => getRestoreBlock())
 }

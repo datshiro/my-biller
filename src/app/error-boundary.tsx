@@ -1,13 +1,14 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { isDbUnavailableError } from '@/db/db-block'
 import { exportBackup } from '@/features/settings/backup'
+import { describeSavedFile } from '@/features/settings/download-sink'
 import { Button } from '@/ui/button'
 
 type State = { error: Error | null; rescue: string | null; rescuing: boolean }
 
 /**
  * Chắn cuối. Khi cây React sập, đường sao lưu thường dùng
- * (Thêm → Cài đặt → SAO LƯU RA FILE) cũng sập theo. Màn này gọi thẳng `exportBackup`, không đi qua
+ * (Thêm → Cài đặt → Sao lưu & khôi phục → SAO LƯU RA FILE) cũng sập theo. Màn này gọi thẳng `exportBackup`, không đi qua
  * router hay state của app, nên vẫn tải được bản sao cục bộ kể cả lúc mọi màn đã trắng.
  *
  * Trừ một trường hợp: chính Dexie là chỗ hỏng. `exportBackup` đi qua `db.transaction`, nên lúc đó nút
@@ -28,12 +29,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   private rescue = async (): Promise<void> => {
     this.setState({ rescuing: true, rescue: null })
     try {
-      const { filename, importable, problem } = await exportBackup(Date.now())
+      const outcome = await exportBackup(Date.now())
       this.setState({
         rescuing: false,
-        rescue: importable
-          ? `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}". Kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`
-          : `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}", nhưng file này KHÔNG nhập lại được: ${problem} Giữ file lại và sửa tay chỗ đó. Hãy kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`,
+        rescue: outcome.importable
+          ? describeSavedFile(outcome)
+          : `${describeSavedFile(outcome)} Nhưng file này KHÔNG nhập lại được: ${outcome.problem} Giữ file lại và sửa tay chỗ đó.`,
       })
     } catch (caught) {
       this.setState({

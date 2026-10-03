@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { exportBackup, wipeEverything } from './backup'
+import { exportBackup, wipeEverything, type BackupOutcome } from './backup'
+import { describeSavedFile } from './download-sink'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { Sheet } from '@/ui/sheet'
@@ -12,8 +13,8 @@ const CONFIRM_WORD = 'XOA'
  * được thì thêm cửa thứ ba nói thẳng ra là xoá bây giờ mất hẳn.
  */
 type WipeStep =
-  | { phase: 'seen'; filename: string; problem: string | null }
-  | { phase: 'accept'; filename: string; problem: string }
+  | { phase: 'seen'; saved: BackupOutcome; problem: string | null }
+  | { phase: 'accept'; saved: BackupOutcome; problem: string }
 
 /**
  * Bắt gõ chữ chứ không chỉ bấm "Đồng ý": xoá sạch là thao tác không có Undo, và người bán đang cầm
@@ -31,8 +32,8 @@ export function DangerZone() {
     setBusy(true)
     setError(null)
     try {
-      const { filename, problem } = await exportBackup(Date.now())
-      setStep({ phase: 'seen', filename, problem })
+      const saved = await exportBackup(Date.now())
+      setStep({ phase: 'seen', saved, problem: saved.problem })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không sao lưu được. Chưa xoá gì cả.')
     } finally {
@@ -111,14 +112,14 @@ export function DangerZone() {
           title="Đã thấy file trong máy chưa?"
           message={
             step.problem === null
-              ? `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file trước khi bấm tiếp; thiết bị có thể đổi tên nếu bị trùng. Sau bước này không lấy lại được gì.`
-              : `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file; thiết bị có thể đổi tên nếu bị trùng. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
+              ? `${describeSavedFile(step.saved)} Mở file trong thư mục Tải về trước khi bấm tiếp. Sau bước này không lấy lại được gì.`
+              : `${describeSavedFile(step.saved)} Mở file trong thư mục Tải về. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
           }
           confirmLabel={step.problem === null ? 'Đã thấy — xoá tất cả' : 'Đã thấy — đọc tiếp'}
           onConfirm={() =>
             step.problem === null
               ? void wipe()
-              : setStep({ phase: 'accept', filename: step.filename, problem: step.problem })
+              : setStep({ phase: 'accept', saved: step.saved, problem: step.problem })
           }
           onCancel={() => setStep(null)}
         />
@@ -130,7 +131,7 @@ export function DangerZone() {
       {step?.phase === 'accept' ? (
         <ConfirmDialog
           title="Bản sao an toàn KHÔNG nhập lại được"
-          message={`${step.problem} Xoá bây giờ là mất hẳn; bản sao có tên đề xuất "${step.filename}" không dựng lại sổ được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi xoá sau.`}
+          message={`${step.problem} Xoá bây giờ là mất hẳn; bản sao "${step.saved.savedAs}" không dựng lại sổ được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi xoá sau.`}
           confirmLabel="Vẫn xoá — mất cũng được"
           onConfirm={() => void wipe()}
           onCancel={() => setStep(null)}

@@ -285,9 +285,22 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
     ...    thể làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy.
     Chọn Máy A
     Mở Màn    /them/cai-dat
+    Chờ Thấy Chữ    Sao lưu & khôi phục
     Không Được Thấy Chữ    Xoá toàn bộ dữ liệu
+    ${outbox_trước}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+    ${máy_trước}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    Mở Màn    /them/sao-luu
+    Chờ Thấy Chữ    Máy này đã ghép sổ chung
+    Chờ Thấy Chữ    làm trên một máy chưa ghép
+    Wait For Elements State    css=button:text-is("Kéo lại từ đầu")    visible
     Không Được Thấy Chữ    Nhập từ file sao lưu
-    Chờ Thấy Chữ    Kéo lại từ đầu
+    Không Được Thấy Chữ    huỷ ghép
+    ${outbox_sau}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+    ${máy_sau}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    Should Be Equal    ${outbox_sau}    ${outbox_trước}    Mở màn sao lưu trên máy đã ghép mà outbox đổi.
+    ${khoá_trước}=    Evaluate    sorted(row['key'] for row in $máy_trước if row['key'] != 'lease')
+    ${khoá_sau}=    Evaluate    sorted(row['key'] for row in $máy_sau if row['key'] != 'lease')
+    Should Be Equal    ${khoá_sau}    ${khoá_trước}    Mở màn sao lưu trên máy đã ghép mà deviceState đổi.
 
     Mở Màn    /them/mat-hang/moi
     Điền Ô    Tên mặt hàng *    Món đang chờ mạng
@@ -304,7 +317,7 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
 
 File sao lưu ở máy đã ghép không chứa token hay mã máy
     [Documentation]    Khóa đường rò chìa khóa qua file người bán có thể gửi bằng Zalo.
-    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/cai-dat
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/sao-luu
     ${promise}=    Promise To Wait For Download
     Bấm Nút    SAO LƯU RA FILE
     ${download}=    Wait For    ${promise}
@@ -333,11 +346,17 @@ Máy bị thu hồi không ghi được vào sổ chung
     ...    Món từ máy bị thu hồi    ${MÁY_A_PAGE}
     Mặt Hàng Không Được Tồn Tại    Món từ máy bị thu hồi    ${MÁY_B_PAGE}
 
+    # Máy bị thu hồi không được thấy nút nhập file: ghi đè ở đây làm sổ máy lệch hẳn với sổ chung.
+    Mở Màn    /them/sao-luu
+    Chờ Thấy Chữ    Máy này đã bị thu hồi khỏi sổ chung
+    Chờ Thấy Chữ    Cài đặt › Máy bán hàng
+    Không Được Thấy Chữ    Nhập từ file sao lưu
+
 Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
     [Documentation]    Xóa bản sao đọc không được làm đổi tổng đã thu hay công nợ của máy B.
     ${payments_trước}=    Đọc Bảng    payments    ${MÁY_B_PAGE}
     ${tổng_trước}=    Evaluate    sum(row['amount'] for row in $payments_trước)
-    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/cai-dat
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/sao-luu
     Bấm Nút    Kéo lại từ đầu
 
     Wait Until Keyword Succeeds    60x    500ms    Bảng Máy Phải Có Số Dòng
