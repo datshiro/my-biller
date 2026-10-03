@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { COUNTER_HEIGHT, counterBox, labelDots, type LabelSize } from '@/domain/tspl/encode'
 import type { LabelBlock } from '@/domain/label-pages'
 import type { Order, OrderLine, ShopSettings } from '@/domain/schema'
-import { labelBodyStyle, labelPadding, labelPaddingLeft, labelUnit } from './label-layout'
+import { cornerLogoSide, labelBodyStyle, labelPadding, labelPaddingLeft, labelUnit } from './label-layout'
 
 /**
  * DOM của một tem, 1px = 1 chấm máy in nên chụp ra đúng khổ. Một ly có ghi chú dài ra nhiều tem: mỗi tem
@@ -18,6 +18,7 @@ export function LabelView({
   blocks,
   page,
   pageCount,
+  cornerLogo = false,
   innerRef,
 }: {
   shop: ShopSettings
@@ -29,12 +30,15 @@ export function LabelView({
   blocks: readonly LabelBlock[]
   page: number
   pageCount: number
+  /** Logo nhỏ ở góc trên phải (ghép sau khi chụp): hai dòng đầu tem chừa chỗ để chữ không chui dưới logo. */
+  cornerLogo?: boolean
   innerRef?: React.Ref<HTMLDivElement>
 }) {
   const { width, height } = labelDots(size)
   const unit = labelUnit(size)
   const padding = labelPadding(size)
   const paddingLeft = labelPaddingLeft(size)
+  const headRoom = cornerLogo ? { paddingRight: cornerLogoSide(size) + 4 } : undefined
 
   return (
     <div
@@ -44,12 +48,12 @@ export function LabelView({
       style={{ width, height, padding, paddingLeft }}
     >
       {shop.name ? (
-        <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
+        <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75, ...headRoom }}>
           {shop.name}
         </p>
       ) : null}
       {/* Không `truncate` mã đơn: nó là thứ khớp ly với đơn, cắt đuôi "…A001" là tem vô dụng. */}
-      <p className="break-all" style={{ fontSize: unit * 0.75 }}>
+      <p className="break-all" style={{ fontSize: unit * 0.75, ...headRoom }}>
         {order.code} · {format(order.soldAt, 'HH:mm dd/MM')}
       </p>
       <div style={{ borderTop: '2px solid currentColor', margin: `${unit * 0.15}px 0` }} />

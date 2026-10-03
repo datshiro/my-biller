@@ -13,6 +13,7 @@ import { buildReceiptJob } from '../printer/print-job'
 import { readPrinterConfig } from '../printer/printer-config'
 import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
 import { buildReceiptRawbtHref } from '../printer/rawbt-href'
+import { decodeLogo } from '../settings/shop-logo'
 import { labelCopies, labelCount } from '@/domain/label-count'
 import { paginateLines } from '@/domain/receipt-pages'
 import type { OrderLine } from '@/domain/schema'
@@ -194,7 +195,11 @@ export function ReceiptPage() {
     labelLock.current = true
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
-      await nativeSink(await buildLabelJob(items, cfg), cfg)
+      const watermark =
+        shop.logo && shop.labelWatermark.enabled
+          ? { logo: await decodeLogo(shop.logo), config: shop.labelWatermark }
+          : null
+      await nativeSink(await buildLabelJob(items, cfg, watermark), cfg)
       // Ghi chú dài ra thêm tem tiếp nên số tờ thật có thể nhiều hơn số ly; nói rõ để người bán không đếm lệch.
       const cups = copies.reduce((sum, n) => sum + n, 0)
       const sheets = items.reduce((sum, { nodes, copies }) => sum + nodes.length * copies, 0)

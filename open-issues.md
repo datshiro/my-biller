@@ -215,3 +215,17 @@
   thao tác sau mang mốc đã lệch. `src/db/recalc.ts:23-34` đang lách cùng hành vi bằng hai lần `update`.
 - Mitigation: đề xuất `verbatimWrites.add(transaction)` trong `applyEvents`, kèm ca Vitest và review riêng;
   gộp cách lách ở `recalc.ts` về cùng cơ chế. Chưa làm — ngoài phạm vi lượt sửa 27/09.
+
+### ISSUE-013 — Hình chìm logo trên tem chưa nghiệm trên XP-365B thật và chưa có trong APK
+- State: deferred
+- Severity: medium
+- Raised by / Date: kongming (tư vấn thiết kế #51) / 03/10/2026
+- Related task: #51 cài logo quán và in logo làm hình chìm trên tem
+- Description: Nút IN TEM chỉ có trên APK, mà APK đóng gói sẵn bản web (không `server.url`), nên phải dựng lại
+  APK (nhớ tăng `versionCode`) thì máy in tem mới có tính năng. Độ phủ chấm thưa (Nhạt 3/16, Vừa 5/16, Đậm 8/16
+  Bayer 4×4) và viền chữ 2 chấm mới thử trên ảnh mô phỏng tem 50×30, chưa lên giấy; nhiệt độ in có thể làm mỗi
+  mức đậm hơn mô phỏng. Robot chỉ chứng được byte TSPL (APK giả).
+- Mitigation: Chuyến quán cùng ISSUE-007/008/009: in đơn 3 phần ở cả ba mức và chế độ góc trên tem 50×30, kiểm
+  tên món, ghi chú, mã đơn và `i/n` đọc rõ. Máy rơi chấm lẻ → đổi tra Bayer sang `BAYER[y & 3][(x >> 1) & 3]`
+  (ô rộng 2 chấm, cùng độ phủ) trong `src/domain/watermark.ts`. In đậm hơn mong đợi → hạ `STRENGTH_CELLS`
+  3/5/8 → 2/4/6.
