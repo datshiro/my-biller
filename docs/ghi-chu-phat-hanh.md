@@ -1,5 +1,26 @@
 # Ghi chú phát hành
 
+## 2.11.0 — logo chìm bên phải trên tem (3/10/2026)
+
+> **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.11.0 sau khi tag đã deploy xong.** Cấu hình hình chìm có thêm
+> trường `align` (không đổi schema IndexedDB, không bump version Dexie, không đổi phiên bản file sao lưu). Worker
+> còn chạy 2.10.0 thì cắt mất `align`: chọn "Bên phải" ở máy mới sẽ bị đảo về giữa. Máy còn ở 2.10.0 hay 2.9.0
+> **không** kẹt đồng bộ và không phá cấu hình: Worker mới giữ `align` khi máy cũ lưu thông tin quán. APK tăng
+> versionCode (8) để cài đè được.
+
+### Người bán thấy gì
+
+- **Cài đặt › Thông tin cửa hàng › Hình chìm trên tem:** thêm vị trí **Bên phải** cạnh Giữa tem và Góc trên phải.
+  Logo chấm thưa lớn dồn về nửa phải vùng chữ, căn giữa theo chiều dọc, nằm dưới chữ; chọn được Nhạt / Vừa / Đậm
+  như Giữa tem. Nửa trái tem — nơi tên món và ghi chú bắt đầu — không thêm chấm nào.
+- Quán đang để Giữa tem từ 2.10.0 vẫn in giữa sau khi cập nhật.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Khi các máy chạy lẫn bản: máy còn 2.10.0 hiện "Giữa tem" dù sổ đang để Bên phải, và bấm "Giữa tem" ở đó không đưa
+  được logo về giữa — đổi vị trí từ máy đã cập nhật.
+- **Chưa in thử trên XP-365B thật** (ISSUE-013), kể cả vị trí Bên phải.
+
 ## 2.10.0 — logo cửa hàng và logo chìm trên tem (3/10/2026)
 
 > **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.10.0 sau khi tag đã deploy xong.** Bản ghi Thông tin cửa hàng có
