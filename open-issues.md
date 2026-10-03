@@ -229,3 +229,18 @@
   tên món, ghi chú, mã đơn và `i/n` đọc rõ. Máy rơi chấm lẻ → đổi tra Bayer sang `BAYER[y & 3][(x >> 1) & 3]`
   (ô rộng 2 chấm, cùng độ phủ) trong `src/domain/watermark.ts`. In đậm hơn mong đợi → hạ `STRENGTH_CELLS`
   3/5/8 → 2/4/6.
+
+### ISSUE-014 — Lưu file vào Tải về trong APK chưa nghiệm trên máy thật; nhánh API 24–28 chưa nghiệm
+- State: deferred
+- Severity: medium
+- Raised by / Date: lượt thi công #48 (cửa ra file `saveToDownloads`) / 04/10/2026
+- Related task: #48 sao lưu & khôi phục — plugin `DownloadFile` (`android/app/src/main/java/dev/datshiro/mybiller/DownloadFilePlugin.java`)
+- Description: Plugin mới chỉ được chứng là biên dịch (`./gradlew assembleDebug`) và lái bằng cầu nối Capacitor giả
+  trong Robot (`robot/libraries/gia-lap-apk.cjs`). Chưa nghiệm trên máy thật: (a) API 29+ ghi qua `MediaStore.Downloads`
+  (`IS_PENDING`, đọc lại `DISPLAY_NAME` khi trùng tên — One UI trên S25), cả `application/json` lẫn
+  `text/csv;charset=utf-8`; (b) **chưa nghiệm API 24–28**: nhánh ghi thẳng `Download/` với quyền
+  `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion="28"`), hộp xin quyền và câu "Chưa cho phép ghi vào bộ nhớ, nên chưa lưu
+  được file." khi người bán từ chối — không có máy hay emulator API ≤ 28 trong tay.
+- Mitigation: Phase nghiệm thu của #48: S25 sao lưu hai lần ⇒ hai file trong Files › Tải xuống, lần hai bị đổi tên và
+  app hiện đúng tên đó. API 24–28: emulator API 28 nếu dựng được; không thì ghi "chưa nghiệm" trong báo cáo nghiệm
+  thu và giữ issue này.

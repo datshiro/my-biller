@@ -141,14 +141,16 @@ describe('exportBackup', () => {
     const outcome = await exportBackup(NOW)
 
     expect(outcome).toEqual({
-      filename: 'my-biller-backup-260807-1400.json',
+      savedAs: 'my-biller-backup-260807-1400.json',
+      location: 'Tải về (Download)',
+      verified: false,
       importable: true,
       problem: null,
     })
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
 
-  it('prepare chỉ giữ đúng một File, chưa tải và chưa đóng dấu cho tới lúc phát download', async () => {
+  it('prepare chưa tải và chưa đóng dấu; lúc phát download ghi đúng nội dung của File đã chuẩn bị', async () => {
     await sellOnCredit(110_000, 110_000)
 
     const prepared = await prepareBackup(NOW)
@@ -162,7 +164,9 @@ describe('exportBackup', () => {
 
     await downloadPreparedBackup(prepared)
 
-    expect(URL.createObjectURL).toHaveBeenCalledWith(prepared.file)
+    const downloaded = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0] as Blob
+    expect(downloaded.type).toBe('application/json')
+    expect(await downloaded.text()).toBe(await prepared.file.text())
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
@@ -198,7 +202,7 @@ describe('exportBackup', () => {
 
     const outcome = await exportBackup(NOW)
 
-    expect(outcome.filename).toBe('my-biller-backup-260807-1400.json')
+    expect(outcome.savedAs).toBe('my-biller-backup-260807-1400.json')
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
   })
 

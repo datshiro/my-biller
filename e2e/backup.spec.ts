@@ -256,7 +256,7 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
   await page.goto('/them/sao-luu')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
   expect(backup.filename).toMatch(/^my-biller-backup-\d{6}-\d{4}\.json$/)
-  await expect(page.getByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeVisible()
+  await expect(page.getByText(/Đã yêu cầu tải file "my-biller-backup-/)).toBeVisible()
 
   // Xoá sạch: tải file an toàn trước, rồi phải tự xác nhận đã thấy file mới xoá được.
   await page.goto('/them/cai-dat')

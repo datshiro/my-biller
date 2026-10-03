@@ -6,6 +6,7 @@ import {
   type PreparedBackup,
 } from '@/features/settings/backup'
 import { describeCounts, isOperationallyEmpty } from '@/domain/backup'
+import { describeSavedFile } from '@/features/settings/download-sink'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 
@@ -53,12 +54,10 @@ export function RecoveryApp() {
     try {
       const outcome = await downloadRecoveryBackup(prepared)
       if (outcome.importable) {
-        setNotice(
-          `Đã gửi yêu cầu tải bản sao với tên đề xuất "${outcome.filename}". Kiểm tra thư mục Tải về trước khi đóng màn hình này.`,
-        )
+        setNotice(`${describeSavedFile(outcome)} Kiểm tra thư mục Tải về trước khi đóng màn hình này.`)
       } else {
         setError(
-          `Đã gửi yêu cầu tải "${outcome.filename}", nhưng file chưa nhập lại được: ${outcome.problem} Giữ file để sửa dữ liệu thủ công.`,
+          `${describeSavedFile(outcome)} Nhưng file chưa nhập lại được: ${outcome.problem} Giữ file để sửa dữ liệu thủ công.`,
         )
       }
     } catch (caught) {

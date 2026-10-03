@@ -18,7 +18,8 @@ const DAY = 24 * 60 * 60 * 1000
 
 /** Tên các file mà app đã bảo trình duyệt tải về trong một ca test. */
 let downloads: string[] = []
-let downloadedFiles: File[] = []
+/** Nội dung các Blob đã đưa cho trình duyệt tải. */
+let downloadedBlobs: Blob[] = []
 
 const setWebShare = ({
   canShare = () => true,
@@ -43,9 +44,9 @@ beforeEach(async () => {
 
   // jsdom không có Blob URL lẫn cơ chế tải file; ghi lại tên file thay cho việc mở thư mục Tải về.
   downloads = []
-  downloadedFiles = []
+  downloadedBlobs = []
   URL.createObjectURL = vi.fn((blob: Blob) => {
-    if (blob instanceof File) downloadedFiles.push(blob)
+    downloadedBlobs.push(blob)
     return 'blob:test'
   })
   URL.revokeObjectURL = vi.fn()
@@ -112,7 +113,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
     expect(dialog.textContent).not.toMatch(/file trống|content-free/i)
     expect(downloads).toEqual([])
     expect(URL.createObjectURL).not.toHaveBeenCalled()
-    expect(screen.queryByText(/Đã gửi yêu cầu tải bản sao/)).toBeNull()
+    expect(screen.queryByText(/Đã yêu cầu tải file/)).toBeNull()
     expect((await getAppState()).lastBackupAt).toBeNull()
     expect((screen.getByRole('button', { name: 'SAO LƯU RA FILE', hidden: true }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Nhập từ file sao lưu', hidden: true }) as HTMLButtonElement).disabled).toBe(true)
@@ -140,7 +141,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
     await waitFor(() => expect(downloads).toEqual(['my-biller-backup-260807-1400.json']))
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
-    expect(downloadedFiles).toHaveLength(1)
+    expect(downloadedBlobs).toHaveLength(1)
     expect((await getAppState()).lastBackupAt).toBe(NOW)
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     const exportButton = screen.getByRole('button', { name: 'SAO LƯU RA FILE' })
@@ -154,7 +155,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
 
-    expect(await screen.findByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeDefined()
+    expect(await screen.findByText(/Đã yêu cầu tải file/)).toBeDefined()
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
   })
@@ -186,23 +187,24 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
 })
 
 describe('chia sẻ đúng file vừa sao lưu', () => {
-  it('probe và share nhận chính File đã phát download; share không tải hoặc stamp lần hai', async () => {
+  it('probe và share nhận File cùng nội dung với file đã phát download; share không tải hoặc stamp lần hai', async () => {
     await seedItem()
     const webShare = setWebShare()
     renderPage()
 
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
     const shareButton = await screen.findByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })
-    const file = downloadedFiles[0]
-    expect(file).toBeDefined()
-    expect(file?.name).toBe('my-biller-backup-260807-1400.json')
-    expect(file?.type).toBe('application/json')
-    expect(webShare.canShare).toHaveBeenCalledWith({ files: [file] })
+    const downloaded = downloadedBlobs[0]
+    expect(downloaded?.type).toBe('application/json')
+    const probed = webShare.canShare.mock.calls[0]?.[0].files?.[0]
+    expect(probed?.name).toBe('my-biller-backup-260807-1400.json')
+    expect(probed?.type).toBe('application/json')
+    expect(await probed?.text()).toBe(await downloaded?.text())
     const stampedAt = (await getAppState()).lastBackupAt
 
     await userEvent.click(shareButton)
 
-    expect(webShare.share).toHaveBeenCalledWith({ files: [file] })
+    expect(webShare.share).toHaveBeenCalledWith({ files: [probed] })
     expect(downloads).toEqual(['my-biller-backup-260807-1400.json'])
     expect((await getAppState()).lastBackupAt).toBe(stampedAt)
     expect(screen.queryByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeNull()
@@ -218,7 +220,7 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
 
-    expect(await screen.findByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeDefined()
+    expect(await screen.findByText(/Đã yêu cầu tải file/)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeNull()
     expect((await getAppState()).lastBackupAt).toBe(NOW)
@@ -230,7 +232,7 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
 
-    expect(await screen.findByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeDefined()
+    expect(await screen.findByText(/Đã yêu cầu tải file/)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeNull()
   })
@@ -248,7 +250,7 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
 
-    expect(await screen.findByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeDefined()
+    expect(await screen.findByText(/Đã yêu cầu tải file/)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeNull()
   })

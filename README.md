@@ -98,7 +98,10 @@ hay runner đồng bộ. Vì IndexedDB bị cô lập theo origin, artifact này
 Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không thay file sao lưu độc lập**. Màn
 *Thêm → Cài đặt → Sao lưu & khôi phục* (`/them/sao-luu`; *Xoá toàn bộ dữ liệu* vẫn ở cuối Cài đặt):
 
-- **Sao lưu ra file** → tải `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được).
+- **Sao lưu ra file** → `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được) vào thư mục
+  Tải về. Trong APK file đi qua plugin `DownloadFile` (MediaStore) và màn hiện "Đã lưu: Download/<tên thật>"
+  (trùng tên thì Android tự đổi); plugin báo lỗi thì không tính là đã sao lưu. Trên web trình duyệt không báo
+  lại file đã lưu hay tên cuối cùng, nên màn chỉ nói "Đã yêu cầu tải file …".
   Nếu bản sao không có đơn, mặt hàng, khách, khoản chi hay giá riêng còn dùng được, app sẽ cảnh báo
   trước khi tải; file vẫn có thể chứa thông tin cửa hàng, nhóm/loại và cấu hình.
 - Máy chưa ghép có thể **Nhập từ file** (ô chọn không lọc theo loại file, để file đã qua Zalo/Drive

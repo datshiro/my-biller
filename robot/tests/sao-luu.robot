@@ -100,8 +100,65 @@ Sao lưu xong thì màn sao lưu ghi lại mốc lần cuối
     Mở Màn    /them/sao-luu
     Chờ Thấy Chữ    Chưa sao lưu lần nào
     Sao Lưu Ra File
-    Chờ Thấy Chữ    Đã gửi yêu cầu tải bản sao
+    Chờ Thấy Chữ    Đã yêu cầu tải file
     Chờ Thấy Chữ    Lần cuối:
+
+Web: sau sao lưu chỉ nói đã yêu cầu tải, không khẳng định đã lưu
+    [Documentation]    `<a download>` không báo lại file đã lưu hay tên cuối cùng, nên trên web màn chỉ được nói
+    ...    "Đã yêu cầu tải" kèm tên đề xuất — "Đã lưu" dành cho APK, nơi plugin đọc lại tên thật.
+    Mở Màn    /them/sao-luu
+    Sao Lưu Ra File
+    Chờ Thấy Chữ    Đã yêu cầu tải file
+    Chờ Thấy Chữ    my-biller-backup-
+    Chờ Thấy Chữ    Hãy mở thư mục Tải về để chắc file đã có
+    Không Được Thấy Chữ    Đã lưu
+
+APK giả: sao lưu ghi đúng một file vào Tải về và hiện tên thật
+    [Documentation]    Trong WebView của APK, `<a download>` với blob bị nuốt im lặng mà mốc sao lưu vẫn đóng
+    ...    dấu — người bán tưởng có file. Nay APK đi qua plugin DownloadFile (ở đây là cầu nối giả):
+    ...    đúng một file JSON đủ bảng, màn hiện "Đã lưu: Download/<tên thật>", lần hai trùng tên thì hiện
+    ...    tên hệ thống đã đổi, và mốc sao lưu có giá trị. Đường MediaStore thật chỉ nghiệm được trên máy.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/sao-luu
+    Click    ${NÚT_SAO_LƯU}
+    Chờ Thấy Chữ    Đã lưu: Download/my-biller-backup-
+    ${đã_lưu}=    Evaluate JavaScript    ${None}    () => window.__savedFiles
+    Length Should Be    ${đã_lưu}    1    App phải ghi đúng một file vào Tải về.
+    Should Be Equal    ${đã_lưu}[0][mimeType]    application/json
+    ${bản_sao}=    Evaluate    json.loads($đã_lưu[0]['text'])    json
+    Should Be Equal    ${bản_sao}[app]    my-biller
+    Length Should Be    ${bản_sao}[data][items]    4
+    Length Should Be    ${bản_sao}[data][orders]    2
+    Length Should Be    ${bản_sao}[data][customers]    1
+    Length Should Be    ${bản_sao}[data][expenses]    1
+    Chờ Thấy Chữ    Đã lưu: Download/${đã_lưu}[0][filename].
+    ${settings}=    Đọc Bảng    settings
+    ${mốc}=    Evaluate
+    ...    next((row['value']['lastBackupAt'] for row in $settings if row['key'] == 'app'), None)
+    Should Not Be Equal    ${mốc}    ${None}    Plugin đã lưu xong mà mốc sao lưu chưa được ghi.
+
+    Wait For Elements State    ${NÚT_SAO_LƯU}    enabled
+    Click    ${NÚT_SAO_LƯU}
+    ${tên}=    Evaluate    $đã_lưu[0]['filename'].replace('.json', ' (1).json')
+    Chờ Thấy Chữ    Đã lưu: Download/${tên}.
+    Không Được Thấy Chữ    Đã yêu cầu tải
+
+APK giả: ghi file thất bại thì báo lỗi và không đóng dấu sao lưu
+    [Documentation]    Plugin báo lỗi (hết chỗ, từ chối quyền) nghĩa là không có file trong Tải về: màn phải báo
+    ...    lỗi, mốc sao lưu giữ nguyên chưa có và banner nhắc vẫn còn.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/sao-luu
+    Evaluate JavaScript    ${None}    () => { window.__failSave = true }
+    Click    ${NÚT_SAO_LƯU}
+    Wait For Elements State    css=[role=alert]    visible
+    Chờ Thấy Chữ    bộ nhớ đầy
+    Không Được Thấy Chữ    Đã lưu:
+    ${settings}=    Đọc Bảng    settings
+    ${mốc}=    Evaluate
+    ...    next((row['value']['lastBackupAt'] for row in $settings if row['key'] == 'app'), None)
+    Should Be Equal    ${mốc}    ${None}    Plugin báo lỗi mà app vẫn ghi mốc sao lưu.
+    # Banner nhắc ("Chưa sao lưu lần nào. Mất máy là mất sạch dữ liệu.") vẫn còn.
+    Chờ Thấy Chữ    Mất máy là mất
 
 Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
     [Documentation]    Vòng tròn đầy đủ: sao lưu → bán thêm → nhập lại. Đơn bán sau lúc sao lưu phải

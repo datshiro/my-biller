@@ -7,8 +7,10 @@ import {
   prepareBackup,
   readBackupFile,
   sharePreparedBackup,
+  type BackupOutcome,
   type PreparedBackup,
 } from './backup'
+import { describeSavedFile } from './download-sink'
 import { BackupBanner } from './backup-banner'
 import { useDeviceConnection, useLastBackupLine } from './use-settings'
 import {
@@ -37,8 +39,8 @@ const SHARE_FAILURE_MESSAGE =
  */
 type ImportStep =
   | { phase: 'confirm'; file: BackupFile }
-  | { phase: 'safety'; file: BackupFile; filename: string; problem: string | null }
-  | { phase: 'accept'; file: BackupFile; filename: string; problem: string }
+  | { phase: 'safety'; file: BackupFile; saved: BackupOutcome; problem: string | null }
+  | { phase: 'accept'; file: BackupFile; saved: BackupOutcome; problem: string }
 
 export function SaoLuuPage() {
   const connection = useDeviceConnection()
@@ -80,10 +82,7 @@ export function SaoLuuPage() {
   }, [clearShareTarget, shareTarget])
 
   const finishManualDownload = async (prepared: PreparedBackup) => {
-    const { filename } = await downloadPreparedBackup(prepared)
-    setNotice(
-      `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}". Hãy kiểm tra thư mục Tải về; thiết bị có thể đổi tên nếu bị trùng.`,
-    )
+    setNotice(describeSavedFile(await downloadPreparedBackup(prepared)))
     if (canSharePreparedBackup(prepared)) {
       shareTargetRef.current = prepared
       setShareTarget(prepared)
@@ -118,11 +117,11 @@ export function SaoLuuPage() {
     try {
       const prepared = await prepareBackup(Date.now())
       if (!prepared.importable) {
-        const { filename, problem } = await downloadPreparedBackup(prepared)
+        const outcome = await downloadPreparedBackup(prepared)
         // Nói thẳng là file này không dùng để phục hồi được. Im lặng ở đây thì người bán yên tâm với
         // một file rỗng nghĩa, và chỉ biết vào đúng lúc mất dữ liệu.
         setError(
-          `Đã gửi yêu cầu tải bản sao với tên đề xuất "${filename}", nhưng file này KHÔNG nhập lại được: ${problem} Sổ vẫn tính là chưa sao lưu.`,
+          `${describeSavedFile(outcome)} Nhưng file này KHÔNG nhập lại được: ${outcome.problem} Sổ vẫn tính là chưa sao lưu.`,
         )
       } else if (isOperationallyEmpty(prepared.counts)) {
         pendingEmptyBackupRef.current = prepared
@@ -196,8 +195,8 @@ export function SaoLuuPage() {
     setStep(null)
     setBusy(true)
     try {
-      const { filename, problem } = await exportBackup(Date.now())
-      setStep({ phase: 'safety', file, filename, problem })
+      const saved = await exportBackup(Date.now())
+      setStep({ phase: 'safety', file, saved, problem: saved.problem })
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -329,14 +328,14 @@ export function SaoLuuPage() {
           title="Đã thấy file trong máy chưa?"
           message={
             step.problem === null
-              ? `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file trước khi bấm tiếp; thiết bị có thể đổi tên nếu bị trùng. Sau bước này dữ liệu đang có trên máy không lấy lại được.`
-              : `App vừa yêu cầu tải bản sao với tên đề xuất "${step.filename}". Hãy kiểm tra thư mục Tải về và mở file; thiết bị có thể đổi tên nếu bị trùng. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
+              ? `${describeSavedFile(step.saved)} Mở file trong thư mục Tải về trước khi bấm tiếp. Sau bước này dữ liệu đang có trên máy không lấy lại được.`
+              : `${describeSavedFile(step.saved)} Mở file trong thư mục Tải về. Bản sao này có chỗ hỏng, còn một bước nữa phải đọc.`
           }
           confirmLabel={step.problem === null ? 'Đã thấy — ghi đè' : 'Đã thấy — đọc tiếp'}
           onConfirm={() =>
             step.problem === null
               ? void runImport(step.file)
-              : setStep({ phase: 'accept', file: step.file, filename: step.filename, problem: step.problem })
+              : setStep({ phase: 'accept', file: step.file, saved: step.saved, problem: step.problem })
           }
           onCancel={() => setStep(null)}
         />
@@ -345,7 +344,7 @@ export function SaoLuuPage() {
       {step?.phase === 'accept' ? (
         <ConfirmDialog
           title="Bản sao an toàn KHÔNG nhập lại được"
-          message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có; bản sao có tên đề xuất "${step.filename}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
+          message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có; bản sao "${step.saved.savedAs}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
           confirmLabel="Vẫn ghi đè — mất cũng được"
           onConfirm={() => void runImport(step.file)}
           onCancel={() => setStep(null)}

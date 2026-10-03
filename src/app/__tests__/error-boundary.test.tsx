@@ -65,7 +65,7 @@ describe('chắn cuối', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '⬇ TẢI FILE SAO LƯU' }))
 
-    expect(await screen.findByText(/tên đề xuất "my-biller-backup-260807-1400\.json"/)).toBeTruthy()
+    expect(await screen.findByText(/Đã yêu cầu tải file "my-biller-backup-260807-1400\.json"/)).toBeTruthy()
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
@@ -92,8 +92,8 @@ describe('chắn cuối', () => {
     await userEvent.click(screen.getByRole('button', { name: '⬇ TẢI FILE SAO LƯU' }))
 
     expect(await screen.findByText(/KHÔNG nhập lại được/)).toBeTruthy()
-    expect(screen.getByText(/kiểm tra thư mục Tải về/)).toBeTruthy()
-    expect(screen.getByText(/thiết bị có thể đổi tên nếu bị trùng/)).toBeTruthy()
+    expect(screen.getByText(/Hãy mở thư mục Tải về để chắc file đã có/)).toBeTruthy()
+    expect(screen.getByText(/trình duyệt có thể đổi tên nếu trùng/)).toBeTruthy()
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
     expect((await getAppState()).lastBackupAt).toBeNull()
   })
