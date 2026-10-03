@@ -52,7 +52,7 @@ Logo và hình chìm cài ở máy A tới máy B
     Chọn Máy A
     Cài Logo Quán    Góc trên phải
     ${ở_a}=    Đọc Logo Quán    ${MÁY_A_PAGE}
-    Should Be Equal    ${ở_a}[watermark]    {"enabled":true,"position":"corner","strength":"light","align":"right"}
+    Should Be Equal    ${ở_a}[watermark]    {"enabled":true,"position":"corner","strength":"light","align":"center"}
     Logo Máy B Phải Hội Tụ Với    ${ở_a}
 
 Heartbeat cục bộ giữ lease và đường sync realtime

@@ -56,6 +56,8 @@ describe('logo cửa hàng trong Thông tin cửa hàng', () => {
     await chọnẢnh()
     await userEvent.click(screen.getByLabelText('In logo chìm trên tem'))
     expect(screen.getByRole('button', { name: 'Vừa' })).toBeDefined()
+    // Đi qua Bên phải rồi mới sang góc: `align` cũ không được nằm lại trong sổ.
+    await userEvent.click(screen.getByRole('button', { name: 'Bên phải' }))
     await userEvent.click(screen.getByRole('button', { name: 'Góc trên phải' }))
     expect(screen.queryByRole('button', { name: 'Vừa' })).toBeNull()
     await lưu()

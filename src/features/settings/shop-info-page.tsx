@@ -29,7 +29,7 @@ function ReceiptPreview({ shop }: { shop: ShopSettings }) {
 const PLACEMENTS: { value: LogoPlacement; label: string; patch: Partial<LabelWatermark> }[] = [
   { value: 'center', label: 'Giữa tem', patch: { position: 'center', align: 'center' } },
   { value: 'right', label: 'Bên phải', patch: { position: 'center', align: 'right' } },
-  { value: 'corner', label: 'Góc trên phải', patch: { position: 'corner' } },
+  { value: 'corner', label: 'Góc trên phải', patch: { position: 'corner', align: 'center' } },
 ]
 
 const STRENGTHS: { value: LabelWatermark['strength']; label: string }[] = [
