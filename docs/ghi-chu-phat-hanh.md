@@ -1,5 +1,35 @@
 # Ghi chú phát hành
 
+## 2.10.0 — logo cửa hàng và logo chìm trên tem (3/10/2026)
+
+> **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.10.0 sau khi tag đã deploy xong.** Bản ghi Thông tin cửa hàng có
+> thêm hai trường (`logo`, `labelWatermark`; không đổi schema IndexedDB, không bump version Dexie, không đổi phiên
+> bản file sao lưu). Worker còn chạy bản cũ thì mỗi lần máy mới lưu Thông tin cửa hàng, logo bị cắt khỏi sổ chung.
+> Máy còn ở 2.9.0 thì **không** phá gì: Worker mới giữ logo khi máy cũ lưu thông tin quán — không cần cập nhật mọi
+> máy trong cùng ngày. APK tăng versionCode (7) để cài đè được.
+
+### Người bán thấy gì
+
+- **Cài đặt › Thông tin cửa hàng › Logo cửa hàng:** chọn ảnh PNG/JPG → thấy ngay bản **đen trắng đúng như khi in**
+  (cắt sát nét). Có "Chọn ảnh khác" và "Gỡ logo". File ảnh trên 5 MB bị từ chối — chọn file logo, đừng chọn ảnh
+  chụp từ camera.
+- **Hình chìm trên tem** (chỉ hiện khi đã có logo): bật "In logo chìm trên tem", chọn **Giữa tem** hoặc **Góc trên
+  phải**, và mức **Nhạt / Vừa / Đậm** (chỉ ở giữa tem). Cài một lần cho **mọi máy đã ghép**.
+- **Tem in ra (APK):** giữa tem có logo chấm thưa nằm dưới chữ, chừa viền trắng quanh nét chữ để tên món và ghi
+  chú vẫn đọc được; số `i/n` không bị logo lấn. Góc trên phải là logo nhỏ in đặc (~6 mm ở tem 50×30), dòng tên
+  quán và mã đơn chừa chỗ cho logo. Tắt hình chìm thì tem y hệt bản trước.
+- Logo trong sổ bị hỏng thì tem vẫn in (không có logo) và báo "Logo không đọc được…" để chọn lại ảnh.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Logo lưu thành PNG đen trắng nhỏ (cạnh dài 400 chấm, trần 40 000 ký tự) vì sổ chung giữ mọi lần lưu thông tin
+  quán mãi mãi. Logo nhiều chi tiết quá trần thì app báo chọn ảnh đơn giản hơn.
+- Cả bản ghi Thông tin cửa hàng là "ai lưu sau thắng": hai máy cùng sửa thì lần lưu sau đè lần trước. Gộp sổ lấy
+  thông tin quán (kể cả logo) của sổ A.
+- File sao lưu 2.10.0 mở bằng app 2.9.0 vẫn khôi phục được, chỉ mất logo.
+- **Chưa in thử trên XP-365B thật** (ISSUE-013): độ đậm chấm thưa mới đo trên ảnh mô phỏng. Sau khi cài APK, in một
+  đơn 3 phần ở cả ba mức và chế độ góc; máy rơi chấm hoặc in quá đậm thì có hướng chỉnh sẵn trong ISSUE-013.
+
 ## 2.9.0 — màn bán làm lại: chạm món có thực đơn là chọn ngay, đơn gom vào sheet, chip ghi chú; ô tiền có trần, đổi được tên máy, chặn tên món trùng (3/10/2026)
 
 > Không đổi Worker, schema IndexedDB hay định dạng sao lưu: deploy theo thứ tự thường, máy chưa cập nhật vẫn đồng
