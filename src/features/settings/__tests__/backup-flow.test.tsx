@@ -85,6 +85,12 @@ const pick = async (contents: string) =>
     target: { files: [new File([contents], 'backup.json', { type: 'application/json' })] },
   })
 
+/** Chọn file rồi chọn chế độ Ghi đè ở hộp "Khôi phục từ file". */
+const pickOverwrite = async (contents: string) => {
+  await pick(contents)
+  await userEvent.click(await screen.findByRole('button', { name: 'Ghi đè' }))
+}
+
 describe('sao lưu trong recovery chỉ đọc', () => {
   it('tải đúng snapshot nhưng không ghi mốc hoặc tạo outbox', async () => {
     await seedItem()
@@ -392,7 +398,7 @@ describe('nhập file sao lưu', () => {
     const file = await collectBackup(NOW)
     renderPage()
 
-    await pick(JSON.stringify(file))
+    await pickOverwrite(JSON.stringify(file))
 
     expect(await screen.findByText('Ghi đè toàn bộ dữ liệu?')).toBeDefined()
     expect(screen.getByText(/1 mặt hàng/)).toBeDefined()
@@ -412,6 +418,7 @@ describe('nhập file sao lưu', () => {
     fireEvent.change(input, {
       target: { files: [new File([JSON.stringify(file)], 'my-biller-backup.txt', { type: 'text/plain' })] },
     })
+    await userEvent.click(await screen.findByRole('button', { name: 'Ghi đè' }))
 
     expect(await screen.findByText('Ghi đè toàn bộ dữ liệu?')).toBeDefined()
   })
@@ -428,7 +435,7 @@ describe('nhập file sao lưu', () => {
     await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
     renderPage()
 
-    await pick(JSON.stringify(file))
+    await pickOverwrite(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
 
     expect(await screen.findByText('Đã thấy file trong máy chưa?')).toBeDefined()
@@ -447,7 +454,7 @@ describe('nhập file sao lưu', () => {
     await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
     renderPage()
 
-    await pick(JSON.stringify(file))
+    await pickOverwrite(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Huỷ' }))
 
@@ -530,7 +537,7 @@ describe('bản sao an toàn không nhập lại được', () => {
     await addOddItem()
     renderPage()
 
-    await pick(JSON.stringify(file))
+    await pickOverwrite(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
 

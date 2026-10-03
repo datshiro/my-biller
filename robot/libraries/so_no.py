@@ -39,3 +39,27 @@ def tong_no(orders, payments):
 def dinh_dang_vnd(so_tien):
     """Cùng dạng `formatVnd`: 100.000 đ."""
     return f"{int(so_tien):,}".replace(",", ".") + " đ"
+
+
+def thanh_v1(van_ban):
+    """Biến một file sao lưu v4 thành đúng hình dạng file v1 của bản cũ: không gid, không bảng giá riêng,
+    khoản thu chưa có allocatedOrderId, mã đơn chưa có chữ máy (PBH-YYMMDD-NNN)."""
+    import json
+    import re
+
+    ban = json.loads(van_ban)
+    data = ban["data"]
+    data.pop("customerPrices", None)
+    for rows in data.values():
+        for row in rows:
+            if isinstance(row, dict):
+                row.pop("gid", None)
+    for payment in data["payments"]:
+        payment.pop("allocatedOrderId", None)
+        payment.pop("unallocatedStatus", None)
+        payment.pop("resolutionNote", None)
+    for order in data["orders"]:
+        order["code"] = re.sub(r"-[A-Z](\d{3,})$", r"-\1", order["code"])
+        order["originalCode"] = ""
+    ban["version"] = 1
+    return json.dumps(ban, ensure_ascii=False, indent=2)

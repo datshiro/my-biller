@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { replaceAllData } from '@/db/backup'
 import { db } from '@/db/db'
+import type { BackupData } from '@/domain/schema'
+import { ledgerK, shiftIds } from '@/domain/__tests__/backup-merge-fixtures'
 import { createItem } from '@/db/repositories/items'
 import { getAppState } from '@/db/repositories/settings'
 
@@ -91,5 +94,58 @@ describe('sao lưu trong APK', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/Chưa cho phép ghi vào bộ nhớ/)
     expect(await screen.findByText('Chưa sao lưu lần nào')).toBeDefined()
     expect(screen.queryByText(/^Đã lưu:/)).toBeNull()
+  })
+})
+
+describe('gộp trong APK', () => {
+  const fileText = (data: BackupData) =>
+    JSON.stringify({ app: 'my-biller', version: 4, appVersion: '2.11.0', exportedAt: new Date(NOW).toISOString(), data })
+
+  async function openMergeAndAnswer() {
+    const device = ledgerK()
+    device.payments[0] = { ...device.payments[0]!, unallocatedStatus: 'refunded' }
+    await db.items.clear()
+    await replaceAllData(device)
+    render(
+      <MemoryRouter>
+        <SaoLuuPage />
+      </MemoryRouter>,
+    )
+    fireEvent.change(await screen.findByLabelText('Chọn file sao lưu'), {
+      target: { files: [new File([fileText(shiftIds(ledgerK(), 10))], 'ban-sao.json', { type: 'application/json' })] },
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Gộp vào sổ trên máy' }))
+    const card = (await screen.findByRole('dialog', { name: 'Gộp file vào sổ trên máy' })).querySelector<HTMLElement>(
+      `[data-conflict-gid="${device.payments[0]!.gid}"]`,
+    )!
+    await userEvent.click(within(card).getByLabelText('Lấy bản trong file'))
+    return device
+  }
+
+  it('plugin lưu file an toàn xong ⇒ gộp luôn, không có cửa "Đã thấy file"', async () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload } })
+    cap.saveToDownloads.mockResolvedValue({ displayName: 'an-toan.json', relativePath: 'Download/' })
+    const device = await openMergeAndAnswer()
+
+    await userEvent.click(screen.getByRole('button', { name: 'GỘP' }))
+
+    await waitFor(() => expect(reload).toHaveBeenCalled())
+    expect(screen.queryByRole('alertdialog', { name: 'Đã thấy file an toàn trong Tải về?' })).toBeNull()
+    expect(cap.saveToDownloads).toHaveBeenCalledTimes(1)
+    expect((await db.payments.get(device.payments[0]!.id))?.unallocatedStatus ?? 'pending').toBe('pending')
+  })
+
+  it('plugin báo lỗi khi lưu file an toàn ⇒ báo lỗi, không ghi gì', async () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload } })
+    cap.saveToDownloads.mockRejectedValue(new Error('Chưa lưu được file vào thư mục Tải về: đĩa đầy'))
+    const device = await openMergeAndAnswer()
+
+    await userEvent.click(screen.getByRole('button', { name: 'GỘP' }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/đĩa đầy/)
+    expect((await db.payments.get(device.payments[0]!.id))?.unallocatedStatus).toBe('refunded')
+    expect(reload).not.toHaveBeenCalled()
   })
 })

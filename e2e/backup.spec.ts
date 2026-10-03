@@ -111,6 +111,12 @@ async function importFile(page: Page, contents: string) {
     .setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(contents) })
 }
 
+/** Chọn file rồi chọn chế độ Ghi đè ở hộp "Khôi phục từ file". */
+async function importFileOverwrite(page: Page, contents: string) {
+  await importFile(page, contents)
+  await page.getByRole('dialog', { name: 'Khôi phục từ file' }).getByRole('button', { name: 'Ghi đè' }).click()
+}
+
 /**
  * Bộ mẫu không có dòng giá riêng nào, mà `[]` khớp `[]` thì vòng sao lưu không chứng minh gì cho bảng
  * này. Đặt giá qua đúng màn người bán dùng rồi mới sao lưu.
@@ -273,7 +279,7 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
   expect((await snapshot(page)).tables.orders).toEqual([])
 
   await page.goto('/them/sao-luu')
-  await importFile(page, backup.text)
+  await importFileOverwrite(page, backup.text)
   await confirmImport(page)
 
   expect(await snapshot(page)).toEqual(before)
@@ -308,7 +314,7 @@ test('file có dòng giá riêng rác: cửa xác nhận nói rõ, nhập vẫn 
     { ...good, id: 9003, unitPrice: 11_000 },
   )
 
-  await importFile(page, JSON.stringify(file))
+  await importFileOverwrite(page, JSON.stringify(file))
   await expect(page.getByText(/3 dòng giá riêng sẽ bị bỏ/)).toBeVisible()
   await confirmImport(page)
 

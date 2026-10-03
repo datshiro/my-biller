@@ -108,7 +108,14 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
   mất đuôi `.json` vẫn chọn được) → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
   đúng thì hỏi xác nhận, tự tải một file của dữ liệu hiện tại về máy, rồi mới ghi đè trong một
   transaction và chạy `recalcAll()`.
-- Ghi đè xong app tự tải lại và hiện **báo cáo đối chiếu** một lần: số đơn, khách, mặt hàng, khoản thu và
+- Chọn file xong app hỏi **Ghi đè** (thay cả sổ) hay **Gộp vào sổ trên máy**. Gộp theo mã toàn cục: dòng chỉ có
+  trong file được thêm (kể cả thứ đã xoá trên máy sau lần sao lưu — xem trước liệt kê tên), cùng một dòng thì
+  bản mới hơn thắng, không xoá gì; đơn trùng mã được cấp mã mới. Khoản thu khác nhau giữa máy và file thì hỏi
+  từng khoản (*Giữ bản trên máy* / *Lấy bản trong file* / *Thêm riêng*), không chọn sẵn, kèm nợ của khách sau
+  gộp theo đúng bộ lựa chọn đang có, "Đã thu / Tổng nợ" trước → sau và số đơn sẽ thu vượt tổng. File v1/v2
+  phải qua cửa cảnh báo nhân đôi. Trước khi gộp app tự lưu một file an toàn; trên web phải xác nhận đã thấy
+  file đó trong Tải về rồi mới ghi.
+- Ghi đè hoặc Gộp xong app tự tải lại và hiện **báo cáo đối chiếu** một lần: số đơn, khách, mặt hàng, khoản thu và
   tổng nợ kỳ vọng (tính từ file) so với số đọc lại trên máy; lệch thì báo **LỆCH** kèm tên file an toàn,
   và nói số đơn có tiền thu vượt tổng đơn nếu có.
 - Máy đã ghép dùng **Kéo lại từ đầu** để dựng lại bản sao từ sổ chung; không cho nhập file đè lên

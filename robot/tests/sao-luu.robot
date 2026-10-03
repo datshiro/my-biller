@@ -19,6 +19,9 @@ Test Tags           sao-luu
 ${NÚT_SAO_LƯU}      css=button:has-text("SAO LƯU RA FILE")
 ${Ô_CHỌN_FILE}      css=input[aria-label="Chọn file sao lưu"]
 ${SHEET_XOÁ}        css=[role=dialog][aria-label="Xoá toàn bộ dữ liệu"]
+${SHEET_CHẾ_ĐỘ}     css=[role=dialog][aria-label="Khôi phục từ file"]
+${SHEET_GỘP}        css=[role=dialog][aria-label="Gộp file vào sổ trên máy"]
+${NÚT_GỘP}          css=[role=dialog][aria-label="Gộp file vào sổ trên máy"] >> css=button:text-is("GỘP")
 
 
 *** Test Cases ***
@@ -167,7 +170,7 @@ Ghi đè cho xem trước số trong file và số đang có trên máy, chưa g
     Bán Nhanh    Trà đá
 
     Mở Màn    /them/sao-luu
-    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Chọn File Để Ghi Đè    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     Chờ Thấy Chữ    File có 2 đơn
     Chờ Thấy Chữ    Đang có trên máy: 3 đơn
@@ -205,6 +208,312 @@ Ghi đè xong báo cáo khớp, sổ đúng bằng file, thẻ hiện một lầ
     Wait For Elements State    ${NÚT_SAO_LƯU}    visible
     Không Được Thấy Chữ    Khôi phục khớp
 
+Gộp không mất đơn bán sau lần sao lưu
+    [Documentation]    Lý do Gộp tồn tại: khôi phục file cũ mà không xoá những gì bán sau lần sao lưu đó. Đơn bán nợ
+    ...    sau khi sao lưu vẫn còn, mọi gid trong file có trong sổ, và Tổng nợ trên thẻ bằng nợ tính từ Đọc Bảng.
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${bản_sao}=    Evaluate    json.loads(open($f, encoding='utf-8').read())    json
+    Bán Nợ Cho Khách    Cà phê sữa    Anh Hùng
+    ${mới}=    Đơn Mới Nhất
+
+    Mở Xem Trước Gộp    ${f}
+    ${thẻ}=    Get Element Count    css=[data-conflict-gid]
+    Should Be Equal As Integers    ${thẻ}    0
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${đơn}=    Đọc Bảng    orders
+    ${còn}=    Evaluate    [o for o in $đơn if o['gid'] == '${mới}[gid]']
+    Length Should Be    ${còn}    1    Gộp làm mất đơn bán sau lần sao lưu.
+    FOR    ${bảng}    IN    orders    customers    items    payments
+        ${dòng}=    Đọc Bảng    ${bảng}
+        ${thiếu}=    Evaluate    sorted({r['gid'] for r in $bản_sao['data'][$bảng]} - {r['gid'] for r in $dòng})
+        Should Be Empty    ${thiếu}    Bảng ${bảng} thiếu dòng của file sau khi gộp.
+    END
+    ${payments}=    Đọc Bảng    payments
+    ${nợ}=    Tong No    ${đơn}    ${payments}
+    ${nợ_chữ}=    Dinh Dang Vnd    ${nợ}
+    ${trên_thẻ}=    Get Text    css=[aria-label="Báo cáo khôi phục"] tr:has-text("Tổng nợ") >> css=td >> nth=2
+    Should Be Equal    ${trên_thẻ}    ${nợ_chữ}    Tổng nợ trên thẻ không bằng nợ tính từ sổ.
+
+Gộp: bản mới hơn thắng, bản cũ hơn thua
+    [Documentation]    Sao lưu F1 (Trà đá 3.000), sửa giá thành 4.000, sao lưu F2; Ghi đè F1 đưa máy về giá cũ với mốc
+    ...    cũ. Gộp F2 thì giá mới hơn trong file thắng; gộp tiếp F1 (cũ hơn) thì giữ giá trên máy.
+    ${món}=    Đọc Bảng    items
+    ${trà}=    Evaluate    next(i for i in $món if i['name'] == 'Trà đá')
+    Mở Màn    /them/sao-luu
+    ${f1}=    Sao Lưu Ra File
+    Mở Màn    /them/mat-hang/${trà}[id]
+    Điền Ô    Giá bán *    4000
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait Until Keyword Succeeds    30x    200ms    Giá Món Phải Là    ${trà}[gid]    4000
+    Mở Màn    /them/sao-luu
+    ${f2}=    Sao Lưu Ra File
+
+    Nhập File Sao Lưu    ${f1}
+    Giá Món Phải Là    ${trà}[gid]    3000
+
+    Mở Xem Trước Gộp    ${f2}
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+    Giá Món Phải Là    ${trà}[gid]    4000
+
+    Mở Xem Trước Gộp    ${f1}
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+    Giá Món Phải Là    ${trà}[gid]    4000
+
+Gộp: hai xung đột của cùng một khách — nợ sau gộp đúng theo cả bộ lựa chọn
+    [Documentation]    Anh Hùng có hai khoản thu chưa trừ đơn (20.000 và 3.000); sao lưu; trên máy trả lại khoản 1 và
+    ...    bỏ khoản 2. Gộp file: hai thẻ, không chọn sẵn, GỘP khoá tới khi chọn đủ; "Nợ sau gộp" đổi theo
+    ...    đúng cả bộ lựa chọn (100.000 → 80.000 → 77.000). File an toàn tải xong trước khi gộp; sau gộp nợ
+    ...    tính từ Đọc Bảng bằng đúng số cuối cùng đã hiện, số dòng payments không đổi.
+    ${p1}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    ${p2}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Trà đá
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p1}    Đã trả lại khách    Xác nhận
+    Xử Lý Khoản Thu Của Anh Hùng    ${p2}    Bỏ có ghi vết    Xác nhận
+    ${trước}=    Đọc Bảng    payments
+    ${đơn_trước}=    Đọc Bảng    orders
+
+    Mở Xem Trước Gộp    ${f}
+    Wait For Elements State    css=[data-conflict-gid="${p1}[gid]"]    visible
+    Wait For Elements State    css=[data-conflict-gid="${p2}[gid]"]    visible
+    ${đã_chọn}=    Get Element Count    css=[data-conflict-gid] input[type=radio]:checked
+    Should Be Equal As Integers    ${đã_chọn}    0    Xem trước đã chọn sẵn thay người bán.
+    Chờ Thấy Chữ    Anh Hùng: hiện 100.000 đ → sau gộp 100.000 đ
+    Wait For Elements State    ${NÚT_GỘP}    disabled
+    Chọn Cho Xung Đột    ${p1}[gid]    Lấy bản trong file
+    Chờ Thấy Chữ    Anh Hùng: hiện 100.000 đ → sau gộp 80.000 đ
+    Wait For Elements State    ${NÚT_GỘP}    disabled
+    Chọn Cho Xung Đột    ${p2}[gid]    Lấy bản trong file
+    Chờ Thấy Chữ    Anh Hùng: hiện 100.000 đ → sau gộp 77.000 đ
+
+    ${an_toàn}=    Bấm Gộp Qua Cửa File An Toàn
+    ${số_đơn_trước}=    Get Length    ${đơn_trước}
+    Length Should Be    ${an_toàn}[data][orders]    ${số_đơn_trước}    File an toàn không phải sổ ngay trước khi gộp.
+    ${chưa_ghi}=    Khoản Thu Theo Gid    ${p1}[gid]
+    Should Be Equal    ${chưa_ghi}[unallocatedStatus]    refunded    Chưa qua cửa mà sổ đã bị gộp.
+    Xác Nhận Gộp
+
+    ${sau}=    Đọc Bảng    payments
+    ${số_trước}=    Get Length    ${trước}
+    Length Should Be    ${sau}    ${số_trước}
+    FOR    ${khoản}    IN    ${p1}    ${p2}
+        ${dòng}=    Khoản Thu Theo Gid    ${khoản}[gid]
+        ${trạng_thái}=    Evaluate    $dòng.get('unallocatedStatus', 'pending')
+        Should Be Equal    ${trạng_thái}    pending
+    END
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    77000
+
+Gộp: xung đột hoàn tiền — Giữ bản trên máy
+    ${p}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p}    Đã trả lại khách    Xác nhận
+    ${trước}=    Đọc Bảng    payments
+    Mở Xem Trước Gộp    ${f}
+    Chờ Thấy Chữ    Chọn cái này thì nợ Anh Hùng sau gộp: 100.000 đ
+    Chọn Cho Xung Đột    ${p}[gid]    Giữ bản trên máy
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${dòng}=    Khoản Thu Theo Gid    ${p}[gid]
+    Should Be Equal    ${dòng}[unallocatedStatus]    refunded
+    ${sau}=    Đọc Bảng    payments
+    ${số_trước}=    Get Length    ${trước}
+    Length Should Be    ${sau}    ${số_trước}
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    100000
+
+Gộp: xung đột đã bỏ — Lấy bản trong file
+    ${p}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p}    Bỏ có ghi vết    Xác nhận
+    Mở Xem Trước Gộp    ${f}
+    Chọn Cho Xung Đột    ${p}[gid]    Lấy bản trong file
+    Chờ Thấy Chữ    Anh Hùng: hiện 100.000 đ → sau gộp 80.000 đ
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${dòng}=    Khoản Thu Theo Gid    ${p}[gid]
+    ${trạng_thái}=    Evaluate    $dòng.get('unallocatedStatus', 'pending')
+    Should Be Equal    ${trạng_thái}    pending
+    Should Be Equal As Integers    ${dòng}[id]    ${p}[id]
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    80000
+
+Gộp: Thêm riêng cảnh báo tính hai lần và thêm đúng một khoản thu mới
+    ${p}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p}    Đã trả lại khách    Xác nhận
+    ${trước}=    Đọc Bảng    payments
+    Mở Xem Trước Gộp    ${f}
+    Chờ Thấy Chữ    Có thể tính tiền hai lần
+    Chọn Cho Xung Đột    ${p}[gid]    Thêm riêng
+    Chờ Thấy Chữ    Anh Hùng: hiện 100.000 đ → sau gộp 80.000 đ
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${sau}=    Đọc Bảng    payments
+    ${gid_cũ}=    Evaluate    {row['gid'] for row in $trước}
+    ${mới}=    Evaluate    list(filter(lambda row, cũ=$gid_cũ: row['gid'] not in cũ, $sau))
+    Length Should Be    ${mới}    1    Thêm riêng phải thêm đúng một khoản thu.
+    Should Be Equal As Integers    ${mới}[0][amount]    ${p}[amount]
+    ${dòng}=    Khoản Thu Theo Gid    ${p}[gid]
+    Should Be Equal    ${dòng}[unallocatedStatus]    refunded
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    80000
+
+Gộp: khoản thu đã gắn sang đơn khác trên máy — Giữ bản trên máy
+    ${p}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p}    Gắn đơn còn nợ    Gắn vào đơn
+    ${đã_gắn}=    Khoản Thu Theo Gid    ${p}[gid]
+    ${đơn_trước}=    Đọc Bảng    orders
+    ${trả_trước}=    Evaluate    next(o['paidAmount'] for o in $đơn_trước if o['id'] == ${đã_gắn}[allocatedOrderId])
+    Mở Xem Trước Gộp    ${f}
+    Chờ Thấy Chữ    Trừ vào đơn
+    Chọn Cho Xung Đột    ${p}[gid]    Giữ bản trên máy
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${dòng}=    Khoản Thu Theo Gid    ${p}[gid]
+    Should Be Equal As Integers    ${dòng}[allocatedOrderId]    ${đã_gắn}[allocatedOrderId]
+    ${đơn_sau}=    Đọc Bảng    orders
+    ${trả_sau}=    Evaluate    next(o['paidAmount'] for o in $đơn_sau if o['id'] == ${đã_gắn}[allocatedOrderId])
+    Should Be Equal As Integers    ${trả_sau}    ${trả_trước}
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    80000
+
+Gộp cùng file hai lần không đổi sổ
+    [Documentation]    Lựa chọn "Lấy bản trong file" làm máy giống file, nên lần gộp thứ hai cùng file không còn xung
+    ...    đột và không đổi dòng nào ở chín bảng sổ.
+    ${p}=    Dựng Khoản Thu Chưa Trừ Của Anh Hùng    Cà phê sữa
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xử Lý Khoản Thu Của Anh Hùng    ${p}    Đã trả lại khách    Xác nhận
+    Gộp Với Một Lựa Chọn    ${f}    ${p}[gid]    Lấy bản trong file
+    ${lần_một}=    Sổ Chín Bảng
+
+    Mở Xem Trước Gộp    ${f}
+    ${thẻ}=    Get Element Count    css=[data-conflict-gid]
+    Should Be Equal As Integers    ${thẻ}    0    Lần gộp thứ hai vẫn còn xung đột.
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+    ${lần_hai}=    Sổ Chín Bảng
+    Dictionaries Should Be Equal    ${lần_hai}    ${lần_một}
+
+File v1 cũ: Gộp phải cảnh báo nhân đôi trước, và không chết vì mã đơn không chữ
+    [Documentation]    File v1/v2 không có mã toàn cục và mã đơn chưa có chữ máy (PBH-YYMMDD-NNN). Gộp vào sổ đã có
+    ...    chính dữ liệu đó phải qua cửa cảnh báo nhân đôi; Huỷ thì không ghi gì; Vẫn gộp thì không lỗi, số
+    ...    đơn và khoản thu gấp đôi, đơn từ file mang mã mới có chữ máy và giữ mã cũ ở originalCode.
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${v1}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-v1.json
+    ${văn_bản}=    Get File    ${f}
+    ${nội_dung}=    Thanh V1    ${văn_bản}
+    Create File    ${v1}    ${nội_dung}
+    Nhập File Sao Lưu    ${v1}
+    ${đơn_v1}=    Đọc Bảng    orders
+    ${phiếu_v1}=    Đọc Bảng    payments
+    ${mã_cũ}=    Evaluate    sorted(o['code'] for o in $đơn_v1)
+    Should Match Regexp    ${mã_cũ}[0]    ^PBH-\\d{6}-\\d{3}$
+
+    Mở Màn    /them/sao-luu
+    Upload File By Selector    ${Ô_CHỌN_FILE}    ${v1}
+    Click    ${SHEET_CHẾ_ĐỘ} >> css=button:text-is("Gộp vào sổ trên máy")
+    Chờ Hộp Xác Nhận    File từ bản cũ — gộp sẽ nhân đôi
+    Chờ Thấy Chữ    Thường nên chọn Ghi đè
+    Bỏ Qua Hộp Xác Nhận
+    Wait For Elements State    ${SHEET_CHẾ_ĐỘ}    visible
+    ${đơn}=    Đọc Bảng    orders
+    Should Be Equal    ${đơn}    ${đơn_v1}    Huỷ ở cửa cảnh báo mà sổ đã đổi.
+
+    Click    ${SHEET_CHẾ_ĐỘ} >> css=button:text-is("Gộp vào sổ trên máy")
+    Xác Nhận Trong Hộp    Vẫn gộp
+    Wait For Elements State    ${SHEET_GỘP}    visible
+    Chờ Thấy Chữ    được cấp mã mới vì trùng mã trên máy
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${đơn_sau}=    Đọc Bảng    orders
+    ${phiếu_sau}=    Đọc Bảng    payments
+    ${hai_lần}=    Evaluate    len($đơn_v1) * 2
+    Length Should Be    ${đơn_sau}    ${hai_lần}
+    ${hai_lần}=    Evaluate    len($phiếu_v1) * 2
+    Length Should Be    ${phiếu_sau}    ${hai_lần}
+    ${đổi_mã}=    Evaluate    [o for o in $đơn_sau if o['originalCode']]
+    ${số_đơn_v1}=    Get Length    ${đơn_v1}
+    Length Should Be    ${đổi_mã}    ${số_đơn_v1}
+    FOR    ${o}    IN    @{đổi_mã}
+        Should Match Regexp    ${o}[code]    ^PBH-\\d{6}-A\\d{3}$
+        Should Contain    ${mã_cũ}    ${o}[originalCode]
+    END
+    [Teardown]    Run Keywords    Đóng Phiên    AND    Remove File    ${v1}
+
+Gộp liệt kê thứ sẽ thêm lại; Huỷ ở cửa file an toàn thì không ghi gì
+    [Documentation]    App không có bia mộ nên món đã xoá sau lần sao lưu sẽ quay lại khi gộp: xem trước phải liệt kê
+    ...    tên. Huỷ ở cửa "Đã thấy file an toàn" là chưa ghi gì; gộp thật thì món về đúng gid cũ.
+    Thêm Mặt Hàng    Bánh mì ốp la    15000
+    ${món}=    Đọc Bảng    items
+    ${bánh_mì}=    Evaluate    next(i for i in $món if i['name'] == 'Bánh mì ốp la')
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Xoá Mặt Hàng Chưa Bán    ${bánh_mì}
+
+    Mở Xem Trước Gộp    ${f}
+    Chờ Thấy Chữ    Sẽ thêm vào máy — có thể gồm thứ bạn đã xoá sau lần sao lưu này
+    Chờ Thấy Chữ    Mặt hàng: Bánh mì ốp la
+    Bấm Gộp Qua Cửa File An Toàn
+    Bỏ Qua Hộp Xác Nhận
+    Wait For Elements State    ${SHEET_GỘP}    visible
+    Mặt Hàng Theo Gid Không Còn    ${bánh_mì}[gid]
+
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+    ${món_sau}=    Đọc Bảng    items
+    ${về}=    Evaluate    [i for i in $món_sau if i['gid'] == '${bánh_mì}[gid]']
+    Length Should Be    ${về}    1    Món đã xoá không về đúng gid cũ.
+
+APK giả: gộp lưu file an toàn qua plugin rồi gộp luôn; plugin lỗi thì không ghi gì
+    [Documentation]    Trong APK plugin báo lại file an toàn đã lưu thật nên không có cửa "Đã thấy file"; plugin lỗi
+    ...    thì dừng, báo lỗi, chưa ghi gì.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Thêm Mặt Hàng    Bánh mì ốp la    15000
+    ${món}=    Đọc Bảng    items
+    ${bánh_mì}=    Evaluate    next(i for i in $món if i['name'] == 'Bánh mì ốp la')
+    Mở Màn    /them/sao-luu
+    Click    ${NÚT_SAO_LƯU}
+    Chờ Thấy Chữ    Đã lưu: Download/
+    ${đã_lưu}=    Evaluate JavaScript    ${None}    () => window.__savedFiles
+    ${f}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-apk.json
+    Create File    ${f}    ${đã_lưu}[0][text]
+    Xoá Mặt Hàng Chưa Bán    ${bánh_mì}
+
+    Mở Xem Trước Gộp    ${f}
+    Evaluate JavaScript    ${None}    () => { window.__failSave = true }
+    Click    ${NÚT_GỘP}
+    Wait For Elements State    ${SHEET_GỘP} >> css=[role=alert]    visible
+    Chờ Thấy Chữ    bộ nhớ đầy
+    Mặt Hàng Theo Gid Không Còn    ${bánh_mì}[gid]
+
+    Evaluate JavaScript    ${None}    () => { window.__failSave = false }
+    Đánh Dấu Trang Hiện Tại
+    Click    ${NÚT_GỘP}
+    Chờ Nạp Lại Xong
+    Chờ Thấy Chữ    Khôi phục khớp
+    ${món_sau}=    Đọc Bảng    items
+    ${về}=    Evaluate    [i for i in $món_sau if i['gid'] == '${bánh_mì}[gid]']
+    Length Should Be    ${về}    1
+    [Teardown]    Run Keywords    Đóng Phiên    AND    Remove File    ${f}
+
 Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
     [Documentation]    Vòng tròn đầy đủ: sao lưu → bán thêm → nhập lại. Đơn bán sau lúc sao lưu phải
     ...    biến mất, còn dữ liệu trong file phải về đủ.
@@ -228,7 +537,7 @@ Nhập file thì phải qua đủ hai cửa xác nhận
     Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
 
-    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Chọn File Để Ghi Đè    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     Chờ Thấy Chữ    2 đơn · 4 mặt hàng · 1 khách · 1 khoản chi · 0 giá riêng
     Xác Nhận Trong Hộp    Tải file an toàn
@@ -242,7 +551,7 @@ Huỷ ở cửa đầu thì chưa đụng gì tới dữ liệu
     Bán Nhanh    Trà đá
 
     Mở Màn    /them/sao-luu
-    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Chọn File Để Ghi Đè    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     Bỏ Qua Hộp Xác Nhận
 
@@ -255,7 +564,7 @@ Huỷ ở cửa thứ hai thì cũng vẫn chưa ghi đè
     Bán Nhanh    Trà đá
 
     Mở Màn    /them/sao-luu
-    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Chọn File Để Ghi Đè    ${đường_dẫn}
     Xác Nhận Trong Hộp    Tải file an toàn
     Chờ Hộp Xác Nhận    Đã thấy file trong máy chưa?
     Bỏ Qua Hộp Xác Nhận
@@ -292,7 +601,7 @@ File sao lưu đã mất đuôi .json (qua Zalo/Drive) vẫn chọn được và
     Bán Nhanh    Trà đá
 
     Mở Màn    /them/sao-luu
-    Upload File By Selector    ${Ô_CHỌN_FILE}    ${txt}
+    Chọn File Để Ghi Đè    ${txt}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     Chờ Thấy Chữ    2 đơn · 4 mặt hàng · 1 khách · 1 khoản chi · 0 giá riêng
     Bỏ Qua Hộp Xác Nhận
@@ -539,10 +848,147 @@ Xoá Toàn Bộ Dữ Liệu
     Chờ Nạp Lại Xong
     RETURN    ${tải}[saveAs]
 
-Nhập File Sao Lưu
+Chọn File Để Ghi Đè
+    [Documentation]    Chọn file rồi chọn chế độ Ghi đè ở hộp "Khôi phục từ file".
+    [Arguments]    ${đường_dẫn}
+    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Wait For Elements State    ${SHEET_CHẾ_ĐỘ}    visible
+    Click    ${SHEET_CHẾ_ĐỘ} >> css=button:text-is("Ghi đè")
+
+Mở Xem Trước Gộp
     [Arguments]    ${đường_dẫn}
     Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Wait For Elements State    ${SHEET_CHẾ_ĐỘ}    visible
+    Click    ${SHEET_CHẾ_ĐỘ} >> css=button:text-is("Gộp vào sổ trên máy")
+    Wait For Elements State    ${SHEET_GỘP}    visible
+
+Chọn Cho Xung Đột
+    [Arguments]    ${gid}    ${nhãn}
+    Click    css=[data-conflict-gid="${gid}"] >> text=${nhãn}
+
+Bấm Gộp Qua Cửa File An Toàn
+    [Documentation]    Trên web bấm GỘP thì app tải file an toàn của sổ hiện tại rồi dừng ở cửa "Đã thấy file an
+    ...    toàn". Chờ cú tải xong và đọc được JSON trên đĩa TRƯỚC khi bấm tiếp: gộp xong trang tự tải lại, cú tải
+    ...    chưa xong lúc đó là mất file. Trả về nội dung file an toàn.
+    ${hứa}=    Promise To Wait For Download
+    Click    ${NÚT_GỘP}
+    ${tải}=    Wait For    ${hứa}
+    Chờ Hộp Xác Nhận    Đã thấy file an toàn trong Tải về?
+    ${nội_dung}=    Get File    ${tải}[saveAs]
+    ${an_toàn}=    Evaluate    json.loads($nội_dung)    json
+    RETURN    ${an_toàn}
+
+Xác Nhận Gộp
+    Đánh Dấu Trang Hiện Tại
+    Xác Nhận Trong Hộp    Đã thấy — gộp
+    Chờ Nạp Lại Xong
+    Chờ Thấy Chữ    Khôi phục khớp
+
+Gộp Với Một Lựa Chọn
+    [Documentation]    Gộp file có đúng một xung đột khoản thu, trả lời nó, đi hết cửa file an toàn.
+    [Arguments]    ${đường_dẫn}    ${gid}    ${nhãn}
+    Mở Xem Trước Gộp    ${đường_dẫn}
+    Wait For Elements State    ${NÚT_GỘP}    disabled
+    Chọn Cho Xung Đột    ${gid}    ${nhãn}
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+Dựng Khoản Thu Chưa Trừ Của Anh Hùng
+    [Documentation]    App không có trả trước hay thu dư: khoản thu chưa trừ đơn nào của một khách có tên chỉ sinh
+    ...    ra khi huỷ một đơn đã thu tiền. Bán món cho Anh Hùng trả tiền mặt rồi huỷ đơn; Anh Hùng vẫn nợ đơn
+    ...    mẫu 100.000 đ nên tín dụng trừ nợ thấy được. Trả về dòng payments.
+    [Arguments]    ${món}
+    Mở Màn    /
+    Chọn Món    ${món}
+    Click    ${NÚT_KHÁCH_TRÊN_ĐẦU}
+    Chọn Khách Trong Sheet    Anh Hùng
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    Mở Chi Tiết Đơn Mới Nhất
+    Bấm Nút    Huỷ đơn
+    Chờ Hộp Xác Nhận    Huỷ đơn này?
+    Xác Nhận Trong Hộp    Huỷ đơn
+    Chờ Thấy Chữ    Đơn này đã huỷ
+    ${phiếu}=    Đọc Bảng    payments
+    ${của_đơn}=    Evaluate    [p for p in $phiếu if p['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Integers    ${của_đơn}[0][allocatedOrderId]    0
+    RETURN    ${của_đơn}[0]
+
+Mã Anh Hùng
+    ${khách}=    Đọc Bảng    customers
+    ${id}=    Evaluate    next(c['id'] for c in $khách if c['name'] == 'Anh Hùng')
+    RETURN    ${id}
+
+Xử Lý Khoản Thu Của Anh Hùng
+    [Documentation]    Trên trang khách: "Đã trả lại khách" / "Bỏ có ghi vết" / "Gắn đơn còn nợ" cho đúng khoản
+    ...    (tìm theo số tiền), rồi chờ sổ ghi xong.
+    [Arguments]    ${khoản}    ${nút}    ${xác_nhận}
+    ${id}=    Mã Anh Hùng
+    Mở Màn    /them/khach-hang/${id}
+    Chờ Thấy Chữ    Lịch sử thu tiền
+    ${tiền}=    Dinh Dang Vnd    ${khoản}[amount]
+    Click    xpath=//li[.//span[normalize-space()="${tiền}"]]//button[normalize-space()="${nút}"]
+    Wait For Elements State    ${HỘP_XÁC_NHẬN}    visible
+    Xác Nhận Trong Hộp    ${xác_nhận}
+    Wait Until Keyword Succeeds    30x    200ms    Khoản Thu Phải Đã Đổi    ${khoản}
+
+Khoản Thu Phải Đã Đổi
+    [Arguments]    ${khoản}
+    ${dòng}=    Khoản Thu Theo Gid    ${khoản}[gid]
+    ${trước}=    Evaluate    ($khoản.get('unallocatedStatus', 'pending'), $khoản['allocatedOrderId'])
+    ${sau}=    Evaluate    ($dòng.get('unallocatedStatus', 'pending'), $dòng['allocatedOrderId'])
+    Should Not Be Equal    ${sau}    ${trước}
+
+Khoản Thu Theo Gid
+    [Arguments]    ${gid}
+    ${phiếu}=    Đọc Bảng    payments
+    ${dòng}=    Evaluate    next(p for p in $phiếu if p['gid'] == '${gid}')
+    RETURN    ${dòng}
+
+Mặt Hàng Theo Gid Không Còn
+    [Arguments]    ${gid}
+    ${món}=    Đọc Bảng    items
+    ${còn}=    Evaluate    [i for i in $món if i['gid'] == '${gid}']
+    Should Be Empty    ${còn}
+
+Giá Món Phải Là
+    [Arguments]    ${gid}    ${giá}
+    ${món}=    Đọc Bảng    items
+    ${dòng}=    Evaluate    next(i for i in $món if i['gid'] == '${gid}')
+    Should Be Equal As Integers    ${dòng}[unitPrice]    ${giá}
+
+Xoá Mặt Hàng Chưa Bán
+    [Arguments]    ${món}
+    Mở Màn    /them/mat-hang/${món}[id]
+    Bấm Nút    Xoá hẳn
+    Chờ Hộp Xác Nhận    Xoá mặt hàng?
+    Xác Nhận Trong Hộp    Xoá
+    Wait Until Keyword Succeeds    30x    200ms    Mặt Hàng Theo Gid Không Còn    ${món}[gid]
+
+Nợ Anh Hùng Từ Sổ
+    [Documentation]    Nợ tính thẳng từ Đọc Bảng orders + payments (robot/libraries/so_no.py), không tin màn.
+    ${orders}=    Đọc Bảng    orders
+    ${payments}=    Đọc Bảng    payments
+    ${id}=    Mã Anh Hùng
+    ${nợ}=    No Cua Khach    ${orders}    ${payments}    ${id}
+    RETURN    ${nợ}
+
+Sổ Chín Bảng
+    ${sổ}=    Create Dictionary
+    FOR    ${bảng}    IN    itemGroups    items    customers    customerPrices    orders    orderLines    payments
+    ...    expenseCategories    expenses
+        ${dòng}=    Đọc Bảng    ${bảng}
+        Set To Dictionary    ${sổ}    ${bảng}=${dòng}
+    END
+    RETURN    ${sổ}
+
+Nhập File Sao Lưu
+    [Arguments]    ${đường_dẫn}
+    Mở Màn    /them/sao-luu
+    Chọn File Để Ghi Đè    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     # Cửa an toàn cũng tải một file nữa về — nuốt cú tải đó để nó không lẫn vào phép chờ sau.
     ${hứa}=    Promise To Wait For Download

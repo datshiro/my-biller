@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyBackup,
+  applyMerge,
   canSharePreparedBackup,
   currentCounts,
   downloadPreparedBackup,
   exportBackup,
   prepareBackup,
   readBackupFile,
+  readLedger,
+  saveSafetyFile,
   sharePreparedBackup,
   type BackupOutcome,
   type PreparedBackup,
 } from './backup'
-import { describeSavedFile } from './download-sink'
+import { describeSavedFile, type SavedFile } from './download-sink'
+import { MergePreviewSheet } from './merge-preview-sheet'
 import { BackupBanner } from './backup-banner'
 import { RESTORE_BLOCK_TEXT } from './restore-block-text'
 import { RestoreReportCard } from './restore-report-card'
 import { clearRestoreReport, readRestoreReport, saveRestoreReport } from './restore-report-store'
-import { useLastBackupLine, useRestoreBlock } from './use-settings'
+import { useDeviceIdentity, useLastBackupLine, useRestoreBlock } from './use-settings'
 import { RestoreBlockedError } from '@/db/backup'
 import {
   countRecords,
@@ -25,10 +29,12 @@ import {
   describeDroppedPrices,
   isOperationallyEmpty,
 } from '@/domain/backup'
-import type { BackupFile } from '@/domain/schema'
+import { findPaymentConflicts, isLegacyFile, MergeReviewError, type PaymentChoice } from '@/domain/backup-merge'
+import type { BackupData, BackupFile } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { ScreenHeader } from '@/ui/screen-header'
+import { Sheet } from '@/ui/sheet'
 import { requestFullResync } from '@/db/sync/applier'
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không xong. Thử lại.')
@@ -44,7 +50,13 @@ const SHARE_FAILURE_MESSAGE =
  * cách nào đi tiếp.
  */
 type Picked = { file: BackupFile; sourceName: string }
+type Choices = Partial<Record<string, PaymentChoice>>
+type MergeState = Picked & { current: BackupData; choices: Choices }
 type ImportStep =
+  | ({ phase: 'mode' } & Picked)
+  | ({ phase: 'legacy' } & Picked)
+  | ({ phase: 'merge'; notice: string | null } & MergeState)
+  | ({ phase: 'merge-safety'; fingerprints: string[]; saved: SavedFile } & MergeState)
   | ({ phase: 'confirm'; current: BackupCounts } & Picked)
   | ({ phase: 'safety'; saved: BackupOutcome; problem: string | null } & Picked)
   | ({ phase: 'accept'; saved: BackupOutcome; problem: string } & Picked)
@@ -55,6 +67,9 @@ const restoreError = (caught: unknown) =>
 
 export function SaoLuuPage() {
   const block = useRestoreBlock()
+  const identity = useDeviceIdentity()
+  // Cùng chữ dự phòng với khoá gộp (`mergeAllDataAndRecalculate`), để mã mới trên xem trước khớp lúc ghi.
+  const fallbackLetter = identity?.letter ?? 'B'
   const lastBackup = useLastBackupLine()
   // Đọc một lần lúc mount, xoá trong effect: StrictMode mount hai lần, đọc-và-xoá cùng chỗ thì lần mount
   // thứ hai mất thẻ.
@@ -200,10 +215,89 @@ export function SaoLuuPage() {
     setError(null)
     setNotice(null)
     try {
-      const backup = await readBackupFile(file)
-      setStep({ phase: 'confirm', file: backup, sourceName: file.name, current: await currentCounts(Date.now()) })
+      setStep({ phase: 'mode', file: await readBackupFile(file), sourceName: file.name })
     } catch (caught) {
       setError(message(caught))
+    }
+  }
+
+  const chooseOverwrite = async ({ file, sourceName }: Picked) => {
+    setStep(null)
+    try {
+      setStep({ phase: 'confirm', file, sourceName, current: await currentCounts(Date.now()) })
+    } catch (caught) {
+      setError(message(caught))
+    }
+  }
+
+  /** Đọc sổ trên máy **một lần**: xem trước và dấu vân tay gửi vào khoá đều tính trên đúng bản này. */
+  const openMerge = async (picked: Picked, notice: string | null = null, choices: Choices = {}) => {
+    try {
+      const current = await readLedger()
+      setStep({ ...picked, current, choices, notice, phase: 'merge' })
+    } catch (caught) {
+      setStep(null)
+      setError(message(caught))
+    }
+  }
+
+  const chooseMerge = (picked: Picked) => {
+    if (isLegacyFile(picked.file)) setStep({ ...picked, phase: 'legacy' })
+    else void openMerge(picked)
+  }
+
+  /** File an toàn trước khi gộp (D11). APK lưu xong là gộp luôn; web dừng ở cửa "Đã thấy file an toàn". */
+  const startMerge = async (state: MergeState, fingerprints: string[]) => {
+    setBusy(true)
+    const saved = await saveSafetyFile().catch((caught: unknown) => {
+      setStep({ ...state, notice: message(caught), phase: 'merge' })
+      setBusy(false)
+      return null
+    })
+    if (saved === null) return
+    if (saved.verified) {
+      await runMerge(state, fingerprints, saved)
+      return
+    }
+    setStep({ ...state, fingerprints, saved, phase: 'merge-safety' })
+    setBusy(false)
+  }
+
+  const runMerge = async (state: MergeState, fingerprints: string[], saved: SavedFile) => {
+    const { file, sourceName, choices } = state
+    setStep({ ...state, notice: null, phase: 'merge' })
+    setBusy(true)
+    try {
+      const answers = Object.fromEntries(
+        Object.entries(choices).filter((entry): entry is [string, PaymentChoice] => entry[1] !== undefined),
+      )
+      const { report, summary } = await applyMerge(file.data, answers, fingerprints)
+      saveRestoreReport({
+        mode: 'merge',
+        sourceName,
+        safety: { savedAs: saved.savedAs, location: saved.location },
+        codeChanges: summary.codeChanges.length,
+        report,
+      })
+      window.location.reload()
+    } catch (caught) {
+      setBusy(false)
+      if (caught instanceof RestoreBlockedError) {
+        setStep(null)
+        setError(RESTORE_BLOCK_TEXT[caught.reason])
+      } else if (caught instanceof MergeReviewError) {
+        // Sổ đổi (hoặc lựa chọn làm sổ hỏng): đọc lại sổ, chỉ giữ câu trả lời của xung đột còn y nguyên.
+        const current = await readLedger()
+        const unchanged = new Set(
+          findPaymentConflicts(current, file.data)
+            .filter((conflict) => fingerprints.includes(conflict.fingerprint))
+            .map((conflict) => conflict.gid),
+        )
+        const kept = Object.fromEntries(Object.entries(choices).filter(([gid]) => unchanged.has(gid)))
+        setStep({ phase: 'merge', file, sourceName, current, choices: kept, notice: caught.message })
+      } else {
+        setStep({ ...state, notice: message(caught), phase: 'merge' })
+      }
     }
   }
 
@@ -341,6 +435,74 @@ export function SaoLuuPage() {
           onCancel={() => cancelEmptyBackup(pendingEmptyBackup)}
           returnFocusRef={exportButton}
           pending={busy}
+        />
+      ) : null}
+
+      {step?.phase === 'mode' ? (
+        <Sheet title="Khôi phục từ file" onClose={() => setStep(null)}>
+          <p className="text-[15px]">
+            File “{step.sourceName}” có {describeCounts(countRecords(step.file.data))}.
+          </p>
+          <div className="mt-4 flex flex-col gap-3">
+            <Button variant="danger" onClick={() => void chooseOverwrite(step)}>
+              Ghi đè
+            </Button>
+            <p className="text-[13px] text-muted">
+              Thay toàn bộ sổ trên máy bằng file. Mất phần đang có trên máy mà file không có.
+            </p>
+            <Button variant="secondary" onClick={() => chooseMerge(step)}>
+              Gộp vào sổ trên máy
+            </Button>
+            <p className="text-[13px] text-muted">
+              Thêm vào máy những gì chỉ có trong file; cùng một dòng thì lấy bản mới hơn. Không xoá gì. Khoản
+              thu khác nhau giữa máy và file sẽ hỏi bạn từng khoản.
+            </p>
+          </div>
+        </Sheet>
+      ) : null}
+
+      {step?.phase === 'legacy' ? (
+        <ConfirmDialog
+          title="File từ bản cũ — gộp sẽ nhân đôi"
+          message="File này từ bản cũ, không có mã toàn cục. Gộp sẽ nhân đôi mọi đơn, khách, món, khoản thu đã có trên máy, và nợ có thể bị tính hai lần. Thường nên chọn Ghi đè."
+          confirmLabel="Vẫn gộp"
+          onConfirm={() => void openMerge(step)}
+          onCancel={() => setStep({ phase: 'mode', file: step.file, sourceName: step.sourceName })}
+        />
+      ) : null}
+
+      {step?.phase === 'merge' ? (
+        <MergePreviewSheet
+          current={step.current}
+          incoming={step.file.data}
+          choices={step.choices}
+          fallbackLetter={fallbackLetter}
+          notice={step.notice}
+          busy={busy}
+          onChoose={(gid, choice) => setStep({ ...step, choices: { ...step.choices, [gid]: choice } })}
+          onMerge={(fingerprints) => void startMerge(step, fingerprints)}
+          onClose={() => {
+            if (!busy) setStep(null)
+          }}
+        />
+      ) : null}
+
+      {step?.phase === 'merge-safety' ? (
+        <ConfirmDialog
+          title="Đã thấy file an toàn trong Tải về?"
+          message={`${describeSavedFile(step.saved)} Mở thư mục Tải về, thấy file rồi mới bấm tiếp — gộp xong trang sẽ tự tải lại.`}
+          confirmLabel="Đã thấy — gộp"
+          onConfirm={() => void runMerge(step, step.fingerprints, step.saved)}
+          onCancel={() =>
+            setStep({
+              phase: 'merge',
+              file: step.file,
+              sourceName: step.sourceName,
+              current: step.current,
+              choices: step.choices,
+              notice: null,
+            })
+          }
         />
       ) : null}
 

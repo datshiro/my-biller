@@ -1,4 +1,9 @@
-import { collectBackup, replaceAllDataAndRecalculate, wipeAllData } from '@/db/backup'
+import {
+  collectBackup,
+  mergeAllDataAndRecalculate,
+  replaceAllDataAndRecalculate,
+  wipeAllData,
+} from '@/db/backup'
 import { saveLastBackupAt } from '@/db/repositories/settings'
 import {
   backupFilename,
@@ -12,6 +17,7 @@ import { getDeviceConnection } from '@/db/repositories/device-state'
 import { getLedgerOverview } from '@/db/doi-soat-snapshot'
 import { buildRestoreReport, expectedAfterReplace, toReportActual, type RestoreReport } from '@/domain/backup-report'
 import { saveToDownloads, type SavedFile } from './download-sink'
+import type { MergeSummary, PaymentChoice } from '@/domain/backup-merge'
 
 export type PreparedBackup = {
   at: number
@@ -164,6 +170,33 @@ export async function applyBackup(data: BackupData): Promise<RestoreReport> {
 /** Số bản ghi đang có trên máy — cho xem trước Ghi đè ("Đang có trên máy: …"). */
 export async function currentCounts(at: number): Promise<BackupCounts> {
   return countRecords((await collectBackup(at)).data)
+}
+
+/** Sổ trên máy lúc mở xem trước Gộp. Đọc một lần: xem trước tính trên đúng bản này, lựa chọn đổi không đọc lại. */
+export async function readLedger(): Promise<BackupData> {
+  return (await collectBackup(Date.now())).data
+}
+
+/**
+ * File an toàn ngay trước Gộp. Gọi thẳng cửa ra file, **không** qua `downloadPreparedBackup`: hàm đó đóng
+ * dấu `lastBackupAt`, tức là ghi vào sổ giữa lúc xem trước và lúc khoá gộp.
+ */
+export async function saveSafetyFile(): Promise<SavedFile> {
+  const prepared = await prepareBackup(Date.now())
+  return saveToDownloads({ filename: prepared.filename, mimeType: 'application/json', text: prepared.text })
+}
+
+/**
+ * Gộp file vào sổ máy: gộp lại trong khoá ghi (không dùng kết quả xem trước), rồi đối chiếu bản kỳ vọng
+ * thuần với sổ đọc lại sau khi khoá đóng.
+ */
+export async function applyMerge(
+  data: BackupData,
+  paymentChoices: Readonly<Record<string, PaymentChoice>>,
+  answeredFingerprints: readonly string[],
+): Promise<{ report: RestoreReport; summary: MergeSummary }> {
+  const { expected, summary } = await mergeAllDataAndRecalculate(data, paymentChoices, answeredFingerprints)
+  return { report: buildRestoreReport(expected, toReportActual(await getLedgerOverview())), summary }
 }
 
 /** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */
