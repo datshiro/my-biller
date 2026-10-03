@@ -51,7 +51,14 @@ describe('outbox giao dịch', () => {
 
     await db.settings.put({
       key: 'shop',
-      value: { name: 'Đổi giữa lượt', phone: '', address: '', footerNote: '' },
+      value: {
+        name: 'Đổi giữa lượt',
+        phone: '',
+        address: '',
+        footerNote: '',
+        logo: null,
+        labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+      },
     })
     await expect(
       savePairedDevice({

@@ -7,6 +7,7 @@ import {
   ExpenseSchema,
   ItemGroupSchema,
   ItemSchema,
+  LabelWatermarkSchema,
   LineToppingSchema,
   OptionGroupSchema,
   OrderLineSchema,
@@ -25,12 +26,14 @@ export {
   ExpenseSchema,
   ItemGroupSchema,
   ItemSchema,
+  LabelWatermarkSchema,
   LineToppingSchema,
   OptionGroupSchema,
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
   SettingRowSchema,
+  SHOP_LOGO_MAX_CHARS,
   ShopSettingsSchema,
   ToppingMenuItemSchema,
 } from '@shared/ledger-schemas'
@@ -211,6 +214,7 @@ export const BackupFileSchema = z.preprocess(
 )
 
 export type ShopSettings = z.infer<typeof ShopSettingsSchema>
+export type LabelWatermark = z.infer<typeof LabelWatermarkSchema>
 export type AppState = z.infer<typeof AppStateSchema>
 export type SettingRow = z.infer<typeof SettingRowSchema>
 export type DeviceIdentity = z.infer<typeof DeviceIdentitySchema>
@@ -240,6 +244,8 @@ export const DEFAULT_SHOP: ShopSettings = {
   phone: '',
   address: '',
   footerNote: 'Cảm ơn quý khách!',
+  logo: null,
+  labelWatermark: { enabled: false, position: 'center', strength: 'light' },
 }
 
 export const DEFAULT_APP_STATE: AppState = {

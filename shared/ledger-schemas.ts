@@ -25,11 +25,34 @@ export const LedgerTableSchema = z.enum([
 export type LedgerTableName = z.infer<typeof LedgerTableSchema>
 export const LEDGER_TABLE_NAMES = LedgerTableSchema.options
 
+/**
+ * Oplog không bao giờ được dọn, mỗi lần lưu thông tin quán chép logo hai lần (before + after), và máy mới ghép kéo lại
+ * từ đầu — nên logo phải là PNG đen trắng nhỏ, không phải ảnh gốc.
+ */
+export const SHOP_LOGO_MAX_CHARS = 40_000
+
+export const LabelWatermarkSchema = z.object({
+  enabled: z.boolean(),
+  position: z.enum(['center', 'corner']),
+  strength: z.enum(['light', 'medium', 'dark']),
+})
+
 export const ShopSettingsSchema = z.object({
   name: z.string(),
   phone: z.string(),
   address: z.string(),
   footerNote: z.string(),
+  logo: z
+    .string()
+    .max(SHOP_LOGO_MAX_CHARS)
+    .regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/)
+    .nullable()
+    .default(null),
+  labelWatermark: LabelWatermarkSchema.default(() => ({
+    enabled: false,
+    position: 'center' as const,
+    strength: 'light' as const,
+  })),
 })
 
 export const AppStateSchema = z.object({
