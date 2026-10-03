@@ -288,6 +288,21 @@ describe('findPaymentConflicts', () => {
     expect(findPaymentConflicts(device, file)[0]?.allocatedOrderCode).toBe(device.orders[3]?.code)
   })
 
+  it('fileAllocatedOrderCode là mã đơn mà dòng file trừ vào — thẻ "phân bổ khác đơn" cần cả hai mã', () => {
+    const device = ledgerK()
+    const file = shiftIds(ledgerK(), 10)
+    file.orders[0] = { ...file.orders[0]!, code: 'PBH-261001-A101' }
+    file.payments[2] = { ...file.payments[2]!, allocatedOrderId: 11 }
+    file.payments[0] = { ...file.payments[0]!, note: 'Sửa' }
+
+    const conflicts = findPaymentConflicts(device, file)
+
+    expect(conflicts.map((c) => [c.allocatedOrderCode, c.fileAllocatedOrderCode])).toEqual([
+      [null, null],
+      [device.orders[3]?.code, 'PBH-261001-A101'],
+    ])
+  })
+
   it('dấu vân tay: đổi một trường nội dung (giữ gid) ⇒ khác; chỉ đổi id cục bộ ⇒ giống', () => {
     const { device, file } = twoConflictsSameCustomer()
     const base = findPaymentConflicts(device, file).map((c) => c.fingerprint)

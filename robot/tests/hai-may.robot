@@ -285,9 +285,11 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
     ...    thể làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy.
     Chọn Máy A
     Mở Màn    /them/cai-dat
+    Chờ Thấy Chữ    Sao lưu & khôi phục
     Không Được Thấy Chữ    Xoá toàn bộ dữ liệu
-    Không Được Thấy Chữ    Nhập từ file sao lưu
+    Mở Màn    /them/sao-luu
     Chờ Thấy Chữ    Kéo lại từ đầu
+    Không Được Thấy Chữ    Nhập từ file sao lưu
 
     Mở Màn    /them/mat-hang/moi
     Điền Ô    Tên mặt hàng *    Món đang chờ mạng
@@ -304,7 +306,7 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
 
 File sao lưu ở máy đã ghép không chứa token hay mã máy
     [Documentation]    Khóa đường rò chìa khóa qua file người bán có thể gửi bằng Zalo.
-    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/cai-dat
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/sao-luu
     ${promise}=    Promise To Wait For Download
     Bấm Nút    SAO LƯU RA FILE
     ${download}=    Wait For    ${promise}
@@ -337,7 +339,7 @@ Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
     [Documentation]    Xóa bản sao đọc không được làm đổi tổng đã thu hay công nợ của máy B.
     ${payments_trước}=    Đọc Bảng    payments    ${MÁY_B_PAGE}
     ${tổng_trước}=    Evaluate    sum(row['amount'] for row in $payments_trước)
-    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/cai-dat
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/sao-luu
     Bấm Nút    Kéo lại từ đầu
 
     Wait Until Keyword Succeeds    60x    500ms    Bảng Máy Phải Có Số Dòng

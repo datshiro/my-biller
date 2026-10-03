@@ -22,6 +22,8 @@ export type PaymentConflict = {
   customerGid: string | null
   /** Mã đơn mà dòng máy đang trừ vào; `null` khi chưa trừ đơn nào. */
   allocatedOrderCode: string | null
+  /** Mã đơn mà dòng file trừ vào (theo đơn trong file); `null` khi chưa trừ đơn nào. */
+  fileAllocatedOrderCode: string | null
   changed: (keyof Payment)[]
 }
 
@@ -115,6 +117,8 @@ export function findPaymentConflicts(current: BackupData, incoming: BackupData):
       customerGid: deviceCustomer ?? fileCustomer ?? null,
       allocatedOrderCode:
         device.allocatedOrderId === 0 ? null : deviceRefs.orders.get(device.allocatedOrderId)?.code ?? null,
+      fileAllocatedOrderCode:
+        file.allocatedOrderId === 0 ? null : fileRefs.orders.get(file.allocatedOrderId)?.code ?? null,
       changed,
     })
   }

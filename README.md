@@ -96,12 +96,13 @@ hay runner đồng bộ. Vì IndexedDB bị cô lập theo origin, artifact này
 ## Sao lưu
 
 Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không thay file sao lưu độc lập**. Màn
-*Thêm → Cài đặt*:
+*Thêm → Cài đặt → Sao lưu & khôi phục* (`/them/sao-luu`; *Xoá toàn bộ dữ liệu* vẫn ở cuối Cài đặt):
 
 - **Sao lưu ra file** → tải `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được).
   Nếu bản sao không có đơn, mặt hàng, khách, khoản chi hay giá riêng còn dùng được, app sẽ cảnh báo
   trước khi tải; file vẫn có thể chứa thông tin cửa hàng, nhóm/loại và cấu hình.
-- Máy chưa ghép có thể **Nhập từ file** → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
+- Máy chưa ghép có thể **Nhập từ file** (ô chọn không lọc theo loại file, để file đã qua Zalo/Drive
+  mất đuôi `.json` vẫn chọn được) → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
   đúng thì hỏi xác nhận, tự tải một file của dữ liệu hiện tại về máy, rồi mới ghi đè trong một
   transaction và chạy `recalcAll()`.
 - Máy đã ghép dùng **Kéo lại từ đầu** để dựng lại bản sao từ sổ chung; không cho nhập file đè lên
@@ -113,7 +114,8 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
   vừa tải. Máy không hỗ trợ vẫn dùng file trong Tải về để gửi qua Zalo hoặc lưu Drive. File chứa toàn
   bộ sổ và thông tin khách, chỉ gửi tới nơi tin cậy.
 - File sao lưu không chứa token, mã máy hay trạng thái đồng bộ trong `deviceState`.
-- Quá 7 ngày chưa sao lưu thì có banner nhắc ở màn Bán và màn Cài đặt.
+- Quá 7 ngày chưa sao lưu thì có banner nhắc ở màn Bán, Cài đặt và Sao lưu & khôi phục; link trong banner
+  mở thẳng màn Sao lưu & khôi phục.
 - **Ghim bộ nhớ** (`navigator.storage.persist()`) giảm khả năng hệ điều hành xoá dữ liệu, nhưng không
   thay được việc sao lưu.
 

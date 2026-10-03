@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SaoLuuPage } from '../sao-luu-page'
 import { SettingsPage } from '../settings-page'
 import { downloadRecoveryBackup, prepareBackup } from '../backup'
 import { collectBackup } from '@/db/backup'
@@ -63,6 +64,14 @@ afterEach(() => {
 const renderPage = () =>
   render(
     <MemoryRouter>
+      <SaoLuuPage />
+    </MemoryRouter>,
+  )
+
+/** Xoá sạch (`DangerZone`) ở lại màn Cài đặt. */
+const renderSettings = () =>
+  render(
+    <MemoryRouter>
       <SettingsPage />
     </MemoryRouter>,
   )
@@ -107,7 +116,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
     expect((await getAppState()).lastBackupAt).toBeNull()
     expect((screen.getByRole('button', { name: 'SAO LƯU RA FILE', hidden: true }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Nhập từ file sao lưu', hidden: true }) as HTMLButtonElement).disabled).toBe(true)
-    const background = screen.getByRole('heading', { name: 'Cài đặt', hidden: true }).closest('[inert]')
+    const background = screen.getByRole('heading', { name: 'Sao lưu & khôi phục', hidden: true }).closest('[inert]')
     expect(background?.getAttribute('aria-hidden')).toBe('true')
 
     pick(JSON.stringify({ app: 'my-biller', version: 2, exportedAt: NOW, data: {} }))
@@ -390,6 +399,21 @@ describe('nhập file sao lưu', () => {
     expect(await db.items.count()).toBe(1)
   })
 
+  /** File qua Zalo/Drive về máy mất đuôi `.json` và mang MIME khác; bộ chọn không được lọc nó đi. */
+  it('ô chọn file không lọc theo loại; file .txt chứa bản sao lưu đúng vẫn tới hộp xác nhận', async () => {
+    await seedItem()
+    const file = await collectBackup(NOW)
+    renderPage()
+
+    const input = screen.getByLabelText('Chọn file sao lưu')
+    expect(input.hasAttribute('accept')).toBe(false)
+    fireEvent.change(input, {
+      target: { files: [new File([JSON.stringify(file)], 'my-biller-backup.txt', { type: 'text/plain' })] },
+    })
+
+    expect(await screen.findByText('Ghi đè toàn bộ dữ liệu?')).toBeDefined()
+  })
+
   /**
    * Cửa thứ hai không phải thủ tục thừa: `exportBackup` chỉ bấm `link.click()` rồi trả về, webview
    * Zalo hay PWA iOS có thể nuốt cú tải mà không báo gì. Ghi đè trước khi người bán tự mắt thấy file
@@ -458,7 +482,7 @@ describe('bản sao an toàn không nhập lại được', () => {
 
   it('xoá sạch: dữ liệu lành thì vẫn chỉ hai cửa như cũ', async () => {
     await seedItem()
-    renderPage()
+    renderSettings()
 
     await wipeUpToSecondGate()
 
@@ -470,7 +494,7 @@ describe('bản sao an toàn không nhập lại được', () => {
   it('xoá sạch: file hỏng thì dừng ở cửa thứ ba, huỷ ở đó là chưa xoá gì', async () => {
     await seedItem()
     await addOddItem()
-    renderPage()
+    renderSettings()
 
     await wipeUpToSecondGate()
     await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
@@ -487,7 +511,7 @@ describe('bản sao an toàn không nhập lại được', () => {
   it('xoá sạch: qua cửa thứ ba thì mới thật sự xoá', async () => {
     await seedItem()
     await addOddItem()
-    renderPage()
+    renderSettings()
 
     await wipeUpToSecondGate()
     await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
@@ -525,7 +549,7 @@ describe('bản sao an toàn không nhập lại được', () => {
     URL.createObjectURL = vi.fn(() => {
       throw new Error('Webview chặn tải file.')
     })
-    renderPage()
+    renderSettings()
 
     await wipeUpToSecondGate()
 
@@ -533,6 +557,18 @@ describe('bản sao an toàn không nhập lại được', () => {
     expect(screen.getByLabelText('Gõ XOA').getAttribute('aria-invalid')).toBeNull()
     expect(screen.queryByText('Đã thấy file trong máy chưa?')).toBeNull()
     expect(await db.items.count()).toBe(1)
+  })
+})
+
+describe('Cài đặt chỉ còn một dòng dẫn tới màn sao lưu', () => {
+  it('không còn nút sao lưu/nhập trên Cài đặt; dòng dẫn mang mốc sao lưu cuối', async () => {
+    await saveAppState({ lastBackupAt: NOW - DAY })
+    renderSettings()
+
+    expect(await screen.findByText('Sao lưu & khôi phục')).toBeDefined()
+    expect(await screen.findByText('Lần cuối: 14:00 ngày 6/8/2026')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'SAO LƯU RA FILE' })).toBeNull()
+    expect(screen.queryByLabelText('Chọn file sao lưu')).toBeNull()
   })
 })
 

@@ -169,7 +169,7 @@ test('tạo đơn rồi tải lại trang: dữ liệu vẫn còn', async ({ pag
 test('kho chỉ có metadata và loại chi mặc định phải cảnh báo trước khi tải', async ({ page }) => {
   await page.goto('/chi-phi')
   await expect(page.getByText('Nguyên liệu', { exact: true })).toBeVisible()
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
 
   const downloads: Download[] = []
   page.on('download', (download) => downloads.push(download))
@@ -218,7 +218,7 @@ test('chia sẻ dùng đúng File vừa tải và không tải hay đóng dấu 
     })
   })
   await seed(page)
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
 
   await expect(page.getByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toHaveCount(0)
   const downloads: Download[] = []
@@ -253,12 +253,13 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
   expect(before.tables.itemGroups?.length).toBeGreaterThan(0)
   expect(before.tables.customerPrices?.length).toBeGreaterThan(0)
 
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
   expect(backup.filename).toMatch(/^my-biller-backup-\d{6}-\d{4}\.json$/)
   await expect(page.getByText(/Đã gửi yêu cầu tải bản sao với tên đề xuất/)).toBeVisible()
 
   // Xoá sạch: tải file an toàn trước, rồi phải tự xác nhận đã thấy file mới xoá được.
+  await page.goto('/them/cai-dat')
   await page.getByRole('button', { name: 'Xoá toàn bộ dữ liệu' }).click()
   await page.getByLabel('Gõ XOA').fill('XOA')
   await Promise.all([
@@ -271,7 +272,7 @@ test('sao lưu → xoá sạch → nhập lại: từng bản ghi của từng b
   ])
   expect((await snapshot(page)).tables.orders).toEqual([])
 
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
   await importFile(page, backup.text)
   await confirmImport(page)
 
@@ -293,7 +294,7 @@ test('file có dòng giá riêng rác: cửa xác nhận nói rõ, nhập vẫn 
   await seed(page)
   await setPrice(page, 'Anh Hùng', 'Phở bò đặc biệt', '45000')
 
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
   const backup = await downloadFrom(page, 'SAO LƯU RA FILE')
 
   const file = JSON.parse(backup.text) as {
@@ -336,7 +337,7 @@ test('file hỏng: báo lỗi và dữ liệu đang có không suy suyển', asy
   await seed(page)
   const before = await snapshot(page)
 
-  await page.goto('/them/cai-dat')
+  await page.goto('/them/sao-luu')
   await importFile(page, '{"app":"my-biller","version":1,"data":{"orders":"không phải mảng"}}')
 
   await expect(page.getByRole('alert')).toContainText('hỏng')

@@ -22,7 +22,7 @@ ${SHEET_XOÁ}        css=[role=dialog][aria-label="Xoá toàn bộ dữ liệu"]
 
 *** Test Cases ***
 Sao lưu ra file thì file thật nằm trong máy và có đủ dữ liệu
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
 
     ${nội_dung}=    Get File    ${đường_dẫn}
@@ -38,7 +38,7 @@ Bản sao chưa có dữ liệu bán hàng phải được cảnh báo trước 
     ...    được sổ trong PWA. Cửa này phải chặn cú tải và mốc cho tới khi họ chủ động xác nhận.
     [Tags]    regression
     [Setup]    Mở Phiên Sạch
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Theo Dõi Yêu Cầu Tải
 
     Click    ${NÚT_SAO_LƯU}
@@ -79,7 +79,7 @@ Bản sao chưa có dữ liệu bán hàng phải được cảnh báo trước 
 Sao lưu xong thì chia sẻ đúng file JSON vừa tải
     [Documentation]    Robot giữ phần user-reachable contract: CTA chỉ hiện sau download và chuyển
     ...    đúng tên đề xuất, MIME và bytes. Native share sheet thật được kiểm riêng trên iPhone.
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Giả Lập Chia Sẻ File
     Không Được Thấy Chữ    CHIA SẺ FILE VỪA SAO LƯU
 
@@ -96,8 +96,8 @@ Sao lưu xong thì chia sẻ đúng file JSON vừa tải
     Should Be Equal    ${đã_chia_sẻ}[text]    ${nội_dung}
     Không Được Thấy Chữ    CHIA SẺ FILE VỪA SAO LƯU
 
-Sao lưu xong thì màn cài đặt ghi lại mốc lần cuối
-    Mở Màn    /them/cai-dat
+Sao lưu xong thì màn sao lưu ghi lại mốc lần cuối
+    Mở Màn    /them/sao-luu
     Chờ Thấy Chữ    Chưa sao lưu lần nào
     Sao Lưu Ra File
     Chờ Thấy Chữ    Đã gửi yêu cầu tải bản sao
@@ -106,7 +106,7 @@ Sao lưu xong thì màn cài đặt ghi lại mốc lần cuối
 Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
     [Documentation]    Vòng tròn đầy đủ: sao lưu → bán thêm → nhập lại. Đơn bán sau lúc sao lưu phải
     ...    biến mất, còn dữ liệu trong file phải về đủ.
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
 
     Bán Nhanh    Phở bò
@@ -123,7 +123,7 @@ Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
 Nhập file thì phải qua đủ hai cửa xác nhận
     [Documentation]    Cửa thứ hai tồn tại vì cú tải file an toàn có thể bị webview nuốt trong im
     ...    lặng — bắt người bán tự mắt thấy file rồi mới cho đi tiếp.
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
 
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
@@ -135,11 +135,11 @@ Nhập file thì phải qua đủ hai cửa xác nhận
     Chờ Thấy Chữ    sau bước này dữ liệu đang có trên máy không lấy lại được
 
 Huỷ ở cửa đầu thì chưa đụng gì tới dữ liệu
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
     Bán Nhanh    Trà đá
 
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     Bỏ Qua Hộp Xác Nhận
@@ -148,11 +148,11 @@ Huỷ ở cửa đầu thì chưa đụng gì tới dữ liệu
     Length Should Be    ${đơn}    3    Bấm Huỷ ở cửa đầu mà dữ liệu vẫn bị ghi đè.
 
 Huỷ ở cửa thứ hai thì cũng vẫn chưa ghi đè
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     ${đường_dẫn}=    Sao Lưu Ra File
     Bán Nhanh    Trà đá
 
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
     Xác Nhận Trong Hộp    Tải file an toàn
     Chờ Hộp Xác Nhận    Đã thấy file trong máy chưa?
@@ -161,10 +161,47 @@ Huỷ ở cửa thứ hai thì cũng vẫn chưa ghi đè
     ${đơn}=    Đọc Bảng    orders
     Length Should Be    ${đơn}    3    Bấm Huỷ ở cửa thứ hai mà dữ liệu vẫn bị ghi đè.
 
+Cài đặt dẫn tới màn Sao lưu & khôi phục, còn banner nhắc thì mở thẳng màn đó
+    [Documentation]    Sao lưu/khôi phục dời khỏi Cài đặt sang màn riêng; Cài đặt chỉ còn một dòng dẫn tới.
+    Mở Màn    /them/cai-dat
+    Không Được Thấy Chữ    SAO LƯU RA FILE
+    Click    css=button:has-text("Sao lưu & khôi phục")
+    Wait For Condition    Url    ==    ${BASE_URL}/them/sao-luu
+    Wait For Elements State    ${NÚT_SAO_LƯU}    visible
+    Chờ Thấy Chữ    Chưa sao lưu lần nào
+
+    Mở Màn    /
+    Click    css=a:has-text("Sao lưu ngay")
+    Wait For Condition    Url    ==    ${BASE_URL}/them/sao-luu
+
+File sao lưu đã mất đuôi .json (qua Zalo/Drive) vẫn chọn được và tới hộp xác nhận
+    [Documentation]    Lỗi cũ: ô chọn file đặt accept="application/json,.json", nên file gửi qua Zalo/Drive
+    ...    về máy mang MIME application/octet-stream hoặc mất đuôi bị bộ chọn Android làm mờ — người
+    ...    bán không nhập lại được bản sao của chính mình. Nay ô chọn không lọc theo loại; nội dung vẫn
+    ...    được parseBackupFile kiểm trước khi chạm DB.
+    [Tags]    regression
+    Mở Màn    /them/sao-luu
+    ${đường_dẫn}=    Sao Lưu Ra File
+    ${có_lọc}=    Evaluate JavaScript    ${Ô_CHỌN_FILE}    (input) => input.hasAttribute('accept')
+    Should Not Be True    ${có_lọc}    Ô chọn file còn lọc theo loại file.
+    ${nội_dung}=    Get File    ${đường_dẫn}
+    ${txt}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-qua-zalo.txt
+    Create File    ${txt}    ${nội_dung}
+    Bán Nhanh    Trà đá
+
+    Mở Màn    /them/sao-luu
+    Upload File By Selector    ${Ô_CHỌN_FILE}    ${txt}
+    Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
+    Chờ Thấy Chữ    2 đơn · 4 mặt hàng · 1 khách · 1 khoản chi · 0 giá riêng
+    Bỏ Qua Hộp Xác Nhận
+    ${đơn}=    Đọc Bảng    orders
+    Length Should Be    ${đơn}    3    Huỷ ở hộp xác nhận mà dữ liệu đã bị đụng.
+    [Teardown]    Run Keywords    Đóng Phiên    AND    Remove File    ${txt}
+
 Chọn nhầm file không phải bản sao lưu thì báo rõ và không hỏi tiếp
     ${rác}=    Set Variable    ${DOWNLOAD_DIR}/khong-phai-ban-sao-luu.json
     Create File    ${rác}    day khong phai JSON
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${rác}
 
     Chờ Thấy Chữ    File này không phải file sao lưu
@@ -174,7 +211,7 @@ Chọn nhầm file không phải bản sao lưu thì báo rõ và không hỏi t
 Nhập file sao lưu của app khác thì bị chặn ngay
     ${lạ}=    Set Variable    ${DOWNLOAD_DIR}/backup-app-khac.json
     Create File    ${lạ}    {"app":"mot-app-khac","version":1,"data":{}}
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${lạ}
 
     Chờ Thấy Chữ    File sao lưu của ứng dụng khác
@@ -402,7 +439,7 @@ Xoá Toàn Bộ Dữ Liệu
 
 Nhập File Sao Lưu
     [Arguments]    ${đường_dẫn}
-    Mở Màn    /them/cai-dat
+    Mở Màn    /them/sao-luu
     Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
     Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
     # Cửa an toàn cũng tải một file nữa về — nuốt cú tải đó để nó không lẫn vào phép chờ sau.
@@ -424,7 +461,7 @@ Chờ Nạp Lại Xong
     ...    và phép chờ qua sớm, để rồi lệnh kế tiếp chết giữa lúc trang đổi. Dấu mốc đặt trên `window`
     ...    là thứ duy nhất chắc chắn biến mất cùng document cũ.
     Wait Until Keyword Succeeds    30x    500ms    Trang Phải Là Trang Mới
-    Wait For Elements State    ${NÚT_SAO_LƯU}    visible
+    Wait For Elements State    css=header h1    visible
 
 Trang Phải Là Trang Mới
     ${còn_dấu}=    Evaluate JavaScript    ${None}    () => window.__truocKhiNapLai === true
