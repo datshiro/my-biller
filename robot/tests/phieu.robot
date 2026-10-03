@@ -565,7 +565,6 @@ In tem: logo đã cài nhưng tắt hình chìm thì tem y hệt khi chưa có l
     [Documentation]    Khoá "tắt là y như cũ" của #51: cài logo mà chưa bật hình chìm không được đổi một byte
     ...    nào của lệnh TSPL. Hai lần chụp html-to-image cách nhau một lần lưu cài đặt — nếu ca này chập
     ...    chờn thì khâu chụp không tất định, phải tìm nguyên nhân chứ đừng nới assert.
-    [Tags]    regression
     [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
     ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
     ${gốc}=    In Tem Của Đơn    ${đơn}
