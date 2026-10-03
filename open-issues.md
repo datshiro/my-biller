@@ -225,7 +225,7 @@
   APK (nhớ tăng `versionCode`) thì máy in tem mới có tính năng. Độ phủ chấm thưa (Nhạt 3/16, Vừa 5/16, Đậm 8/16
   Bayer 4×4) và viền chữ 2 chấm mới thử trên ảnh mô phỏng tem 50×30, chưa lên giấy; nhiệt độ in có thể làm mỗi
   mức đậm hơn mô phỏng. Robot chỉ chứng được byte TSPL (APK giả).
-- Mitigation: Chuyến quán cùng ISSUE-007/008/009: in đơn 3 phần ở cả ba mức và chế độ góc trên tem 50×30, kiểm
+- Mitigation: Chuyến quán cùng ISSUE-007/008/009: in đơn 3 phần ở cả ba mức, chế độ bên phải và chế độ góc trên tem 50×30, kiểm
   tên món, ghi chú, mã đơn và `i/n` đọc rõ. Máy rơi chấm lẻ → đổi tra Bayer sang `BAYER[y & 3][(x >> 1) & 3]`
   (ô rộng 2 chấm, cùng độ phủ) trong `src/domain/watermark.ts`. In đậm hơn mong đợi → hạ `STRENGTH_CELLS`
   3/5/8 → 2/4/6.

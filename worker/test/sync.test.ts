@@ -637,6 +637,34 @@ describe('oplog đồng bộ', () => {
     expect((await lastShop())?.after).toMatchObject(removedOnPurpose)
   })
 
+  it('máy 2.10.0 lưu thông tin quán không đưa logo chìm bên phải về giữa', async () => {
+    const text = { name: 'Quán', phone: '', address: '', footerNote: '', logo: 'data:image/png;base64,iVBORw0KGgo=' }
+    const right = { enabled: true, position: 'center', strength: 'medium', align: 'right' }
+    const created = { key: 'shop', value: { ...text, labelWatermark: right } }
+    expect((await push(event('settings', 'shop', created))).status).toBe(201)
+
+    // Bản 2.10.0 bỏ `align` khi đọc, nên cấu hình nó đẩy lên thiếu hẳn khoá này.
+    const darkerByOldClient = {
+      key: 'shop',
+      value: { ...text, labelWatermark: { enabled: true, position: 'center', strength: 'dark' } },
+    }
+    expect((await push(event('settings', 'shop', darkerByOldClient, {}, 'put', created))).status).toBe(201)
+    const lastShop = (await pullAll()).filter((entry) => entry.table === 'settings' && entry.entityKey === 'shop').at(-1)
+    expect(lastShop?.after).toMatchObject({ value: { labelWatermark: { strength: 'dark', align: 'right' } } })
+  })
+
+  it('máy 2.9.0 lưu thông tin quán (không có cả `labelWatermark`) giữ nguyên logo chìm bên phải', async () => {
+    const text = { name: 'Quán', phone: '', address: '', footerNote: '' }
+    const right = { enabled: true, position: 'center', strength: 'light', align: 'right' }
+    const created = { key: 'shop', value: { ...text, logo: 'data:image/png;base64,iVBORw0KGgo=', labelWatermark: right } }
+    expect((await push(event('settings', 'shop', created))).status).toBe(201)
+
+    const renamedBy290 = { key: 'shop', value: { ...text, name: 'Quán Mới' } }
+    expect((await push(event('settings', 'shop', renamedBy290, {}, 'put', created))).status).toBe(201)
+    const lastShop = (await pullAll()).filter((entry) => entry.table === 'settings' && entry.entityKey === 'shop').at(-1)
+    expect(lastShop?.after).toMatchObject({ value: { name: 'Quán Mới', labelWatermark: right } })
+  })
+
   it('từ chối logo vượt trần trước khi ghi vào sổ', async () => {
     const logo = 'data:image/png;base64,' + 'A'.repeat(40_000)
     const shop = { key: 'shop', value: { name: 'Quán', phone: '', address: '', footerNote: '', logo } }

@@ -44,21 +44,16 @@ Logo và hình chìm cài ở máy A tới máy B
     [Documentation]    Cấu hình hình chìm trên tem là của cả sổ, không theo máy (chốt ở #51): bật ở quầy
     ...    này thì tem in ở quầy kia cũng có logo. Chỉ so độ dài logo và cấu hình — không đưa logo vào log.
     Chọn Máy A
+    Cài Logo Quán    Bên phải
+    ${ở_a}=    Đọc Logo Quán    ${MÁY_A_PAGE}
+    Should Be Equal    ${ở_a}[watermark]    {"enabled":true,"position":"center","strength":"light","align":"right"}
+    Logo Máy B Phải Hội Tụ Với    ${ở_a}
+
+    Chọn Máy A
     Cài Logo Quán    Góc trên phải
     ${ở_a}=    Đọc Logo Quán    ${MÁY_A_PAGE}
-    Should Be Equal    ${ở_a}[watermark]    {"enabled":true,"position":"corner","strength":"light"}
-    # `Cài Logo Quán` đi bằng `Go To`, tức tải lại trang: tab mới phải chờ lease 15 giây của tab cũ hết hạn mới
-    # được đẩy — cùng ngân sách 40 × 500ms như các ca khác mở màn bằng URL.
-    ${hội_tụ}=    Run Keyword And Return Status
-    ...    Wait Until Keyword Succeeds    40x    500ms    Logo Máy B Phải Giống    ${ở_a}
-    IF    not ${hội_tụ}
-        ${pending}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
-        ${state}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
-        ${notice}=    Evaluate    [row.get('message') for row in $state if row.get('key') == 'notice']
-        ${bảng}=    Evaluate    [(row['table'], row['status']) for row in $pending]
-        ${ở_b}=    Đọc Logo Quán    ${MÁY_B_PAGE}
-        Fail    Máy B chưa nhận logo: B=${ở_b}, outbox A=${bảng}, notice A=${notice}
-    END
+    Should Be Equal    ${ở_a}[watermark]    {"enabled":true,"position":"corner","strength":"light","align":"center"}
+    Logo Máy B Phải Hội Tụ Với    ${ở_a}
 
 Heartbeat cục bộ giữ lease và đường sync realtime
     [Documentation]    Khóa lỗi poll mạng dài hơn TTL làm lease hết hạn: heartbeat cục bộ phải giữ
@@ -627,3 +622,19 @@ Logo Máy B Phải Giống
     [Arguments]    ${ở_a}
     ${ở_b}=    Đọc Logo Quán    ${MÁY_B_PAGE}
     Should Be Equal    ${ở_b}    ${ở_a}    Máy B chưa nhận logo/cấu hình hình chìm của máy A.
+
+Logo Máy B Phải Hội Tụ Với
+    [Documentation]    `Cài Logo Quán` đi bằng `Go To`, tức tải lại trang: tab mới phải chờ lease 15 giây của tab cũ hết
+    ...    hạn mới được đẩy — cùng ngân sách 40 × 500ms như các ca khác mở màn bằng URL. Hụt thì báo kèm hàng đợi và
+    ...    thông báo đồng bộ của máy A để phân biệt chậm với kẹt.
+    [Arguments]    ${ở_a}
+    ${hội_tụ}=    Run Keyword And Return Status
+    ...    Wait Until Keyword Succeeds    40x    500ms    Logo Máy B Phải Giống    ${ở_a}
+    IF    not ${hội_tụ}
+        ${pending}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
+        ${state}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+        ${notice}=    Evaluate    [row.get('message') for row in $state if row.get('key') == 'notice']
+        ${bảng}=    Evaluate    [(row['table'], row['status']) for row in $pending]
+        ${ở_b}=    Đọc Logo Quán    ${MÁY_B_PAGE}
+        Fail    Máy B chưa nhận logo: B=${ở_b}, outbox A=${bảng}, notice A=${notice}
+    END

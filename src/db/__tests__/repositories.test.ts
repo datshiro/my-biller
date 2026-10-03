@@ -39,8 +39,22 @@ describe('settings', () => {
       address: '',
       footerNote: 'Cảm ơn quý khách!',
       logo: null,
-      labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+      labelWatermark: { enabled: false, position: 'center', strength: 'light', align: 'center' },
     })
+  })
+
+  it('bản ghi do 2.10.0 ghi (hình chìm chưa có `align`) đọc ra căn giữa, không lệch sang phải', async () => {
+    const value = {
+      name: 'Quán',
+      phone: '',
+      address: '',
+      footerNote: '',
+      logo: 'data:image/png;base64,iVBORw0KGgo=',
+      labelWatermark: { enabled: true, position: 'center', strength: 'dark' },
+    }
+    // Ghi thẳng dòng thô như máy 2.10.0 để lại trên IndexedDB, không qua schema mới.
+    await db.settings.put({ key: 'shop', value } as unknown as Parameters<typeof db.settings.put>[0])
+    expect((await getShop()).labelWatermark).toEqual({ enabled: true, position: 'center', strength: 'dark', align: 'center' })
   })
 
   it('lưu từng phần, không xoá trường chưa sửa', async () => {

@@ -57,7 +57,7 @@ describe('outbox giao dịch', () => {
         address: '',
         footerNote: '',
         logo: null,
-        labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+        labelWatermark: { enabled: false, position: 'center', strength: 'light', align: 'center' },
       },
     })
     await expect(

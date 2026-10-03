@@ -35,6 +35,12 @@ export const LabelWatermarkSchema = z.object({
   enabled: z.boolean(),
   position: z.enum(['center', 'corner']),
   strength: z.enum(['light', 'medium', 'dark']),
+  /**
+   * Logo chìm (`position: 'center'`) căn giữa tem hay dồn về nửa phải. Là trường riêng chứ không phải một giá trị
+   * `position` mới: bản 2.10.0 gặp giá trị enum lạ thì không parse nổi bản ghi shop và kẹt đồng bộ, còn trường lạ
+   * thì chỉ bị bỏ qua (in căn giữa).
+   */
+  align: z.enum(['center', 'right']).default('center'),
 })
 
 export const ShopSettingsSchema = z.object({
@@ -52,6 +58,7 @@ export const ShopSettingsSchema = z.object({
     enabled: false,
     position: 'center' as const,
     strength: 'light' as const,
+    align: 'center' as const,
   })),
 })
 

@@ -649,7 +649,7 @@ describe('in tem trong app native', () => {
   it('bật hình chìm → giải mã logo một lần và đưa cấu hình vào lệnh in tem', async () => {
     sinkShim.native = true
     localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
-    const labelWatermark = { enabled: true, position: 'center' as const, strength: 'medium' as const }
+    const labelWatermark = { enabled: true, position: 'center' as const, strength: 'medium' as const, align: 'right' as const }
     await saveShop({ logo: 'data:image/png;base64,iVBORw0KGgo=', labelWatermark })
     const { id } = await seedOrder({ qty: 3, paid: 165_000 })
     renderReceipt(id)
@@ -668,7 +668,7 @@ describe('in tem trong app native', () => {
     logoShim.decode.mockRejectedValueOnce(new DOMException('The source image could not be decoded.', 'InvalidStateError'))
     await saveShop({
       logo: 'data:image/png;base64,AAAA',
-      labelWatermark: { enabled: true, position: 'center', strength: 'medium' },
+      labelWatermark: { enabled: true, position: 'center', strength: 'medium', align: 'center' },
     })
     const { id } = await seedOrder({ qty: 3, paid: 165_000 })
     renderReceipt(id)

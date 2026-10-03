@@ -5,7 +5,7 @@ import { labelSequence } from '@/domain/label-count'
 import type { LabelWatermark } from '@/domain/schema'
 import { encodeLabels, labelDots, type LabelImage, type LabelSize } from '@/domain/tspl/encode'
 import { compositeUnder, renderLogoLayer, STRENGTH_CELLS } from '@/domain/watermark'
-import { watermarkBox } from '@/features/receipt/label-layout'
+import { logoPlacement, watermarkBox } from '@/features/receipt/label-layout'
 
 export interface LabelWatermarkJob {
   logo: Bitmap
@@ -21,11 +21,12 @@ export function buildWatermarkLayer(size: LabelSize, watermark: LabelWatermarkJo
   const { config, logo } = watermark
   if (!config.enabled) return null
   const dots = labelDots(size)
+  const placement = logoPlacement(config)
   const layer = renderLogoLayer(
     dots,
     logo,
-    watermarkBox(size, config.position),
-    config.position === 'corner' ? { kind: 'solid' } : { kind: 'dither', cells: STRENGTH_CELLS[config.strength] },
+    watermarkBox(size, placement),
+    placement === 'corner' ? { kind: 'solid' } : { kind: 'dither', cells: STRENGTH_CELLS[config.strength] },
   )
   return layer
 }

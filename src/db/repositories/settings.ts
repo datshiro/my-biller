@@ -12,7 +12,13 @@ import { syncTransaction } from '../sync/outbox'
 export async function getShop(): Promise<ShopSettings> {
   const row = await db.settings.get('shop')
   // Lần chạy đầu chưa có gì — trả mặc định để phiếu bán hàng không vỡ vì thiếu tên cửa hàng.
-  return { ...DEFAULT_SHOP, ...(row?.key === 'shop' ? row.value : {}) }
+  const value = row?.key === 'shop' ? row.value : undefined
+  // Dòng sổ do bản cũ ghi không qua schema mới: hình chìm của 2.10.0 thiếu `align`, phải nhận mặc định từng trường.
+  return {
+    ...DEFAULT_SHOP,
+    ...value,
+    labelWatermark: { ...DEFAULT_SHOP.labelWatermark, ...value?.labelWatermark },
+  }
 }
 
 export async function saveShop(patch: Partial<ShopSettings>): Promise<void> {

@@ -146,7 +146,7 @@ describe('OrderLineSchema.note', () => {
 
 describe('ShopSettings: logo và hình chìm trên tem', () => {
   const cũ = { name: 'Q', phone: '', address: '', footerNote: '' }
-  const tắt = { enabled: false, position: 'center', strength: 'light' }
+  const tắt = { enabled: false, position: 'center', strength: 'light', align: 'center' }
 
   it('bản ghi từ bản cũ chưa có hai trường thì nhận mặc định: không logo, tắt hình chìm', () => {
     const shop = ShopSettingsSchema.parse(cũ)
@@ -177,9 +177,19 @@ describe('ShopSettings: logo và hình chìm trên tem', () => {
     const value = {
       ...cũ,
       logo: 'data:image/png;base64,iVBORw0K',
-      labelWatermark: { enabled: true, position: 'corner', strength: 'dark' },
+      labelWatermark: { enabled: true, position: 'corner', strength: 'dark', align: 'right' },
     }
     expect(ShopSettingsSchema.parse(value)).toEqual(value)
+  })
+
+  it('cấu hình hình chìm của bản 2.10.0 chưa có `align` thì căn giữa như cũ', () => {
+    const labelWatermark = { enabled: true, position: 'center', strength: 'medium' }
+    expect(ShopSettingsSchema.parse({ ...cũ, labelWatermark }).labelWatermark).toEqual({ ...labelWatermark, align: 'center' })
+  })
+
+  it('căn lạ bị từ chối', () => {
+    const labelWatermark = { enabled: true, position: 'center', strength: 'dark', align: 'left' }
+    expect(ShopSettingsSchema.safeParse({ ...cũ, labelWatermark }).success).toBe(false)
   })
 
   it('vị trí lạ bị từ chối', () => {
