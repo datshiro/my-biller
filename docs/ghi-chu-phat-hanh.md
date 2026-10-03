@@ -1,5 +1,42 @@
 # Ghi chú phát hành
 
+## 2.9.0 — màn bán làm lại: chạm món có thực đơn là chọn ngay, đơn gom vào sheet, chip ghi chú; ô tiền có trần, đổi được tên máy, chặn tên món trùng (3/10/2026)
+
+> Không đổi Worker, schema IndexedDB hay định dạng sao lưu: deploy theo thứ tự thường, máy chưa cập nhật vẫn đồng
+> bộ bình thường với máy đã cập nhật. APK tăng versionCode để cài đè được.
+
+### Người bán thấy gì
+
+- **Đầu màn Bán:** khách và công tắc **Lẻ / SỈ** chung một hàng. Doanh thu "Hôm nay" không còn ở màn Bán — xem ở
+  tab Đơn. Lưới món lên cao hơn.
+- **Món có thực đơn riêng** (nhóm có tuỳ chọn hoặc topping cài ở Cài đặt › Nhóm mặt hàng): chạm là mở sheet chọn
+  tuỳ chọn, topping, ghi chú, số lượng rồi bấm **THÊM · số tiền**. Đóng sheet mà không bấm THÊM thì món không vào
+  đơn. Món của nhóm không có thực đơn riêng vẫn một chạm là vào đơn; ô món có thực đơn mang icon nhỏ. Cài thực đơn
+  cho nhóm Đồ uống thì **mọi món trong nhóm** (kể cả Trà đá) đều mở sheet.
+- **Đơn đang lên** gom vào sheet **Xem đơn** mở từ thanh đáy (số món, tổng, THU TIỀN). Sửa số lượng, Giảm giá /
+  phụ thu nằm trong sheet này.
+- **Sửa dòng:** cùng sheet với lúc thêm; số lượng ở trên cùng, đơn giá riêng nằm sau nút **Đổi giá**. Nút **Bỏ món**
+  giờ có **Hoàn lại** như gõ 0.
+- **Chip ghi chú:** các cụm ghi chú hay dùng gần đây (ngăn bằng dấu phẩy + khoảng trắng) hiện thành chip; chạm để
+  thêm hoặc gỡ đúng cụm đó. Cụm trùng chữ một tuỳ chọn (như "Đá riêng" ghi ở bản cũ) và cụm dài hơn 24 ký tự không
+  lên chip.
+- **Ô tiền dừng ở 999.999.999 đ:** giá bán, phụ thu, tiền khách đưa gõ thừa số 0 thì ô giữ số cũ và báo "Tối đa
+  999.999.999 đ." thay vì làm sập màn Bán.
+- **Đổi được tên và chữ cái máy:** màn Máy bán hàng (chưa ghép) có nút "Đổi tên hoặc chữ cái" — dùng khi ghép báo
+  trùng chữ cái. Trang đổi tên điền sẵn giá trị đang dùng.
+- **Chặn tên món trùng** (không phân biệt hoa thường, tính cả món ngừng bán); sổ cũ đã có hai món cùng tên vẫn sửa
+  được giá khi không đổi tên.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Chip ghi chú đọc 300 dòng gần nhất của sổ máy đó, gồm cả dòng đồng bộ từ máy khác và dòng của đơn đã huỷ.
+- Ghi chú gõ liền không khoảng trắng ("ít hành,mang về") được tính là một cụm — giá của việc giữ dấu phẩy thập
+  phân ("thêm 1,5 lạng").
+- Món đã lưu giá vượt trần từ trước vẫn giữ giá cũ; trần chỉ chặn ô nhập.
+- Đã QA tay trên điện thoại thật (Galaxy S25 Ultra, Android 16, Chrome, 3/10): màn bán mới chạy đúng như mô tả.
+  Lượt đó chạy trên sổ trống; trường hợp sổ có ghi chú từ trước 2.8.0 ("Đá riêng" trong ghi chú) mới kiểm trên
+  Chrome giả lập điện thoại và Robot (gồm Robot hai máy trên staging).
+
 ## 2.8.0 — tem ghi chú dài in tiếp, lề trái rộng hơn; tuỳ chọn và topping có giá theo nhóm món (1/10/2026)
 
 > **Deploy Worker TRƯỚC Pages/APK, và cập nhật mọi máy đã ghép trong cùng ngày.** Dòng đơn và nhóm món có
