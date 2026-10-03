@@ -34,6 +34,8 @@ async function seedShop() {
     phone: '0900000000',
     address: '12 Lê Lợi, P.3',
     footerNote: 'Hẹn gặp lại!',
+    logo: 'data:image/png;base64,iVBORw0KGgo=',
+    labelWatermark: { enabled: true, position: 'corner', strength: 'dark' },
   })
   const groupId = await createGroup({ name: 'Món nước', sortOrder: 10 })
   const customerId = await createCustomer({

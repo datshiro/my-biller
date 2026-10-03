@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { BackupFileSchema, ItemSchema, OrderLineSchema, OrderSchema, PaymentSchema } from '../schema'
+import {
+  BackupFileSchema,
+  ItemSchema,
+  OrderLineSchema,
+  OrderSchema,
+  PaymentSchema,
+  ShopSettingsSchema,
+} from '../schema'
 import { testGid } from '@/test-fixtures'
 
 const emptyBackup = {
@@ -134,5 +141,49 @@ describe('OrderLineSchema.note', () => {
 
   it('giữ nguyên ghi chú đã có', () => {
     expect(OrderLineSchema.parse({ ...dòngCũ, note: 'ít hành' }).note).toBe('ít hành')
+  })
+})
+
+describe('ShopSettings: logo và hình chìm trên tem', () => {
+  const cũ = { name: 'Q', phone: '', address: '', footerNote: '' }
+  const tắt = { enabled: false, position: 'center', strength: 'light' }
+
+  it('bản ghi từ bản cũ chưa có hai trường thì nhận mặc định: không logo, tắt hình chìm', () => {
+    const shop = ShopSettingsSchema.parse(cũ)
+    expect(shop.logo).toBeNull()
+    expect(shop.labelWatermark).toEqual(tắt)
+  })
+
+  it('file sao lưu cũ có bản ghi shop thiếu hai trường vẫn khôi phục được', () => {
+    const file = BackupFileSchema.parse({
+      ...emptyBackup,
+      data: { ...emptyBackup.data, settings: [{ key: 'shop', value: cũ }] },
+    })
+    const row = file.data.settings[0]
+    expect(row?.key === 'shop' && row.value.logo).toBeNull()
+    expect(row?.key === 'shop' && row.value.labelWatermark).toEqual(tắt)
+  })
+
+  it('logo chỉ nhận data URL PNG', () => {
+    expect(ShopSettingsSchema.safeParse({ ...cũ, logo: 'data:image/jpeg;base64,AAAA' }).success).toBe(false)
+  })
+
+  it('logo dài quá trần bị từ chối: oplog không bao giờ dọn, mỗi lần lưu chép logo hai lần', () => {
+    const quáTrần = 'data:image/png;base64,' + 'A'.repeat(40_000)
+    expect(ShopSettingsSchema.safeParse({ ...cũ, logo: quáTrần }).success).toBe(false)
+  })
+
+  it('giữ nguyên logo và cấu hình hợp lệ', () => {
+    const value = {
+      ...cũ,
+      logo: 'data:image/png;base64,iVBORw0K',
+      labelWatermark: { enabled: true, position: 'corner', strength: 'dark' },
+    }
+    expect(ShopSettingsSchema.parse(value)).toEqual(value)
+  })
+
+  it('vị trí lạ bị từ chối', () => {
+    const labelWatermark = { enabled: true, position: 'left', strength: 'dark' }
+    expect(ShopSettingsSchema.safeParse({ ...cũ, labelWatermark }).success).toBe(false)
   })
 })

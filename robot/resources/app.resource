@@ -260,3 +260,59 @@ Mở Chi Tiết Đơn Mới Nhất
         END
     END
     RETURN    ${số}
+
+Cài Logo Quán
+    [Documentation]    Chọn ảnh mẫu tổng hợp `logo-mau.png` (repo public — không dùng logo thật của quán) ở
+    ...    Thông tin cửa hàng. `${vị_trí}` = chữ trên nút vị trí ("Giữa tem"/"Góc trên phải") thì bật luôn
+    ...    hình chìm; `${mức}` = "Nhạt"/"Vừa"/"Đậm" (chỉ có ở giữa tem). Lưu xong màn tự lùi — chờ theo URL,
+    ...    xem `Xoá Thông Tin Quán`.
+    [Arguments]    ${vị_trí}=${None}    ${mức}=${None}
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${CURDIR}/logo-mau.png
+    Wait For Elements State    css=[data-shop-logo-preview]    visible
+    IF    $vị_trí is not None
+        Check Checkbox    css=[data-label-watermark] input[type="checkbox"]
+        Click    css=[data-label-watermark] button:text-is("${vị_trí}")
+    END
+    IF    $mức is not None
+        Click    css=[data-label-watermark] button:text-is("${mức}")
+    END
+    Bấm Nút    LƯU THÔNG TIN
+    Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+
+Đọc Logo Quán
+    [Documentation]    Đọc thẳng bản ghi `settings/shop` trong IndexedDB nhưng KHÔNG trả chuỗi logo (dài, vô
+    ...    nghĩa trong log): chỉ tiền tố có đúng PNG không, độ dài, và cấu hình hình chìm dạng JSON.
+    [Arguments]    ${page}=${None}
+    IF    $page is not None
+        ${page_trước}=    Switch Page    CURRENT
+        Switch Page    ${page}    context=ALL    browser=ALL
+    END
+    TRY
+        ${logo}=    Evaluate JavaScript    ${None}
+        ...    async () => {
+        ...        const db = await new Promise((resolve, reject) => {
+        ...            const open = indexedDB.open('my-biller')
+        ...            open.onsuccess = () => resolve(open.result)
+        ...            open.onerror = () => reject(open.error)
+        ...        })
+        ...        const row = await new Promise((resolve, reject) => {
+        ...            const request = db.transaction('settings', 'readonly').objectStore('settings').get('shop')
+        ...            request.onsuccess = () => resolve(request.result)
+        ...            request.onerror = () => reject(request.error)
+        ...        })
+        ...        db.close()
+        ...        const logo = row?.value?.logo ?? null
+        ...        return {
+        ...            png: typeof logo === 'string' && logo.startsWith('data:image/png;base64,'),
+        ...            length: typeof logo === 'string' ? logo.length : 0,
+        ...            watermark: JSON.stringify(row?.value?.labelWatermark ?? null),
+        ...        }
+        ...    }
+    FINALLY
+        IF    $page is not None
+            Switch Page    ${page_trước}    context=ALL    browser=ALL
+        END
+    END
+    RETURN    ${logo}

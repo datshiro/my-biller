@@ -68,11 +68,23 @@ vi.mock('../../printer/printer-sink', () => ({
 // Chụp tem cũng cần canvas thật. Màn này chỉ chịu trách nhiệm gọi đúng khổ + đúng số tem; byte TSPL
 // được kiểm ở tspl.test.ts và bằng Robot trên Chrome thật.
 const labelShim = vi.hoisted(() => ({
-  build: vi.fn<(items: readonly { nodes: readonly HTMLElement[]; copies: number }[], size: unknown) => Promise<Uint8Array>>(
+  build: vi.fn<
+    (items: readonly { nodes: readonly HTMLElement[]; copies: number }[], size: unknown, watermark?: unknown) => Promise<Uint8Array>
+  >(
     async (items) => new Uint8Array(items.map((item) => item.copies)),
   ),
 }))
 vi.mock('../../printer/label-job', () => ({ buildLabelJob: labelShim.build }))
+
+// Giải mã logo cần `createImageBitmap` — jsdom không có. Mặc định trả một bitmap 1×1.
+const logoShim = vi.hoisted(() => ({
+  decode: vi.fn<(dataUrl: string) => Promise<{ width: number; height: number; data: Uint8Array }>>(async () => ({
+    width: 1,
+    height: 1,
+    data: new Uint8Array([0x80]),
+  })),
+}))
+vi.mock('../../settings/shop-logo', () => ({ decodeLogo: logoShim.decode }))
 
 // `buildReceiptRawbtHref` chạy `encodePng1`+`CompressionStream` trên canvas thật — jsdom không có. Mock
 // trả href hợp lệ; ca "quá dài" override bằng `mockResolvedValueOnce(null)`.
@@ -87,6 +99,7 @@ afterEach(() => {
   sinkShim.androidWeb = false
   sinkShim.sink.mockReset()
   labelShim.build.mockClear()
+  logoShim.decode.mockClear()
   try {
     localStorage.removeItem('may-in')
     localStorage.removeItem('may-in-tem')
@@ -631,6 +644,42 @@ describe('in tem trong app native', () => {
     expect(labelShim.build.mock.calls[0]?.[1]).toEqual(temCfg)
     expect(sinkShim.sink.mock.calls[0]?.[1]).toEqual(temCfg)
     expect(await screen.findByText('Đã gửi 3 tem tới máy in 192.168.1.60:9100.')).toBeDefined()
+  })
+
+  it('bật hình chìm → giải mã logo một lần và đưa cấu hình vào lệnh in tem', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    const labelWatermark = { enabled: true, position: 'center' as const, strength: 'medium' as const }
+    await saveShop({ logo: 'data:image/png;base64,iVBORw0KGgo=', labelWatermark })
+    const { id } = await seedOrder({ qty: 3, paid: 165_000 })
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+    await xacNhanTem()
+
+    expect(await screen.findByText('Đã gửi 3 tem tới máy in 192.168.1.60:9100.')).toBeDefined()
+    expect(logoShim.decode).toHaveBeenCalledOnce()
+    expect(labelShim.build.mock.calls[0]?.[2]).toMatchObject({ config: labelWatermark })
+  })
+
+  it('logo trong sổ hỏng không chặn in tem: vẫn in, không hình chìm, và nói rõ bằng tiếng Việt', async () => {
+    sinkShim.native = true
+    localStorage.setItem('may-in-tem', JSON.stringify(temCfg))
+    logoShim.decode.mockRejectedValueOnce(new DOMException('The source image could not be decoded.', 'InvalidStateError'))
+    await saveShop({
+      logo: 'data:image/png;base64,AAAA',
+      labelWatermark: { enabled: true, position: 'center', strength: 'medium' },
+    })
+    const { id } = await seedOrder({ qty: 3, paid: 165_000 })
+    renderReceipt(id)
+
+    await userEvent.click(await nútTem())
+    await xacNhanTem()
+
+    await waitFor(() => expect(sinkShim.sink).toHaveBeenCalledOnce())
+    expect(labelShim.build.mock.calls[0]?.[2]).toBeNull()
+    expect(await screen.findByText(/Đã gửi 3 tem tới máy in 192\.168\.1\.60:9100\. Logo không đọc được/)).toBeDefined()
+    expect(screen.queryByText(/could not be decoded/)).toBeNull()
   })
 
   it('đơn trên 50 phần → hộp xác nhận nhắc kiểm lại số lượng', async () => {

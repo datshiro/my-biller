@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { COUNTER_HEIGHT, counterBox, labelDots, type LabelSize } from '@/domain/tspl/encode'
 import type { LabelBlock } from '@/domain/label-pages'
 import type { Order, OrderLine, ShopSettings } from '@/domain/schema'
-import { labelBodyStyle, labelPadding, labelPaddingLeft, labelUnit } from './label-layout'
+import { cornerLogoSide, labelBodyStyle, labelPadding, labelPaddingLeft, labelUnit } from './label-layout'
 
 /**
  * DOM của một tem, 1px = 1 chấm máy in nên chụp ra đúng khổ. Một ly có ghi chú dài ra nhiều tem: mỗi tem
@@ -18,6 +18,7 @@ export function LabelView({
   blocks,
   page,
   pageCount,
+  cornerLogo = false,
   innerRef,
 }: {
   shop: ShopSettings
@@ -29,6 +30,8 @@ export function LabelView({
   blocks: readonly LabelBlock[]
   page: number
   pageCount: number
+  /** Logo nhỏ ở góc trên phải (ghép sau khi chụp): hai dòng đầu tem chừa chỗ để chữ không chui dưới logo. */
+  cornerLogo?: boolean
   innerRef?: React.Ref<HTMLDivElement>
 }) {
   const { width, height } = labelDots(size)
@@ -36,13 +39,8 @@ export function LabelView({
   const padding = labelPadding(size)
   const paddingLeft = labelPaddingLeft(size)
 
-  return (
-    <div
-      ref={innerRef}
-      data-label
-      className="flex flex-col overflow-hidden bg-white leading-tight text-ink"
-      style={{ width, height, padding, paddingLeft }}
-    >
+  const head = (
+    <>
       {shop.name ? (
         <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
           {shop.name}
@@ -52,6 +50,28 @@ export function LabelView({
       <p className="break-all" style={{ fontSize: unit * 0.75 }}>
         {order.code} · {format(order.soldAt, 'HH:mm dd/MM')}
       </p>
+    </>
+  )
+
+  return (
+    <div
+      ref={innerRef}
+      data-label
+      className="flex flex-col overflow-hidden bg-white leading-tight text-ink"
+      style={{ width, height, padding, paddingLeft }}
+    >
+      {cornerLogo ? (
+        // Đầu tem cao ít nhất bằng logo góc, kể cả khi quán chưa đặt tên: tên món không được trồi lên dưới logo.
+        <div
+          data-label-head
+          className="shrink-0"
+          style={{ minHeight: cornerLogoSide(size), paddingRight: cornerLogoSide(size) + 4 }}
+        >
+          {head}
+        </div>
+      ) : (
+        head
+      )}
       <div style={{ borderTop: '2px solid currentColor', margin: `${unit * 0.15}px 0` }} />
       {/* Tên món to nhất: người pha nhìn tem biết ly nào là món gì. Dài thì xuống tối đa hai dòng. */}
       <p className="line-clamp-2 font-bold" style={{ fontSize: unit * 1.3 }}>

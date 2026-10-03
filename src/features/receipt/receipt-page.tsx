@@ -8,11 +8,12 @@ import { canShareReceipt, downloadReceipt, renderReceiptPng, shareReceipt } from
 import { receiptSignature, useReceipt } from './use-receipt'
 import { downloadBytes } from '../printer/download-bytes'
 import { DEFAULT_LABEL_SIZE, readLabelPrinterConfig } from '../printer/label-config'
-import { buildLabelJob } from '../printer/label-job'
+import { buildLabelJob, type LabelWatermarkJob } from '../printer/label-job'
 import { buildReceiptJob } from '../printer/print-job'
 import { readPrinterConfig } from '../printer/printer-config'
 import { isAndroidWeb, isNativeApp, nativeSink } from '../printer/printer-sink'
 import { buildReceiptRawbtHref } from '../printer/rawbt-href'
+import { decodeLogo } from '../settings/shop-logo'
 import { labelCopies, labelCount } from '@/domain/label-count'
 import { paginateLines } from '@/domain/receipt-pages'
 import type { OrderLine } from '@/domain/schema'
@@ -194,12 +195,26 @@ export function ReceiptPage() {
     labelLock.current = true
     setInTem({ busy: true, message: 'Đang chuẩn bị tem…', error: false })
     try {
-      await nativeSink(await buildLabelJob(items, cfg), cfg)
+      // Logo là dữ liệu đồng bộ từ máy khác: hỏng thì vẫn in tem, chỉ bỏ hình chìm — đừng để nó khoá nút in trên mọi máy.
+      let watermark: LabelWatermarkJob | null = null
+      let logoNote = ''
+      if (shop.logo && shop.labelWatermark.enabled) {
+        try {
+          watermark = { logo: await decodeLogo(shop.logo), config: shop.labelWatermark }
+        } catch {
+          logoNote = ' Logo không đọc được nên tem in không có logo — vào Thông tin cửa hàng chọn lại ảnh logo.'
+        }
+      }
+      await nativeSink(await buildLabelJob(items, cfg, watermark), cfg)
       // Ghi chú dài ra thêm tem tiếp nên số tờ thật có thể nhiều hơn số ly; nói rõ để người bán không đếm lệch.
       const cups = copies.reduce((sum, n) => sum + n, 0)
       const sheets = items.reduce((sum, { nodes, copies }) => sum + nodes.length * copies, 0)
       const extra = sheets > cups ? ` (${sheets} tờ giấy, ${sheets - cups} tờ là phần ghi chú dài)` : ''
-      setInTem({ busy: false, message: `Đã gửi ${cups} tem${extra} tới máy in ${cfg.host}:${cfg.port}.`, error: false })
+      setInTem({
+        busy: false,
+        message: `Đã gửi ${cups} tem${extra} tới máy in ${cfg.host}:${cfg.port}.${logoNote}`,
+        error: false,
+      })
     } catch (error) {
       setInTem({
         busy: false,

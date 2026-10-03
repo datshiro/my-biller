@@ -606,6 +606,43 @@ describe('oplog đồng bộ', () => {
     expect((await lastGroup())?.after).toMatchObject({ optionGroups: [], toppingMenu: [] })
   })
 
+  it('máy cũ lưu thông tin quán không xoá logo và cấu hình hình chìm; máy mới gỡ logo chủ ý thì được tôn trọng', async () => {
+    const brand = {
+      logo: 'data:image/png;base64,iVBORw0KGgo=',
+      labelWatermark: { enabled: true, position: 'center', strength: 'medium' },
+    }
+    const text = { phone: '', address: '', footerNote: '' }
+    const created = { key: 'shop', value: { name: 'Quán', ...text, ...brand } }
+    expect((await push(event('settings', 'shop', created))).status).toBe(201)
+
+    const lastShop = async () =>
+      (await pullAll()).filter((entry) => entry.table === 'settings' && entry.entityKey === 'shop').at(-1)
+    expect((await lastShop())?.after).toMatchObject(created)
+
+    // Bản cũ không biết hai trường nên bản ghi nó đẩy lên thiếu hẳn hai khoá.
+    const renamedByOldClient = { key: 'shop', value: { name: 'Quán Mới', ...text } }
+    expect((await push(event('settings', 'shop', renamedByOldClient, {}, 'put', created))).status).toBe(201)
+    expect((await lastShop())?.after).toMatchObject({ value: { name: 'Quán Mới', ...brand } })
+
+    const removedOnPurpose = {
+      key: 'shop',
+      value: {
+        name: 'Quán Mới',
+        ...text,
+        logo: null,
+        labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+      },
+    }
+    expect((await push(event('settings', 'shop', removedOnPurpose, {}, 'put', renamedByOldClient))).status).toBe(201)
+    expect((await lastShop())?.after).toMatchObject(removedOnPurpose)
+  })
+
+  it('từ chối logo vượt trần trước khi ghi vào sổ', async () => {
+    const logo = 'data:image/png;base64,' + 'A'.repeat(40_000)
+    const shop = { key: 'shop', value: { name: 'Quán', phone: '', address: '', footerNote: '', logo } }
+    expect((await push(event('settings', 'shop', shop))).status).toBe(409)
+  })
+
   it('từ chối payload sai hợp đồng ở mọi bảng trước khi ghi vào sổ', async () => {
     const customerGid = crypto.randomUUID()
     const groupGid = crypto.randomUUID()

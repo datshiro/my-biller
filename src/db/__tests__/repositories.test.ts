@@ -33,7 +33,14 @@ beforeEach(async () => {
 
 describe('settings', () => {
   it('lần chạy đầu trả về mặc định thay vì undefined', async () => {
-    expect(await getShop()).toEqual({ name: '', phone: '', address: '', footerNote: 'Cảm ơn quý khách!' })
+    expect(await getShop()).toEqual({
+      name: '',
+      phone: '',
+      address: '',
+      footerNote: 'Cảm ơn quý khách!',
+      logo: null,
+      labelWatermark: { enabled: false, position: 'center', strength: 'light' },
+    })
   })
 
   it('lưu từng phần, không xoá trường chưa sửa', async () => {

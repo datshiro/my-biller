@@ -454,6 +454,36 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
+Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được, chặn ảnh quá lớn
+    [Documentation]    Logo lưu thành PNG đen trắng trong bản ghi shop của sổ chung (#51), nên đọc thẳng
+    ...    IndexedDB chứ không chỉ tin ảnh xem trước: giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
+    ...    Trần 40 000 ký tự vì oplog không bao giờ dọn và mỗi lần lưu thông tin quán chép logo hai lần.
+    Cài Logo Quán
+    ${logo}=    Đọc Logo Quán
+    Should Be True    ${logo}[png]    Logo trong sổ không phải data URL PNG.
+    Should Be True    0 < ${logo}[length] < 40000    Logo trong sổ dài ${logo}[length] ký tự.
+    Should Be Equal    ${logo}[watermark]    {"enabled":false,"position":"center","strength":"light"}
+
+    Reload
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Wait For Elements State    css=[data-shop-logo-preview]    visible
+
+    Bấm Nút    Gỡ logo
+    Wait For Elements State    css=[data-shop-logo-preview]    detached
+    Bấm Nút    LƯU THÔNG TIN
+    Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+    ${logo}=    Đọc Logo Quán
+    Should Be Equal As Integers    ${logo}[length]    0    Gỡ logo rồi mà sổ vẫn còn logo.
+
+    # Ảnh chụp camera (vài chục MB) bị chặn trước khi giải mã: giải mã cỡ gốc làm treo máy yếu.
+    ${quá_lớn}=    Set Variable    ${OUTPUT_DIR}/anh-qua-lon.png
+    Evaluate    open($quá_lớn, 'wb').write(bytes(6 * 1024 * 1024))
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${quá_lớn}
+    Chờ Thấy Chữ    Ảnh quá lớn
+    Get Element Count    css=[data-shop-logo-preview]    ==    0
+
 In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
     [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
     ...    IN TEM thật và đọc được đúng byte TSPL app định gửi. Số tem đối chiếu với orderLines trong
@@ -508,6 +538,62 @@ In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ kh
     ...    imgs.push(t.slice(at + head.length, at + head.length + 50 * 240));
     ...    return [imgs.length, imgs[0] === imgs[1], imgs[1] === imgs[2]] }
     Should Be Equal    ${giống}    ${{ [3, True, False] }}
+
+In tem: hình chìm giữa tem thêm logo chấm thưa mà số thứ tự vẫn sạch
+    [Documentation]    Logo chìm (#51) được ghép sau khi chụp ảnh tem nên chỉ thấy trong byte TSPL gửi đi, không
+    ...    thấy trên DOM. So cùng một đơn in hai lần: logo đã cài nhưng tắt, rồi bật ở giữa tem mức Vừa. Vùng
+    ...    giữa phải thêm mực; số `i/n` máy in tự vẽ vẫn còn và ô của nó không bị logo lấn.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
+    Cài Logo Quán
+    ${tắt}=    In Tem Của Đơn    ${đơn}
+    Cài Logo Quán    Giữa tem    Vừa
+    ${bật}=    In Tem Của Đơn    ${đơn}
+
+    ${giữa_tắt}=    Đếm Mực Vùng    ${tắt}    100    60    300    170
+    ${giữa_bật}=    Đếm Mực Vùng    ${bật}    100    60    300    170
+    Should Be True    ${giữa_bật} > ${giữa_tắt} + 200
+    ...    Vùng giữa tem chỉ thêm ${giữa_bật} - ${giữa_tắt} chấm mực — logo chìm không lên tem.
+    ${tspl}=    Evaluate    base64.b64decode($bật).decode('latin-1')    modules=base64
+    Should Contain    ${tspl}    "1/3"
+    Should Contain    ${tspl}    "3/3"
+    ${số_tắt}=    Đếm Mực Vùng    ${tắt}    300    200    400    240
+    ${số_bật}=    Đếm Mực Vùng    ${bật}    300    200    400    240
+    Should Be Equal As Integers    ${số_bật}    ${số_tắt}    Logo lấn vào ô số thứ tự.
+
+In tem: logo đã cài nhưng tắt hình chìm thì tem y hệt khi chưa có logo
+    [Documentation]    Khoá "tắt là y như cũ" của #51: cài logo mà chưa bật hình chìm không được đổi một byte
+    ...    nào của lệnh TSPL. Hai lần chụp html-to-image cách nhau một lần lưu cài đặt — nếu ca này chập
+    ...    chờn thì khâu chụp không tất định, phải tìm nguyên nhân chứ đừng nới assert.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
+    ${gốc}=    In Tem Của Đơn    ${đơn}
+    Cài Logo Quán
+    ${sau}=    In Tem Của Đơn    ${đơn}
+    Should Be True    $gốc == $sau    TSPL đổi chỉ vì đã cài logo trong khi hình chìm đang tắt.
+
+In tem: logo nhỏ ở góc trên phải in đặc, tên quán vẫn in
+    [Documentation]    Chế độ góc in logo đặc cỡ ~6 mm (làm mờ ở cỡ đó thì không nhận ra) và đầu tem chừa chỗ cho
+    ...    nó, kể cả khi quán chưa đặt tên — không thì tên món trồi lên dưới logo. Ô góc trên phải tem
+    ...    50×30 là x 344–390, y 10–56.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    ${đơn}=    Cài Máy In Tem Và Chốt Đơn Ba Ly
+    Cài Logo Quán
+    ${tắt}=    In Tem Của Đơn    ${đơn}
+    Cài Logo Quán    Góc trên phải
+    ${bật}=    In Tem Của Đơn    ${đơn}
+    ${góc_tắt}=    Đếm Mực Vùng    ${tắt}    340    10    392    58
+    ${góc_bật}=    Đếm Mực Vùng    ${bật}    340    10    392    58
+    Should Be True    ${góc_bật} > ${góc_tắt} + 300    Góc trên phải không có logo đặc.
+    ${tên_quán}=    Đếm Mực Vùng    ${bật}    20    0    150    30
+    Should Be True    ${tên_quán} > 0    Dòng tên quán biến mất khi có logo ở góc.
+
+    # Quán chưa đặt tên: đầu tem vẫn phải cao bằng logo, nếu không tên món trồi lên và bị khoét xuyên logo.
+    Xoá Thông Tin Quán
+    ${không_tên}=    In Tem Của Đơn    ${đơn}
+    ${góc_không_tên}=    Đếm Mực Vùng    ${không_tên}    340    10    392    58
+    Should Be Equal As Integers    ${góc_không_tên}    ${góc_bật}
+    ...    Quán chưa đặt tên thì chữ trên tem lấn vào logo góc.
 
 In tem: ghi chú dài hơn khổ tem thì in tiếp sang tem sau, các tem của một ly đi liền nhau và chung số
     [Documentation]    Trước đây ghi chú bị cắt ở hai dòng (`line-clamp`) nên người pha không thấy nửa sau.
@@ -633,6 +719,45 @@ In tem: trên web không có nút IN TEM, khổ tem lưu được và còn sau k
     Should Be Equal    ${rộng}    50
 
 *** Keywords ***
+Cài Máy In Tem Và Chốt Đơn Ba Ly
+    [Documentation]    Máy in tem LAN giả ở 192.168.1.60, khổ mặc định 50×30, rồi chốt một đơn ba ly (Trà đá ×2,
+    ...    Cà phê sữa) như ca "In tem: mỗi phần một tem…". Trả về đơn vừa chốt.
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×30 mm
+    Mở Màn    /
+    Chọn Món    Trà đá    2
+    Chọn Món    Cà phê sữa
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    RETURN    ${đơn}
+
+In Tem Của Đơn
+    [Documentation]    Mở phiếu của đơn, bấm IN TEM và trả base64 của lệnh TSPL vừa gửi. `__printJobs` cộng dồn
+    ...    trong một trang nên lấy job CUỐI, không phải job đầu.
+    [Arguments]    ${đơn}
+    Mở Màn    /don/${đơn}[id]/phieu
+    Click    css=button[data-label-print]
+    Chờ Hộp Xác Nhận    In 3 tem cho đơn ${đơn}[code]?
+    Xác Nhận Trong Hộp    In tem
+    Chờ Thấy Chữ    Đã gửi 3 tem
+    ${b64}=    Evaluate JavaScript    ${None}    () => window.__printJobs.at(-1).base64
+    RETURN    ${b64}
+
+Đếm Mực Vùng
+    [Documentation]    Số chấm mực trong vùng [x0, x1) × [y0, y1) của ảnh tem ĐẦU TIÊN (tem 1/3) trong lệnh TSPL.
+    ...    TSPL đảo bit so với ESC/POS: bit 0 là mực. Tem 50×30 = 400×240 chấm, 50 byte mỗi hàng.
+    [Arguments]    ${b64}    ${x0}    ${y0}    ${x1}    ${y1}
+    ${mực}=    Evaluate JavaScript    ${None}
+    ...    ([b64, x0, y0, x1, y1]) => { const t = atob(b64); const head = 'BITMAP 0,0,50,240,0,';
+    ...    const at = t.indexOf(head) + head.length; let ink = 0;
+    ...    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    ...    const byte = t.charCodeAt(at + y * 50 + (x >> 3)); if (!(byte & (0x80 >> (x & 7)))) ink++ }
+    ...    return ink }
+    ...    arg=${{ [$b64, int($x0), int($y0), int($x1), int($y1)] }}
+    RETURN    ${mực}
 Dựng Đơn Nhiều Dòng
     [Documentation]    Seed một đơn ${số_dòng} dòng qua repository (như e2e `buildReceiptWithLines`)
     ...    rồi mở phiếu — nhanh hơn bấm tay từng món. Nút .bin và node bản nhiệt vẫn là UI thật.

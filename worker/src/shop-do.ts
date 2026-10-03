@@ -60,6 +60,8 @@ const SETTINGS_KEYS = new Set(['shop', 'app'])
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
 function first<T>(rows: Iterable<T>): T | undefined {
   return rows[Symbol.iterator]().next().value as T | undefined
 }
@@ -858,10 +860,29 @@ export class ShopDO extends DurableObject<Env> {
     return { ...event, after }
   }
 
+  /**
+   * Cùng bẫy với thực đơn nhóm món, nhưng nằm sâu một tầng trong `value` của bản ghi `shop`: máy bản cũ bỏ `logo` và
+   * `labelWatermark` khi đọc, rồi lưu thông tin quán là đẩy lên cả bản ghi thiếu hai khoá — last-write-wins xoá logo
+   * trên mọi máy. Máy mới luôn ghi đủ hai khoá (gỡ logo là `null` tường minh), nên thiếu hẳn khoá chỉ có thể là máy cũ.
+   */
+  private preserveShopBranding(raw: SyncEvent, event: SyncEvent): SyncEvent {
+    if (event.table !== 'settings' || event.entityKey !== 'shop' || !event.after || !raw.after) return event
+    const rawValue = raw.after.value
+    const storedValue = this.ledgerPayload('settings', 'shop')?.after?.value
+    if (!isRecord(rawValue) || !isRecord(storedValue) || !isRecord(event.after.value)) return event
+    const value = { ...event.after.value }
+    for (const field of ['logo', 'labelWatermark']) {
+      if (!(field in rawValue) && field in storedValue) value[field] = storedValue[field]
+    }
+    return { ...event, after: { ...event.after, value } }
+  }
+
   private canonicalizeEvent(event: SyncEvent): { event: SyncEvent } | { problem: string } {
     const checked = this.validateEventPayloads(event)
     if ('problem' in checked) return checked
-    const validated = { event: this.preserveItemGroupMenu(event, checked.event) }
+    const validated = {
+      event: this.preserveShopBranding(event, this.preserveItemGroupMenu(event, checked.event)),
+    }
     const identityProblem = this.identityProblem(validated.event)
     if (identityProblem) return { problem: identityProblem }
     if (validated.event.operation === 'delete') return validated

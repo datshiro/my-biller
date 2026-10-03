@@ -30,6 +30,13 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   không lệch tổng. Worker phải lên TRƯỚC máy mới (Worker cũ cắt `toppings` khỏi sổ chung vĩnh viễn). Thực
   đơn nhóm món là last-write-wins; Worker chép thực đơn đã lưu vào bản ghi của máy cũ không có hai trường đó
   để đổi tên nhóm không xoá thực đơn.
+- Bản ghi `settings/shop` mang thêm `logo` (PNG đen trắng dạng data URL, trần 40 000 ký tự vì oplog không
+  bao giờ dọn và mỗi lần lưu chép logo hai lần) và `labelWatermark` (hình chìm trên tem: bật/tắt, vị trí,
+  mức đậm) — cấu hình của cả sổ, không theo máy. Cả hai có `.default` nên bản ghi và file sao lưu cũ vẫn
+  đọc được. Không thêm khoá `settings` mới: máy bản cũ ném lỗi khi áp khoá lạ và kẹt đồng bộ. Máy bản cũ
+  bỏ hai trường khi đọc rồi lưu thông tin quán là đẩy lên bản ghi thiếu hai khoá, nên Worker chép giá trị
+  đang lưu vào (`preserveShopBranding`); máy mới luôn ghi đủ hai khoá, gỡ logo là `null` tường minh. Cả bản
+  ghi vẫn là last-write-wins, và gộp sổ lấy cài đặt của sổ A.
 
 ## Đường ghi và đọc
 
