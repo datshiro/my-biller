@@ -9,7 +9,7 @@ import {
   type MergeSummary,
   type PaymentChoice,
 } from '@/domain/backup-merge'
-import { withDerivedPaid, type DerivedLedger } from '@/domain/backup-report'
+import { expectedAfterReplace, type DerivedLedger } from '@/domain/backup-report'
 import { BackupFileSchema, type BackupData, type BackupFile } from '@/domain/schema'
 
 /** Các bảng thuộc cuốn sổ. Trạng thái riêng của máy tuyệt đối không đi theo sao lưu/phục hồi. */
@@ -235,7 +235,8 @@ export async function mergeAllDataAndRecalculate(
 
     await replaceLedger(outcome.merged)
     await recalcAll()
-    return { expected: withDerivedPaid(outcome.merged), summary: outcome.summary }
+    // Cùng luật với `replaceLedger`: dòng giá mồ côi bị bỏ khi ghi, nên bản kỳ vọng cũng bỏ — không thì báo LỆCH giả.
+    return { expected: expectedAfterReplace(outcome.merged), summary: outcome.summary }
   })
 }
 

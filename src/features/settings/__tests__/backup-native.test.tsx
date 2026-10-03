@@ -136,6 +136,23 @@ describe('gộp trong APK', () => {
     expect((await db.payments.get(device.payments[0]!.id))?.unallocatedStatus ?? 'pending').toBe('pending')
   })
 
+  it('file an toàn không nhập lại được ⇒ hỏi "Bản sao an toàn KHÔNG nhập lại được" trước khi ghi', async () => {
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload } })
+    cap.saveToDownloads.mockResolvedValue({ displayName: 'an-toan.json', relativePath: 'Download/' })
+    const device = await openMergeAndAnswer()
+    await db.items.add({ gid: '00000000-0000-4000-8000-000000000999', name: 'Hàng lạ', groupId: null, unit: '', unitPrice: 25_500.5, costPrice: null, isActive: 1, note: '', createdAt: 1, updatedAt: 1 })
+
+    await userEvent.click(screen.getByRole('button', { name: 'GỘP' }))
+
+    const accept = await screen.findByRole('alertdialog', { name: 'Bản sao an toàn KHÔNG nhập lại được' })
+    expect((await db.payments.get(device.payments[0]!.id))?.unallocatedStatus).toBe('refunded')
+    await userEvent.click(within(accept).getByRole('button', { name: 'Vẫn gộp — mất cũng được' }))
+
+    await waitFor(() => expect(reload).toHaveBeenCalled())
+    expect((await db.payments.get(device.payments[0]!.id))?.unallocatedStatus ?? 'pending').toBe('pending')
+  })
+
   it('plugin báo lỗi khi lưu file an toàn ⇒ báo lỗi, không ghi gì', async () => {
     const reload = vi.fn()
     Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload } })

@@ -138,6 +138,7 @@ export function MergePreviewSheet({
           showAllNames={showAllNames}
           onShowAllNames={() => setShowAllNames(true)}
           onChoose={onChoose}
+          busy={busy}
         />
       )}
     </Sheet>
@@ -155,6 +156,7 @@ function MergeBody({
   showAllNames,
   onShowAllNames,
   onChoose,
+  busy,
 }: {
   preview: Preview
   choices: Readonly<Partial<Record<string, PaymentChoice>>>
@@ -164,6 +166,7 @@ function MergeBody({
   showAllNames: boolean
   onShowAllNames: () => void
   onChoose: (gid: string, choice: PaymentChoice) => void
+  busy: boolean
 }) {
   const { summary, totals, willAdd } = preview
   const unanswered = preview.conflicts.filter((conflict) => choices[conflict.gid] === undefined).length
@@ -231,6 +234,7 @@ function MergeBody({
           fileSide={fileSide}
           customerName={customerName}
           onChoose={onChoose}
+          busy={busy}
         />
       ))}
 
@@ -275,6 +279,7 @@ function ConflictCard({
   fileSide,
   customerName,
   onChoose,
+  busy,
 }: {
   conflict: PaymentConflict
   choice: PaymentChoice | undefined
@@ -284,6 +289,7 @@ function ConflictCard({
   fileSide: Side
   customerName: (gid: string) => string
   onChoose: (gid: string, choice: PaymentChoice) => void
+  busy: boolean
 }) {
   const { device, file } = conflict
   const appendGain = effects.append.collected - effects.device.collected
@@ -312,6 +318,7 @@ function ConflictCard({
                 type="radio"
                 name={`xung-dot-${conflict.gid}`}
                 checked={choice === option.value}
+                disabled={busy}
                 onChange={() => onChoose(conflict.gid, option.value)}
               />
               {option.label}

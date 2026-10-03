@@ -5,7 +5,7 @@ import { clearRestoreReport, readRestoreReport, saveRestoreReport, type StoredRe
 const stored: StoredRestoreReport = {
   mode: 'overwrite',
   sourceName: 'my-biller-backup-261001-1000.json',
-  safety: { savedAs: 'my-biller-backup-261004-0900.json', location: 'Tải về (Download)' },
+  safety: { savedAs: 'my-biller-backup-261004-0900.json', location: 'Tải về (Download)', verified: false },
   codeChanges: 0,
   report: {
     ok: true,

@@ -1,3 +1,4 @@
+import { describeSavedFile } from './download-sink'
 import type { StoredRestoreReport } from './restore-report-store'
 import { formatVnd } from '@/domain/money'
 
@@ -18,6 +19,8 @@ export function RestoreReportCard({ stored }: { stored: StoredRestoreReport }) {
         {mode} từ file “{stored.sourceName}”.
         {stored.codeChanges > 0 ? ` ${stored.codeChanges} đơn trong file được cấp mã mới vì trùng mã trên máy.` : ''}
       </p>
+      {/* Luôn nói file an toàn đã ra đâu (D11): đó là đường về nếu kết quả khôi phục không như ý. */}
+      {safety ? <p className="mt-1 text-[13px] text-muted">{describeSavedFile(safety, 'file an toàn')}</p> : null}
       {report.ok ? null : (
         <p role="alert" className="mt-2 rounded-btn bg-danger-tint px-3 py-2 text-[13px] font-semibold text-danger">
           Khôi phục LỆCH ở: {mismatched.join(', ')}.

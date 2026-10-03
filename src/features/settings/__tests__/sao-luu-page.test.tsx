@@ -1,16 +1,30 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Cho một ca giả cảnh lưu báo cáo vào sessionStorage ném (hết chỗ, chế độ riêng tư) sau khi đã ghi xong.
+const store = vi.hoisted(() => ({ failSave: false }))
+vi.mock('../restore-report-store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../restore-report-store')>()
+  return {
+    ...actual,
+    saveRestoreReport: (stored: Parameters<typeof actual.saveRestoreReport>[0]) => {
+      if (store.failSave) throw new Error('QuotaExceededError')
+      actual.saveRestoreReport(stored)
+    },
+  }
+})
+
 import { MergePreviewSheet } from '../merge-preview-sheet'
 import { SaoLuuPage } from '../sao-luu-page'
 import { saveRestoreReport, type StoredRestoreReport } from '../restore-report-store'
 import { collectBackup, replaceAllData } from '@/db/backup'
 import type { PaymentChoice } from '@/domain/backup-merge'
 import type { BackupData } from '@/domain/schema'
-import { ledgerK, mk, shiftIds } from '@/domain/__tests__/backup-merge-fixtures'
+import { g, ledgerK, mk, shiftIds } from '@/domain/__tests__/backup-merge-fixtures'
 import { db } from '@/db/db'
 import { createItem } from '@/db/repositories/items'
 import { installTestDevice, testGid } from '@/test-fixtures'
@@ -52,6 +66,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  store.failSave = false
 })
 
 const renderPage = () =>
@@ -175,7 +190,7 @@ describe('thẻ báo cáo sau khôi phục', () => {
   const stored = (over: Partial<StoredRestoreReport['report']> = {}): StoredRestoreReport => ({
     mode: 'overwrite',
     sourceName: 'ban-sao-cu.json',
-    safety: { savedAs: 'an-toan.json', location: 'Tải về (Download)' },
+    safety: { savedAs: 'an-toan.json', location: 'Tải về (Download)', verified: false },
     codeChanges: 0,
     report: {
       ok: true,
@@ -218,6 +233,21 @@ describe('thẻ báo cáo sau khôi phục', () => {
     expect(alert.textContent).toMatch(/Khôi phục LỆCH ở: Đơn/)
     expect(alert.textContent).toMatch(/an-toan\.json/)
     expect(screen.getByText('LỆCH')).toBeDefined()
+  })
+
+  it('thẻ khớp vẫn luôn nói file an toàn: web chỉ nói đã yêu cầu tải', async () => {
+    saveRestoreReport(stored())
+    renderPage()
+
+    expect(await screen.findByText(/Đã yêu cầu tải file an toàn "an-toan\.json"/)).toBeDefined()
+    expect(screen.queryByText(/Đã lưu file an toàn/)).toBeNull()
+  })
+
+  it('thẻ khớp vẫn luôn nói file an toàn: APK nói đã lưu kèm nơi và tên thật', async () => {
+    saveRestoreReport({ ...stored(), safety: { savedAs: 'an-toan (1).json', location: 'Download/', verified: true } })
+    renderPage()
+
+    expect(await screen.findByText(/Đã lưu file an toàn: Download\/an-toan \(1\)\.json/)).toBeDefined()
   })
 
   it('có đơn thu vượt tổng ⇒ nói rõ số đơn đó', async () => {
@@ -404,7 +434,7 @@ describe('bấm GỘP', () => {
     expect(stored).toMatchObject({
       mode: 'merge',
       sourceName: 'ban-sao.json',
-      safety: { savedAs: 'my-biller-backup-260807-1400.json' },
+      safety: { savedAs: 'my-biller-backup-260807-1400.json', verified: false },
       report: { ok: true },
     })
   })
@@ -461,5 +491,100 @@ describe('xem trước Gộp: lựa chọn làm sổ hỏng', () => {
     rerender(sheet('device'))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(mergeButton().disabled).toBe(false)
+  })
+})
+
+/** Khoản 1 trên máy đã trả lại khách, trong file còn chờ: một xung đột, trả lời Thêm riêng. */
+async function openAppendMerge() {
+  const device = ledgerK()
+  device.payments[0] = { ...device.payments[0]!, unallocatedStatus: 'refunded' }
+  await replaceAllData(device)
+  renderPage()
+  await openMerge(shiftIds(ledgerK(), 10))
+  await choose(device.payments[0]!.gid, 'Thêm riêng')
+  return device
+}
+
+describe('một lần gộp ghi đúng một lần', () => {
+  it('bấm GỘP và "Đã thấy — gộp" hai lần trước khi màn kịp vẽ lại ⇒ khoản thu chỉ thêm đúng một', async () => {
+    const device = await openAppendMerge()
+
+    act(() => {
+      mergeButton().click()
+      mergeButton().click()
+    })
+    const confirm = await screen.findByRole('button', { name: 'Đã thấy — gộp' })
+    act(() => {
+      confirm.click()
+      confirm.click()
+    })
+
+    await waitFor(() => expect(reload).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(await db.payments.count()).toBe(device.payments.length + 1)
+  })
+
+  it('ghi xong mà lưu báo cáo lỗi ⇒ vẫn tải lại trang, không đưa về xem trước để gộp lần nữa', async () => {
+    const device = await openAppendMerge()
+    store.failSave = true
+
+    await userEvent.click(mergeButton())
+    await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — gộp' }))
+
+    await waitFor(() => expect(reload).toHaveBeenCalled())
+    expect(screen.queryByText(/QuotaExceededError/)).toBeNull()
+    const again = screen.queryByRole('button', { name: 'GỘP' }) as HTMLButtonElement | null
+    if (again && !again.disabled) {
+      await userEvent.click(again)
+      const confirm = screen.queryByRole('button', { name: 'Đã thấy — gộp' })
+      if (confirm) await userEvent.click(confirm)
+    }
+    expect(await db.payments.count()).toBe(device.payments.length + 1)
+  })
+})
+
+describe('file an toàn trước khi gộp không nhập lại được', () => {
+  it('web: sau "Đã thấy" còn cửa "Bản sao an toàn KHÔNG nhập lại được"; Huỷ thì không ghi gì', async () => {
+    await replaceAllData(ledgerK())
+    // Bản ghi lạ (bản cũ, sửa tay): `collectBackup` xuất được nhưng `parseBackupFile` từ chối.
+    await db.items.add({ ...mk.item(9, 99, { name: 'Hàng lạ' }), id: undefined, unitPrice: 25_500.5 })
+    const file = shiftIds(ledgerK(), 10)
+    file.items.push(mk.item(30, 91, { name: 'Trà đá' }))
+    renderPage()
+    await openMerge(file)
+
+    await userEvent.click(mergeButton())
+    await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — gộp' }))
+
+    const accept = await screen.findByRole('alertdialog', { name: 'Bản sao an toàn KHÔNG nhập lại được' })
+    expect(accept.textContent).toMatch(/unitPrice/)
+    expect(await db.items.where('gid').equals(g(91)).count()).toBe(0)
+    await userEvent.click(within(accept).getByRole('button', { name: 'Huỷ' }))
+    expect(await db.items.where('gid').equals(g(91)).count()).toBe(0)
+    expect(reload).not.toHaveBeenCalled()
+  })
+})
+
+describe('xem trước Gộp đang ghi', () => {
+  it('đang xử lý thì khoá các lựa chọn', () => {
+    const device = ledgerK()
+    device.payments[0] = { ...device.payments[0]!, unallocatedStatus: 'refunded' }
+    render(
+      <MergePreviewSheet
+        current={device}
+        incoming={shiftIds(ledgerK(), 10)}
+        choices={{}}
+        fallbackLetter="A"
+        notice={null}
+        busy
+        onChoose={() => {}}
+        onMerge={() => {}}
+        onClose={() => {}}
+      />,
+    )
+
+    const radios = [...document.querySelectorAll<HTMLInputElement>('input[type=radio]')]
+    expect(radios.length).toBeGreaterThan(0)
+    expect(radios.every((radio) => radio.disabled)).toBe(true)
   })
 })

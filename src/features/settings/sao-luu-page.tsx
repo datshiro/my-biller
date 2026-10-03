@@ -14,12 +14,17 @@ import {
   type BackupOutcome,
   type PreparedBackup,
 } from './backup'
-import { describeSavedFile, type SavedFile } from './download-sink'
+import { describeSavedFile } from './download-sink'
 import { MergePreviewSheet } from './merge-preview-sheet'
 import { BackupBanner } from './backup-banner'
 import { RESTORE_BLOCK_TEXT } from './restore-block-text'
 import { RestoreReportCard } from './restore-report-card'
-import { clearRestoreReport, readRestoreReport, saveRestoreReport } from './restore-report-store'
+import {
+  clearRestoreReport,
+  readRestoreReport,
+  saveRestoreReport,
+  type StoredRestoreReport,
+} from './restore-report-store'
 import { useDeviceIdentity, useLastBackupLine, useRestoreBlock } from './use-settings'
 import { RestoreBlockedError } from '@/db/backup'
 import {
@@ -56,7 +61,7 @@ type ImportStep =
   | ({ phase: 'mode' } & Picked)
   | ({ phase: 'legacy' } & Picked)
   | ({ phase: 'merge'; notice: string | null } & MergeState)
-  | ({ phase: 'merge-safety'; fingerprints: string[]; saved: SavedFile } & MergeState)
+  | ({ phase: 'merge-safety' | 'merge-accept'; fingerprints: string[]; saved: BackupOutcome } & MergeState)
   | ({ phase: 'confirm'; current: BackupCounts } & Picked)
   | ({ phase: 'safety'; saved: BackupOutcome; problem: string | null } & Picked)
   | ({ phase: 'accept'; saved: BackupOutcome; problem: string } & Picked)
@@ -80,6 +85,7 @@ export function SaoLuuPage() {
   const emptyBackupLock = useRef(false)
   const pendingEmptyBackupRef = useRef<PreparedBackup | null>(null)
   const shareLock = useRef(false)
+  const restoreLock = useRef(false)
   const shareTargetRef = useRef<PreparedBackup | null>(null)
 
   const [busy, setBusy] = useState(false)
@@ -246,59 +252,99 @@ export function SaoLuuPage() {
     else void openMerge(picked)
   }
 
-  /** File an toàn trước khi gộp (D11). APK lưu xong là gộp luôn; web dừng ở cửa "Đã thấy file an toàn". */
+  /**
+   * Ghi đã xong (ghi đè hoặc gộp): lỗi lưu báo cáo (sessionStorage đầy, bị chặn) chỉ làm mất thẻ báo cáo.
+   * Luôn tải lại trang, không bao giờ đưa người bán về xem trước — bấm GỘP lần nữa là ghi lần nữa.
+   */
+  const finishRestore = (stored: StoredRestoreReport | null) => {
+    try {
+      if (stored) saveRestoreReport(stored)
+    } catch {
+      // Thẻ báo cáo mất; sổ đã ghi xong và đối chiếu lại được ở màn Đối soát.
+    }
+    window.location.reload()
+  }
+
+  /**
+   * File an toàn trước khi gộp (D11). Khoá `restoreLock` giữ từ cú bấm GỘP: hai cú chạm trước khi màn kịp vẽ
+   * lại không được ra hai lần ghi. Web dừng ở cửa "Đã thấy file an toàn"; file an toàn không nhập lại được
+   * thì dừng ở cửa đọc chỗ hỏng (cả APK lẫn web) — tới đó khoá được nhả vì chưa ghi gì.
+   */
   const startMerge = async (state: MergeState, fingerprints: string[]) => {
+    if (restoreLock.current) return
+    restoreLock.current = true
     setBusy(true)
     const saved = await saveSafetyFile().catch((caught: unknown) => {
       setStep({ ...state, notice: message(caught), phase: 'merge' })
-      setBusy(false)
       return null
     })
-    if (saved === null) return
-    if (saved.verified) {
-      await runMerge(state, fingerprints, saved)
+    if (saved === null || !saved.verified || !saved.importable) {
+      restoreLock.current = false
+      setBusy(false)
+      if (saved !== null) {
+        setStep({ ...state, fingerprints, saved, phase: saved.verified ? 'merge-accept' : 'merge-safety' })
+      }
       return
     }
-    setStep({ ...state, fingerprints, saved, phase: 'merge-safety' })
-    setBusy(false)
+    await writeMerge(state, fingerprints, saved)
   }
 
-  const runMerge = async (state: MergeState, fingerprints: string[], saved: SavedFile) => {
+  const runMerge = async (state: MergeState, fingerprints: string[], saved: BackupOutcome) => {
+    if (restoreLock.current) return
+    restoreLock.current = true
+    await writeMerge(state, fingerprints, saved)
+  }
+
+  const writeMerge = async (state: MergeState, fingerprints: string[], saved: BackupOutcome) => {
     const { file, sourceName, choices } = state
     setStep({ ...state, notice: null, phase: 'merge' })
     setBusy(true)
+    let done: Awaited<ReturnType<typeof applyMerge>>
     try {
       const answers = Object.fromEntries(
         Object.entries(choices).filter((entry): entry is [string, PaymentChoice] => entry[1] !== undefined),
       )
-      const { report, summary } = await applyMerge(file.data, answers, fingerprints)
-      saveRestoreReport({
-        mode: 'merge',
-        sourceName,
-        safety: { savedAs: saved.savedAs, location: saved.location },
-        codeChanges: summary.codeChanges.length,
-        report,
-      })
-      window.location.reload()
+      done = await applyMerge(file.data, answers, fingerprints)
     } catch (caught) {
+      // Chưa ghi gì (khoá ghi rollback): nhả khoá để người bán chọn lại.
+      restoreLock.current = false
       setBusy(false)
       if (caught instanceof RestoreBlockedError) {
         setStep(null)
         setError(RESTORE_BLOCK_TEXT[caught.reason])
-      } else if (caught instanceof MergeReviewError) {
-        // Sổ đổi (hoặc lựa chọn làm sổ hỏng): đọc lại sổ, chỉ giữ câu trả lời của xung đột còn y nguyên.
-        const current = await readLedger()
-        const unchanged = new Set(
-          findPaymentConflicts(current, file.data)
-            .filter((conflict) => fingerprints.includes(conflict.fingerprint))
-            .map((conflict) => conflict.gid),
-        )
-        const kept = Object.fromEntries(Object.entries(choices).filter(([gid]) => unchanged.has(gid)))
-        setStep({ phase: 'merge', file, sourceName, current, choices: kept, notice: caught.message })
-      } else {
-        setStep({ ...state, notice: message(caught), phase: 'merge' })
+        return
       }
+      if (!(caught instanceof MergeReviewError)) {
+        setStep({ ...state, notice: message(caught), phase: 'merge' })
+        return
+      }
+      // Sổ đổi (hoặc lựa chọn làm sổ hỏng): đọc lại sổ, chỉ giữ câu trả lời của xung đột còn y nguyên.
+      let current: BackupData
+      try {
+        current = await readLedger()
+      } catch (readError) {
+        setStep(null)
+        setError(message(readError))
+        return
+      }
+      const unchanged = new Set(
+        findPaymentConflicts(current, file.data)
+          .filter((conflict) => fingerprints.includes(conflict.fingerprint))
+          .map((conflict) => conflict.gid),
+      )
+      const kept = Object.fromEntries(Object.entries(choices).filter(([gid]) => unchanged.has(gid)))
+      setStep({ phase: 'merge', file, sourceName, current, choices: kept, notice: caught.message })
+      return
     }
+    finishRestore(
+      done.report && {
+        mode: 'merge',
+        sourceName,
+        safety: { savedAs: saved.savedAs, location: saved.location, verified: saved.verified },
+        codeChanges: done.summary.codeChanges.length,
+        report: done.report,
+      },
+    )
   }
 
   /** Xuất bản hiện tại ra file rồi dừng lại hỏi — chưa xoá gì cả. */
@@ -316,22 +362,28 @@ export function SaoLuuPage() {
   }
 
   const runImport = async ({ file, sourceName }: Picked, saved: BackupOutcome) => {
+    if (restoreLock.current) return
+    restoreLock.current = true
     setStep(null)
     setBusy(true)
+    let report: Awaited<ReturnType<typeof applyBackup>>
     try {
-      const report = await applyBackup(file.data)
-      saveRestoreReport({
-        mode: 'overwrite',
-        sourceName,
-        safety: { savedAs: saved.savedAs, location: saved.location },
-        codeChanges: 0,
-        report,
-      })
-      window.location.reload()
+      report = await applyBackup(file.data)
     } catch (caught) {
+      restoreLock.current = false
       setError(restoreError(caught))
       setBusy(false)
+      return
     }
+    finishRestore(
+      report && {
+        mode: 'overwrite',
+        sourceName,
+        safety: { savedAs: saved.savedAs, location: saved.location, verified: saved.verified },
+        codeChanges: 0,
+        report,
+      },
+    )
   }
 
   return (
@@ -492,6 +544,31 @@ export function SaoLuuPage() {
           title="Đã thấy file an toàn trong Tải về?"
           message={`${describeSavedFile(step.saved)} Mở thư mục Tải về, thấy file rồi mới bấm tiếp — gộp xong trang sẽ tự tải lại.`}
           confirmLabel="Đã thấy — gộp"
+          pending={busy}
+          onConfirm={() =>
+            step.saved.importable
+              ? void runMerge(step, step.fingerprints, step.saved)
+              : setStep({ ...step, phase: 'merge-accept' })
+          }
+          onCancel={() =>
+            setStep({
+              phase: 'merge',
+              file: step.file,
+              sourceName: step.sourceName,
+              current: step.current,
+              choices: step.choices,
+              notice: null,
+            })
+          }
+        />
+      ) : null}
+
+      {step?.phase === 'merge-accept' ? (
+        <ConfirmDialog
+          title="Bản sao an toàn KHÔNG nhập lại được"
+          message={`${step.saved.problem ?? ''} Gộp bây giờ thì bản sao "${step.saved.savedAs}" không dựng lại được sổ đang có nếu kết quả gộp không như ý. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi gộp sau.`}
+          confirmLabel="Vẫn gộp — mất cũng được"
+          pending={busy}
           onConfirm={() => void runMerge(step, step.fingerprints, step.saved)}
           onCancel={() =>
             setStep({

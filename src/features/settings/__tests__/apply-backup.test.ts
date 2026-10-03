@@ -117,9 +117,9 @@ describe('applyBackup', () => {
 
     const report = await applyBackup(file.data)
 
-    expect(report.ok).toBe(true)
-    expect(report.rows.find((row) => row.key === 'orders')).toMatchObject({ expected: 1, actual: 1 })
-    expect(report.rows.find((row) => row.key === 'debtTotal')).toMatchObject({ expected: 70_000, actual: 70_000 })
+    expect(report?.ok).toBe(true)
+    expect(report?.rows.find((row) => row.key === 'orders')).toMatchObject({ expected: 1, actual: 1 })
+    expect(report?.rows.find((row) => row.key === 'debtTotal')).toMatchObject({ expected: 70_000, actual: 70_000 })
   })
 
   /**

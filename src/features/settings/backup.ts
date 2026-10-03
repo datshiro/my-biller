@@ -15,7 +15,13 @@ import {
 import type { BackupData, BackupFile } from '@/domain/schema'
 import { getDeviceConnection } from '@/db/repositories/device-state'
 import { getLedgerOverview } from '@/db/doi-soat-snapshot'
-import { buildRestoreReport, expectedAfterReplace, toReportActual, type RestoreReport } from '@/domain/backup-report'
+import {
+  buildRestoreReport,
+  expectedAfterReplace,
+  toReportActual,
+  type DerivedLedger,
+  type RestoreReport,
+} from '@/domain/backup-report'
 import { saveToDownloads, type SavedFile } from './download-sink'
 import type { MergeSummary, PaymentChoice } from '@/domain/backup-merge'
 
@@ -159,12 +165,12 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
  * `recalcAll()` chạy sau cùng để `paidAmount`/`status` được dựng lại từ `payments` thay vì tin vào
  * con số đã lưu trong file.
  */
-export async function applyBackup(data: BackupData): Promise<RestoreReport> {
+export async function applyBackup(data: BackupData): Promise<RestoreReport | null> {
   // Không kiểm "đã ghép" ở đây: chốt chặn nằm trong khoá ghi và ném `RestoreBlockedError` có lý do, để màn
   // dịch sang lời giải thích. Kiểm trước khoá vừa thừa vừa che mất lý do đó.
   await replaceAllDataAndRecalculate(data)
   // Đọc sau khi khoá đóng; kỳ vọng tính thuần từ file, không đọc lại DB.
-  return buildRestoreReport(expectedAfterReplace(data), toReportActual(await getLedgerOverview()))
+  return reportAfterWrite(expectedAfterReplace(data))
 }
 
 /** Số bản ghi đang có trên máy — cho xem trước Ghi đè ("Đang có trên máy: …"). */
@@ -181,9 +187,22 @@ export async function readLedger(): Promise<BackupData> {
  * File an toàn ngay trước Gộp. Gọi thẳng cửa ra file, **không** qua `downloadPreparedBackup`: hàm đó đóng
  * dấu `lastBackupAt`, tức là ghi vào sổ giữa lúc xem trước và lúc khoá gộp.
  */
-export async function saveSafetyFile(): Promise<SavedFile> {
+export async function saveSafetyFile(): Promise<BackupOutcome> {
   const prepared = await prepareBackup(Date.now())
-  return saveToDownloads({ filename: prepared.filename, mimeType: 'application/json', text: prepared.text })
+  const saved = await saveToDownloads({ filename: prepared.filename, mimeType: 'application/json', text: prepared.text })
+  return { ...saved, importable: prepared.importable, problem: prepared.problem }
+}
+
+/**
+ * Báo cáo đối chiếu sau khi ghi. Ghi đã xong thì lỗi ở đây chỉ làm mất báo cáo, không được ném ra: người
+ * gọi phải coi lần ghi là xong, không đưa người bán về để ghi lần nữa.
+ */
+async function reportAfterWrite(expected: DerivedLedger): Promise<RestoreReport | null> {
+  try {
+    return buildRestoreReport(expected, toReportActual(await getLedgerOverview()))
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -194,9 +213,9 @@ export async function applyMerge(
   data: BackupData,
   paymentChoices: Readonly<Record<string, PaymentChoice>>,
   answeredFingerprints: readonly string[],
-): Promise<{ report: RestoreReport; summary: MergeSummary }> {
+): Promise<{ report: RestoreReport | null; summary: MergeSummary }> {
   const { expected, summary } = await mergeAllDataAndRecalculate(data, paymentChoices, answeredFingerprints)
-  return { report: buildRestoreReport(expected, toReportActual(await getLedgerOverview())), summary }
+  return { report: await reportAfterWrite(expected), summary }
 }
 
 /** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */

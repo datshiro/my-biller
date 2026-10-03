@@ -618,6 +618,20 @@ describe('mergeAllDataAndRecalculate', () => {
     expect(await db.payments.where('allocatedOrderId').equals(4).count()).toBe(0)
   })
 
+  /**
+   * `replaceLedger` bỏ dòng giá mồ côi khi ghi; bản kỳ vọng phải bỏ y như vậy, nếu không thì sổ máy có sẵn
+   * một dòng giá rác là báo cáo Gộp báo LỆCH giả ở "Giá riêng".
+   */
+  it('sổ máy có dòng giá mồ côi ⇒ báo cáo Gộp vẫn khớp', async () => {
+    await replaceAllData(ledgerK())
+    await db.customerPrices.add({ gid: g(98), customerId: 404, itemId: 404, unitPrice: 1_000, createdAt: 1, updatedAt: 1 })
+
+    const { expected } = await mergeAnswering(shiftIds(ledgerK(), 10), {})
+
+    expect((await reportNow(expected)).ok).toBe(true)
+    expect(expected.data.customerPrices).toHaveLength(1)
+  })
+
   it('parity Ghi đè: bản kỳ vọng thuần bằng DB sau replaceAllDataAndRecalculate', async () => {
     const data = ledgerK()
     data.orders[0] = { ...data.orders[0]!, paidAmount: 999, status: 'partial' }

@@ -18,7 +18,7 @@ const ReportRowSchema = z.object({
 const StoredRestoreReportSchema = z.object({
   mode: z.enum(['overwrite', 'merge']),
   sourceName: z.string(),
-  safety: z.object({ savedAs: z.string(), location: z.string() }).nullable(),
+  safety: z.object({ savedAs: z.string(), location: z.string(), verified: z.boolean() }).nullable(),
   codeChanges: z.number().int().nonnegative(),
   report: z.object({
     ok: z.boolean(),

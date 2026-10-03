@@ -244,3 +244,18 @@
 - Mitigation: Phase nghiệm thu của #48: S25 sao lưu hai lần ⇒ hai file trong Files › Tải xuống, lần hai bị đổi tên và
   app hiện đúng tên đó. API 24–28: emulator API 28 nếu dựng được; không thì ghi "chưa nghiệm" trong báo cáo nghiệm
   thu và giữ issue này.
+
+### ISSUE-015 — Gộp file sao lưu: ba điểm review để sau (mã đổi hai lần, chi phí xem trước, phạm vi cảnh báo Thêm riêng)
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập đường Gộp của #48 (APPROVE-WITH-FIXES) / 04/10/2026
+- Related task: #48 sao lưu & khôi phục — `src/domain/backup-merge.ts`, `src/features/settings/merge-preview-sheet.tsx`
+- Description:
+  (a) Một đơn đã được cấp mã mới ở lần gộp trước, nếu file sau mang bản mới hơn của chính đơn đó (hai máy chưa
+  ghép cùng chữ) thì bị cấp mã lần nữa; mã mới có thể khác lần trước và `originalCode` không giữ mã trung gian.
+  (b) `previewMerge` gộp lại 1 + 3×số xung đột lần mỗi khi đổi một lựa chọn; đo trên Mac: 80 ms với 4.000 đơn và
+  20 xung đột — chưa đo trên S25.
+  (c) Câu "phần dư mất khỏi công nợ" dưới *Thêm riêng* hiện mỗi khi dòng file đã trừ vào một đơn, kể cả khi đơn đó
+  trên máy đã huỷ (khi ấy `recalcAll` đưa khoản thêm về chưa trừ, phần dư không mất) — cảnh báo rộng hơn thực tế.
+- Mitigation: (b) đo trên S25 ở phase nghiệm thu; chậm thì chỉ tính hiệu ứng của một thẻ khi mở thẻ. (a), (c) chờ có
+  ca thật; số tiền không sai trong cả ba trường hợp, báo cáo đối chiếu sau ghi vẫn bắt lệch.

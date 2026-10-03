@@ -46,7 +46,7 @@ public class DownloadFilePlugin extends Plugin {
         String filename = basename(call.getString("filename"));
         String mimeType = call.getString("mimeType");
         String text = call.getString("text");
-        if (filename == null || filename.isEmpty() || mimeType == null || text == null) {
+        if (filename == null || filename.isEmpty() || mimeType == null || baseMime(mimeType).isEmpty() || text == null) {
             call.reject("Thiếu tên file, loại file hoặc nội dung.", "EARGS");
             return;
         }
@@ -76,7 +76,8 @@ public class DownloadFilePlugin extends Plugin {
                         : writeLegacy(filename, bytes)
                 );
             } catch (Exception e) {
-                call.reject("Chưa lưu được file vào thư mục Tải về: " + e.getMessage(), "EWRITE");
+                String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                call.reject("Chưa lưu được file vào thư mục Tải về: " + reason, "EWRITE");
             }
         }).start();
     }
@@ -100,7 +101,8 @@ public class DownloadFilePlugin extends Plugin {
             }
             ContentValues done = new ContentValues();
             done.put(MediaStore.Downloads.IS_PENDING, 0);
-            resolver.update(uri, done, null, null);
+            // 0 dòng = file vẫn đang ẩn (IS_PENDING) — người bán không thấy nó trong Tải về, không được báo đã lưu.
+            if (resolver.update(uri, done, null, null) == 0) throw new IllegalStateException("hệ thống không hoàn tất file");
 
             // Đọc lại tên sau khi xong: hệ thống đổi tên khi trùng, và app phải nói đúng tên người bán sẽ thấy.
             String displayName = filename;

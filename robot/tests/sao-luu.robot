@@ -400,6 +400,7 @@ Gộp cùng file hai lần không đổi sổ
     ${f}=    Sao Lưu Ra File
     Xử Lý Khoản Thu Của Anh Hùng    ${p}    Đã trả lại khách    Xác nhận
     Gộp Với Một Lựa Chọn    ${f}    ${p}[gid]    Lấy bản trong file
+    Chờ Thấy Chữ    Đã yêu cầu tải file an toàn
     ${lần_một}=    Sổ Chín Bảng
 
     Mở Xem Trước Gộp    ${f}
@@ -509,6 +510,8 @@ APK giả: gộp lưu file an toàn qua plugin rồi gộp luôn; plugin lỗi t
     Click    ${NÚT_GỘP}
     Chờ Nạp Lại Xong
     Chờ Thấy Chữ    Khôi phục khớp
+    # Thẻ báo cáo luôn nói file an toàn ra đâu, kể cả khi khớp — đó là đường về của người bán.
+    Chờ Thấy Chữ    Đã lưu file an toàn: Download/my-biller-backup-
     ${món_sau}=    Đọc Bảng    items
     ${về}=    Evaluate    [i for i in $món_sau if i['gid'] == '${bánh_mì}[gid]']
     Length Should Be    ${về}    1

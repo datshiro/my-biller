@@ -44,8 +44,11 @@ export async function saveToDownloads(request: DownloadRequest): Promise<SavedFi
   return { savedAs: request.filename, location: WEB_LOCATION, verified: false }
 }
 
-/** Câu báo kết quả lưu file. Trên web không bao giờ khẳng định "Đã lưu" — trình duyệt không báo lại. */
-export function describeSavedFile({ savedAs, location, verified }: SavedFile): string {
-  if (verified) return `Đã lưu: ${location}${savedAs}.`
-  return `Đã yêu cầu tải file "${savedAs}" về thư mục ${location}. Hãy mở thư mục Tải về để chắc file đã có; trình duyệt có thể đổi tên nếu trùng.`
+/**
+ * Câu báo kết quả lưu file. Trên web không bao giờ khẳng định "Đã lưu" — trình duyệt không báo lại.
+ * `what` gọi tên file khi cần phân biệt (vd "file an toàn").
+ */
+export function describeSavedFile({ savedAs, location, verified }: SavedFile, what = 'file'): string {
+  if (verified) return what === 'file' ? `Đã lưu: ${location}${savedAs}.` : `Đã lưu ${what}: ${location}${savedAs}.`
+  return `Đã yêu cầu tải ${what} "${savedAs}" về thư mục ${location}. Hãy mở thư mục Tải về để chắc file đã có; trình duyệt có thể đổi tên nếu trùng.`
 }
