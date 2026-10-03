@@ -33,8 +33,9 @@
 - Ghi chú gõ liền không khoảng trắng ("ít hành,mang về") được tính là một cụm — giá của việc giữ dấu phẩy thập
   phân ("thêm 1,5 lạng").
 - Món đã lưu giá vượt trần từ trước vẫn giữ giá cũ; trần chỉ chặn ô nhập.
-- Chưa QA trên điện thoại thật với sổ có đơn từ trước 2.8.0; đã kiểm trên Chrome giả lập điện thoại và Robot
-  (gồm Robot hai máy trên staging).
+- Đã QA tay trên điện thoại thật (Galaxy S25 Ultra, Android 16, Chrome, 3/10): màn bán mới chạy đúng như mô tả.
+  Lượt đó chạy trên sổ trống; trường hợp sổ có ghi chú từ trước 2.8.0 ("Đá riêng" trong ghi chú) mới kiểm trên
+  Chrome giả lập điện thoại và Robot (gồm Robot hai máy trên staging).
 
 ## 2.8.0 — tem ghi chú dài in tiếp, lề trái rộng hơn; tuỳ chọn và topping có giá theo nhóm món (1/10/2026)
 
