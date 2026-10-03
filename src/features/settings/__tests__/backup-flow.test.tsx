@@ -80,8 +80,8 @@ const renderSettings = () =>
 const seedItem = () =>
   createItem({ name: 'Phở', groupId: null, unit: 'tô', unitPrice: 50_000, costPrice: null, isActive: 1 })
 
-const pick = (contents: string) =>
-  fireEvent.change(screen.getByLabelText('Chọn file sao lưu'), {
+const pick = async (contents: string) =>
+  fireEvent.change(await screen.findByLabelText('Chọn file sao lưu'), {
     target: { files: [new File([contents], 'backup.json', { type: 'application/json' })] },
   })
 
@@ -120,7 +120,7 @@ describe('sao lưu thủ công chưa có dữ liệu nghiệp vụ', () => {
     const background = screen.getByRole('heading', { name: 'Sao lưu & khôi phục', hidden: true }).closest('[inert]')
     expect(background?.getAttribute('aria-hidden')).toBe('true')
 
-    pick(JSON.stringify({ app: 'my-biller', version: 2, exportedAt: NOW, data: {} }))
+    await pick(JSON.stringify({ app: 'my-biller', version: 2, exportedAt: NOW, data: {} }))
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
@@ -356,7 +356,7 @@ describe('chia sẻ đúng file vừa sao lưu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'SAO LƯU RA FILE' }))
     expect(await screen.findByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeDefined()
 
-    pick('không phải JSON')
+    await pick('không phải JSON')
 
     expect(await screen.findByRole('alert')).toBeDefined()
     expect(screen.queryByRole('button', { name: 'CHIA SẺ FILE VỪA SAO LƯU' })).toBeNull()
@@ -368,7 +368,7 @@ describe('nhập file sao lưu', () => {
     await seedItem()
     renderPage()
 
-    pick('{ "app": "my-biller", "version": 1 }')
+    await pick('{ "app": "my-biller", "version": 1 }')
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toMatch(/hỏng/)
@@ -381,7 +381,7 @@ describe('nhập file sao lưu', () => {
     await seedItem()
     renderPage()
 
-    pick(JSON.stringify({ app: 'app-khac', version: 1 }))
+    await pick(JSON.stringify({ app: 'app-khac', version: 1 }))
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/ứng dụng khác/)
     expect(await db.items.count()).toBe(1)
@@ -392,7 +392,7 @@ describe('nhập file sao lưu', () => {
     const file = await collectBackup(NOW)
     renderPage()
 
-    pick(JSON.stringify(file))
+    await pick(JSON.stringify(file))
 
     expect(await screen.findByText('Ghi đè toàn bộ dữ liệu?')).toBeDefined()
     expect(screen.getByText(/1 mặt hàng/)).toBeDefined()
@@ -407,7 +407,7 @@ describe('nhập file sao lưu', () => {
     const file = await collectBackup(NOW)
     renderPage()
 
-    const input = screen.getByLabelText('Chọn file sao lưu')
+    const input = await screen.findByLabelText('Chọn file sao lưu')
     expect(input.hasAttribute('accept')).toBe(false)
     fireEvent.change(input, {
       target: { files: [new File([JSON.stringify(file)], 'my-biller-backup.txt', { type: 'text/plain' })] },
@@ -428,7 +428,7 @@ describe('nhập file sao lưu', () => {
     await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
     renderPage()
 
-    pick(JSON.stringify(file))
+    await pick(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
 
     expect(await screen.findByText('Đã thấy file trong máy chưa?')).toBeDefined()
@@ -447,7 +447,7 @@ describe('nhập file sao lưu', () => {
     await createItem({ name: 'Bún', groupId: null, unit: 'tô', unitPrice: 40_000, costPrice: null, isActive: 1 })
     renderPage()
 
-    pick(JSON.stringify(file))
+    await pick(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Huỷ' }))
 
@@ -530,7 +530,7 @@ describe('bản sao an toàn không nhập lại được', () => {
     await addOddItem()
     renderPage()
 
-    pick(JSON.stringify(file))
+    await pick(JSON.stringify(file))
     await userEvent.click(await screen.findByRole('button', { name: 'Tải file an toàn' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Đã thấy — đọc tiếp' }))
 

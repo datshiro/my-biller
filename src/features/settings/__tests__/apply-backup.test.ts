@@ -109,6 +109,39 @@ describe('applyBackup', () => {
     expect(await db.orders.count()).toBe(1)
     expect((await db.orders.toArray())[0]?.total).toBe(110_000)
   })
+
+  it('trả báo cáo đối chiếu khớp: kỳ vọng tính thuần từ file, thực tế đọc sau khi ghi', async () => {
+    await sellOnCredit(110_000, 40_000)
+    const file = await collectBackup(NOW)
+    await sellOnCredit(200_000, 0)
+
+    const report = await applyBackup(file.data)
+
+    expect(report.ok).toBe(true)
+    expect(report.rows.find((row) => row.key === 'orders')).toMatchObject({ expected: 1, actual: 1 })
+    expect(report.rows.find((row) => row.key === 'debtTotal')).toMatchObject({ expected: 70_000, actual: 70_000 })
+  })
+
+  /**
+   * Chốt chặn duy nhất nằm trong khoá ghi. Một kiểm tra riêng trước khoá ném câu kỹ thuật cũ và che mất
+   * lý do có kiểu, nên màn không dịch được sang lời giải thích cho người bán.
+   */
+  it('máy đã ghép ⇒ ném RestoreBlockedError mang lý do, dữ liệu nguyên', async () => {
+    await sellOnCredit(110_000, 40_000)
+    const file = await collectBackup(NOW)
+    await db.deviceState.put({
+      key: 'connection',
+      shopId: testGid(500),
+      token: 'token-thu-nghiem-du-dai-cho-ket-noi-1234567890',
+      syncUrl: 'https://sync.example.com',
+    })
+
+    await expect(applyBackup({ ...file.data, orders: [] })).rejects.toMatchObject({
+      name: 'RestoreBlockedError',
+      reason: 'connected',
+    })
+    expect(await db.orders.count()).toBe(1)
+  })
 })
 
 /**

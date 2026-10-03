@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { getRestoreBlock } from '@/db/backup'
 import { getLedgerOverview, getSyncAnchor } from '@/db/doi-soat-snapshot'
 import { getAppState, getShop } from '@/db/repositories/settings'
 import {
@@ -53,4 +54,9 @@ export function useLastBackupLine(): string {
   if (state === undefined) return '…'
   if (state.lastBackupAt === null) return 'Chưa sao lưu lần nào'
   return `Lần cuối: ${format(state.lastBackupAt, "HH:mm 'ngày' d/M/yyyy")}`
+}
+
+/** Vì sao máy này không khôi phục từ file được; `undefined` khi chưa đọc xong, `null` khi không bị chặn. */
+export function useRestoreBlock() {
+  return useLiveQuery(() => getRestoreBlock())
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyBackup,
   canSharePreparedBackup,
+  currentCounts,
   downloadPreparedBackup,
   exportBackup,
   prepareBackup,
@@ -12,10 +13,15 @@ import {
 } from './backup'
 import { describeSavedFile } from './download-sink'
 import { BackupBanner } from './backup-banner'
-import { useDeviceConnection, useLastBackupLine } from './use-settings'
+import { RESTORE_BLOCK_TEXT } from './restore-block-text'
+import { RestoreReportCard } from './restore-report-card'
+import { clearRestoreReport, readRestoreReport, saveRestoreReport } from './restore-report-store'
+import { useLastBackupLine, useRestoreBlock } from './use-settings'
+import { RestoreBlockedError } from '@/db/backup'
 import {
   countRecords,
   describeCounts,
+  type BackupCounts,
   describeDroppedPrices,
   isOperationallyEmpty,
 } from '@/domain/backup'
@@ -37,14 +43,22 @@ const SHARE_FAILURE_MESSAGE =
  * đang có, nên phải nói ra thay vì chặn cứng — chặn thì người bán không nhập được mà cũng không có
  * cách nào đi tiếp.
  */
+type Picked = { file: BackupFile; sourceName: string }
 type ImportStep =
-  | { phase: 'confirm'; file: BackupFile }
-  | { phase: 'safety'; file: BackupFile; saved: BackupOutcome; problem: string | null }
-  | { phase: 'accept'; file: BackupFile; saved: BackupOutcome; problem: string }
+  | ({ phase: 'confirm'; current: BackupCounts } & Picked)
+  | ({ phase: 'safety'; saved: BackupOutcome; problem: string | null } & Picked)
+  | ({ phase: 'accept'; saved: BackupOutcome; problem: string } & Picked)
+
+/** Lỗi chốt chặn trong khoá ghi (hai tab đua nhau) dịch sang đúng câu giải thích, không câu kỹ thuật. */
+const restoreError = (caught: unknown) =>
+  caught instanceof RestoreBlockedError ? RESTORE_BLOCK_TEXT[caught.reason] : message(caught)
 
 export function SaoLuuPage() {
-  const connection = useDeviceConnection()
+  const block = useRestoreBlock()
   const lastBackup = useLastBackupLine()
+  // Đọc một lần lúc mount, xoá trong effect: StrictMode mount hai lần, đọc-và-xoá cùng chỗ thì lần mount
+  // thứ hai mất thẻ.
+  const [restoreReport] = useState(readRestoreReport)
   const fileInput = useRef<HTMLInputElement>(null)
   const exportButton = useRef<HTMLButtonElement>(null)
   const exportLock = useRef(false)
@@ -61,6 +75,8 @@ export function SaoLuuPage() {
   const [pendingEmptyBackup, setPendingEmptyBackup] = useState<PreparedBackup | null>(null)
   const [shareTarget, setShareTarget] = useState<PreparedBackup | null>(null)
   const modalOpen = pendingEmptyBackup !== null || step !== null
+
+  useEffect(() => clearRestoreReport(), [])
 
   const clearShareTarget = useCallback((expected: PreparedBackup | null = null) => {
     if (expected !== null && shareTargetRef.current !== expected) return
@@ -184,19 +200,20 @@ export function SaoLuuPage() {
     setError(null)
     setNotice(null)
     try {
-      setStep({ phase: 'confirm', file: await readBackupFile(file) })
+      const backup = await readBackupFile(file)
+      setStep({ phase: 'confirm', file: backup, sourceName: file.name, current: await currentCounts(Date.now()) })
     } catch (caught) {
       setError(message(caught))
     }
   }
 
   /** Xuất bản hiện tại ra file rồi dừng lại hỏi — chưa xoá gì cả. */
-  const saveSafetyCopy = async (file: BackupFile) => {
+  const saveSafetyCopy = async ({ file, sourceName }: Picked) => {
     setStep(null)
     setBusy(true)
     try {
       const saved = await exportBackup(Date.now())
-      setStep({ phase: 'safety', file, saved, problem: saved.problem })
+      setStep({ phase: 'safety', file, sourceName, saved, problem: saved.problem })
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -204,14 +221,21 @@ export function SaoLuuPage() {
     }
   }
 
-  const runImport = async (file: BackupFile) => {
+  const runImport = async ({ file, sourceName }: Picked, saved: BackupOutcome) => {
     setStep(null)
     setBusy(true)
     try {
-      await applyBackup(file.data)
+      const report = await applyBackup(file.data)
+      saveRestoreReport({
+        mode: 'overwrite',
+        sourceName,
+        safety: { savedAs: saved.savedAs, location: saved.location },
+        codeChanges: 0,
+        report,
+      })
       window.location.reload()
     } catch (caught) {
-      setError(message(caught))
+      setError(restoreError(caught))
       setBusy(false)
     }
   }
@@ -225,6 +249,7 @@ export function SaoLuuPage() {
       >
         <ScreenHeader title="Sao lưu & khôi phục" back="back" />
         <BackupBanner />
+        {restoreReport ? <RestoreReportCard stored={restoreReport} /> : null}
 
         <section className="px-4 py-5">
           <Button
@@ -266,14 +291,20 @@ export function SaoLuuPage() {
           ) : null}
 
           <div className="mt-4">
-            {connection ? (
+            {/* Chưa đọc xong lý do chặn thì chưa vẽ gì: máy đã ghép không được thấy nút nhập dù chỉ một nhịp. */}
+            {block === undefined ? null : block !== null ? (
               <>
-                <Button variant="secondary" disabled={busy || modalOpen} onClick={() => void requestResync()}>
-                  Kéo lại từ đầu
-                </Button>
-                <p className="mt-2 text-[13px] text-muted">
-                  Xoá bản sao trên máy này rồi tải lại từ sổ chung. Không ảnh hưởng máy khác.
-                </p>
+                <p className="rounded-btn bg-warn-tint px-3 py-2 text-[13px] text-warn">{RESTORE_BLOCK_TEXT[block]}</p>
+                {block === 'connected' ? (
+                  <div className="mt-3">
+                    <Button variant="secondary" disabled={busy || modalOpen} onClick={() => void requestResync()}>
+                      Kéo lại từ đầu
+                    </Button>
+                    <p className="mt-2 text-[13px] text-muted">
+                      Xoá bản sao trên máy này rồi tải lại từ sổ chung. Không ảnh hưởng máy khác.
+                    </p>
+                  </div>
+                ) : null}
               </>
             ) : (
               <>
@@ -316,9 +347,9 @@ export function SaoLuuPage() {
       {step?.phase === 'confirm' ? (
         <ConfirmDialog
           title="Ghi đè toàn bộ dữ liệu?"
-          message={`File có ${describeCounts(countRecords(step.file.data))}.${describeDroppedPrices(step.file.data)} Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
+          message={`File có ${describeCounts(countRecords(step.file.data))}.${describeDroppedPrices(step.file.data)} Đang có trên máy: ${describeCounts(step.current)}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế — mất phần chưa có trong file. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
           confirmLabel="Tải file an toàn"
-          onConfirm={() => void saveSafetyCopy(step.file)}
+          onConfirm={() => void saveSafetyCopy(step)}
           onCancel={() => setStep(null)}
         />
       ) : null}
@@ -334,8 +365,8 @@ export function SaoLuuPage() {
           confirmLabel={step.problem === null ? 'Đã thấy — ghi đè' : 'Đã thấy — đọc tiếp'}
           onConfirm={() =>
             step.problem === null
-              ? void runImport(step.file)
-              : setStep({ phase: 'accept', file: step.file, saved: step.saved, problem: step.problem })
+              ? void runImport(step, step.saved)
+              : setStep({ phase: 'accept', file: step.file, sourceName: step.sourceName, saved: step.saved, problem: step.problem })
           }
           onCancel={() => setStep(null)}
         />
@@ -346,7 +377,7 @@ export function SaoLuuPage() {
           title="Bản sao an toàn KHÔNG nhập lại được"
           message={`${step.problem} Ghi đè bây giờ là mất hẳn dữ liệu đang có; bản sao "${step.saved.savedAs}" không dựng lại được. Muốn giữ đường về thì bấm Huỷ, mở file ra sửa tay đúng chỗ đó, rồi ghi đè sau.`}
           confirmLabel="Vẫn ghi đè — mất cũng được"
-          onConfirm={() => void runImport(step.file)}
+          onConfirm={() => void runImport(step, step.saved)}
           onCancel={() => setStep(null)}
         />
       ) : null}

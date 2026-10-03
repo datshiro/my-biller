@@ -3,11 +3,14 @@ import { saveLastBackupAt } from '@/db/repositories/settings'
 import {
   backupFilename,
   countOperationalRecords,
+  countRecords,
   parseBackupFile,
   type BackupCounts,
 } from '@/domain/backup'
 import type { BackupData, BackupFile } from '@/domain/schema'
 import { getDeviceConnection } from '@/db/repositories/device-state'
+import { getLedgerOverview } from '@/db/doi-soat-snapshot'
+import { buildRestoreReport, expectedAfterReplace, toReportActual, type RestoreReport } from '@/domain/backup-report'
 import { saveToDownloads, type SavedFile } from './download-sink'
 
 export type PreparedBackup = {
@@ -150,11 +153,17 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
  * `recalcAll()` chạy sau cùng để `paidAmount`/`status` được dựng lại từ `payments` thay vì tin vào
  * con số đã lưu trong file.
  */
-export async function applyBackup(data: BackupData): Promise<void> {
-  if (await getDeviceConnection()) {
-    throw new Error('Máy đã ghép không nhập file sao lưu. Hãy dùng “Kéo lại từ đầu”.')
-  }
+export async function applyBackup(data: BackupData): Promise<RestoreReport> {
+  // Không kiểm "đã ghép" ở đây: chốt chặn nằm trong khoá ghi và ném `RestoreBlockedError` có lý do, để màn
+  // dịch sang lời giải thích. Kiểm trước khoá vừa thừa vừa che mất lý do đó.
   await replaceAllDataAndRecalculate(data)
+  // Đọc sau khi khoá đóng; kỳ vọng tính thuần từ file, không đọc lại DB.
+  return buildRestoreReport(expectedAfterReplace(data), toReportActual(await getLedgerOverview()))
+}
+
+/** Số bản ghi đang có trên máy — cho xem trước Ghi đè ("Đang có trên máy: …"). */
+export async function currentCounts(at: number): Promise<BackupCounts> {
+  return countRecords((await collectBackup(at)).data)
 }
 
 /** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */

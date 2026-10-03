@@ -7,6 +7,7 @@ Resource            ../resources/sales.resource
 Library             OperatingSystem
 Library             Collections
 Library             String
+Library             ../libraries/so_no.py
 Suite Setup         Mở Trình Duyệt Cho Suite
 Suite Teardown      Đóng Trình Duyệt Cuối Suite
 Test Setup          Mở Phiên Có Dữ Liệu Mẫu
@@ -159,6 +160,50 @@ APK giả: ghi file thất bại thì báo lỗi và không đóng dấu sao lư
     Should Be Equal    ${mốc}    ${None}    Plugin báo lỗi mà app vẫn ghi mốc sao lưu.
     # Banner nhắc ("Chưa sao lưu lần nào. Mất máy là mất sạch dữ liệu.") vẫn còn.
     Chờ Thấy Chữ    Mất máy là mất
+
+Ghi đè cho xem trước số trong file và số đang có trên máy, chưa ghi gì trước khi xác nhận
+    Mở Màn    /them/sao-luu
+    ${đường_dẫn}=    Sao Lưu Ra File
+    Bán Nhanh    Trà đá
+
+    Mở Màn    /them/sao-luu
+    Upload File By Selector    ${Ô_CHỌN_FILE}    ${đường_dẫn}
+    Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
+    Chờ Thấy Chữ    File có 2 đơn
+    Chờ Thấy Chữ    Đang có trên máy: 3 đơn
+    Chờ Thấy Chữ    mất phần chưa có trong file
+    ${đơn}=    Đọc Bảng    orders
+    Length Should Be    ${đơn}    3    Mới xem trước mà sổ đã bị ghi đè.
+
+Ghi đè xong báo cáo khớp, sổ đúng bằng file, thẻ hiện một lần
+    [Documentation]    Sau khi ghi app tự tải lại trang; báo cáo đối chiếu (kỳ vọng tính từ file ⟷ đọc lại
+    ...    trên máy) sống qua lần tải đó trong sessionStorage và chỉ hiện một lần. Tổng nợ trên thẻ phải bằng
+    ...    nợ tính thẳng từ `Đọc Bảng orders` + `payments`, số dòng bằng file. Ca "báo cáo bắt được khi
+    ...    lệch" không làm ở đây: Robot không chen được vào giữa lúc ghi và lúc đọc đối chiếu — ca đó ở
+    ...    Vitest (src/db/__tests__/backup.test.ts "cố tình làm lệch", sao-luu-page.test.tsx thẻ LỆCH).
+    Mở Màn    /them/sao-luu
+    ${đường_dẫn}=    Sao Lưu Ra File
+    ${bản_sao}=    Evaluate    json.loads(open($đường_dẫn, encoding='utf-8').read())    json
+    Bán Nợ Cho Khách    Cà phê sữa    Anh Hùng
+
+    Nhập File Sao Lưu    ${đường_dẫn}
+
+    Chờ Thấy Chữ    Khôi phục khớp
+    FOR    ${bảng}    IN    orders    customers    items    payments
+        ${dòng}=    Đọc Bảng    ${bảng}
+        ${trong_file}=    Get Length    ${bản_sao}[data][${bảng}]
+        Length Should Be    ${dòng}    ${trong_file}    Bảng ${bảng} sau ghi đè không bằng file.
+    END
+    ${orders}=    Đọc Bảng    orders
+    ${payments}=    Đọc Bảng    payments
+    ${nợ}=    Tong No    ${orders}    ${payments}
+    ${nợ_chữ}=    Dinh Dang Vnd    ${nợ}
+    ${trên_thẻ}=    Get Text    css=[aria-label="Báo cáo khôi phục"] tr:has-text("Tổng nợ") >> css=td >> nth=2
+    Should Be Equal    ${trên_thẻ}    ${nợ_chữ}    Tổng nợ trên thẻ không bằng nợ tính từ sổ.
+
+    Reload
+    Wait For Elements State    ${NÚT_SAO_LƯU}    visible
+    Không Được Thấy Chữ    Khôi phục khớp
 
 Nhập lại file sao lưu thì sổ quay về đúng lúc sao lưu
     [Documentation]    Vòng tròn đầy đủ: sao lưu → bán thêm → nhập lại. Đơn bán sau lúc sao lưu phải

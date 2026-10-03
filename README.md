@@ -108,8 +108,12 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
   mất đuôi `.json` vẫn chọn được) → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
   đúng thì hỏi xác nhận, tự tải một file của dữ liệu hiện tại về máy, rồi mới ghi đè trong một
   transaction và chạy `recalcAll()`.
+- Ghi đè xong app tự tải lại và hiện **báo cáo đối chiếu** một lần: số đơn, khách, mặt hàng, khoản thu và
+  tổng nợ kỳ vọng (tính từ file) so với số đọc lại trên máy; lệch thì báo **LỆCH** kèm tên file an toàn,
+  và nói số đơn có tiền thu vượt tổng đơn nếu có.
 - Máy đã ghép dùng **Kéo lại từ đầu** để dựng lại bản sao từ sổ chung; không cho nhập file đè lên
-  dữ liệu của các máy khác.
+  dữ liệu của các máy khác. Máy đã ghép, đang ghép hoặc bị thu hồi không thấy nút nhập mà thấy câu giải
+  thích vì sao và đường đang có (khôi phục trên một máy chưa ghép, Kéo lại từ đầu, hoặc ghép lại).
 - Safari và app đã thêm vào Màn hình chính là hai kho dữ liệu tách biệt. Luôn sao lưu ở đúng nơi đang
   nhìn thấy sổ; nếu Safari báo bản sao chưa có dữ liệu bán hàng, hãy mở biểu tượng app trên Màn hình
   chính rồi kiểm tra lại.
