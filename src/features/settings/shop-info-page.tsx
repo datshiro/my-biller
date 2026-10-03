@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { logoDataUrlFromFile } from './shop-logo'
 import { useShop } from './use-settings'
 import { saveShop } from '@/db/repositories/settings'
-import type { ShopSettings } from '@/domain/schema'
+import type { LabelWatermark, ShopSettings } from '@/domain/schema'
 import { Button } from '@/ui/button'
+import { SelectChip } from '@/ui/chip'
 import { ListSkeleton } from '@/ui/empty-state'
 import { FormScreen } from '@/ui/form-screen'
 import { TextField } from '@/ui/text-field'
@@ -23,6 +25,131 @@ function ReceiptPreview({ shop }: { shop: ShopSettings }) {
   )
 }
 
+const POSITIONS: { value: LabelWatermark['position']; label: string }[] = [
+  { value: 'center', label: 'Giữa tem' },
+  { value: 'corner', label: 'Góc trên phải' },
+]
+
+const STRENGTHS: { value: LabelWatermark['strength']; label: string }[] = [
+  { value: 'light', label: 'Nhạt' },
+  { value: 'medium', label: 'Vừa' },
+  { value: 'dark', label: 'Đậm' },
+]
+
+function LogoSection({
+  logo,
+  watermark,
+  onLogo,
+  onWatermark,
+  onError,
+}: {
+  logo: string | null
+  watermark: LabelWatermark
+  onLogo: (logo: string | null) => void
+  onWatermark: (patch: Partial<LabelWatermark>) => void
+  onError: (message: string | null) => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  const pick = async (file: File) => {
+    setBusy(true)
+    onError(null)
+    try {
+      onLogo(await logoDataUrlFromFile(file))
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : 'Không đọc được ảnh này.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="label-xs text-muted">LOGO CỬA HÀNG</p>
+      {logo ? (
+        <div className="flex items-center gap-3 rounded-card border border-line bg-white p-3">
+          <img
+            data-shop-logo-preview
+            src={logo}
+            alt="Logo sẽ in (đen trắng)"
+            className="max-h-24 max-w-[60%] object-contain"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          <p className="text-[12px] text-muted">Bản đen trắng, đúng như khi in.</p>
+        </div>
+      ) : null}
+      <div className="flex gap-2">
+        <label className="inline-flex h-12 cursor-pointer items-center justify-center rounded-btn border border-line bg-surface px-4 font-semibold text-ink active:bg-line">
+          {busy ? 'Đang xử lý ảnh…' : logo ? 'Chọn ảnh khác' : 'Chọn ảnh logo'}
+          <input
+            data-shop-logo-input
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              // Xoá giá trị để chọn lại đúng ảnh vừa chọn vẫn kích hoạt onChange.
+              event.target.value = ''
+              if (file) void pick(file)
+            }}
+          />
+        </label>
+        {logo ? (
+          <Button variant="danger" onClick={() => onLogo(null)}>
+            Gỡ logo
+          </Button>
+        ) : null}
+      </div>
+
+      {logo ? (
+        <div data-label-watermark className="flex flex-col gap-3 rounded-card border border-line bg-surface p-3">
+          <label className="flex items-center gap-3 font-semibold">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-brand"
+              checked={watermark.enabled}
+              onChange={(event) => onWatermark({ enabled: event.target.checked })}
+            />
+            In logo chìm trên tem
+          </label>
+          {watermark.enabled ? (
+            <>
+              <div className="flex gap-2 overflow-x-auto">
+                {POSITIONS.map((option) => (
+                  <SelectChip
+                    key={option.value}
+                    selected={watermark.position === option.value}
+                    onClick={() => onWatermark({ position: option.value })}
+                  >
+                    {option.label}
+                  </SelectChip>
+                ))}
+              </div>
+              {watermark.position === 'center' ? (
+                <div className="flex gap-2 overflow-x-auto">
+                  {STRENGTHS.map((option) => (
+                    <SelectChip
+                      key={option.value}
+                      selected={watermark.strength === option.value}
+                      onClick={() => onWatermark({ strength: option.value })}
+                    >
+                      {option.label}
+                    </SelectChip>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-muted">Logo nhỏ ở góc in đậm, không làm mờ.</p>
+              )}
+            </>
+          ) : null}
+          <p className="text-[12px] text-muted">Cài chung cho mọi máy đã ghép.</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ShopForm({ shop }: { shop: ShopSettings }) {
   const navigate = useNavigate()
   const [draft, setDraft] = useState(shop)
@@ -31,7 +158,9 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
 
   const set = (patch: Partial<ShopSettings>) => setDraft((current) => ({ ...current, ...patch }))
 
-  const dirty = (Object.keys(shop) as (keyof ShopSettings)[]).some((key) => draft[key] !== shop[key])
+  const dirty =
+    (Object.keys(shop) as (keyof ShopSettings)[]).some((key) => key !== 'labelWatermark' && draft[key] !== shop[key]) ||
+    JSON.stringify(draft.labelWatermark) !== JSON.stringify(shop.labelWatermark)
 
   const save = async () => {
     setSaving(true)
@@ -42,6 +171,9 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
         phone: draft.phone.trim(),
         address: draft.address.trim(),
         footerNote: draft.footerNote.trim(),
+        // Luôn ghi đủ hai khoá: Worker coi bản ghi thiếu khoá là của máy bản cũ và giữ logo đang lưu.
+        logo: draft.logo,
+        labelWatermark: draft.labelWatermark,
       })
       void navigate(-1)
     } catch (caught) {
@@ -87,6 +219,16 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
         value={draft.footerNote}
         onChange={(event) => set({ footerNote: event.target.value })}
         placeholder="Ví dụ: Cảm ơn quý khách!"
+      />
+
+      <LogoSection
+        logo={draft.logo}
+        watermark={draft.labelWatermark}
+        onLogo={(logo) =>
+          set(logo ? { logo } : { logo: null, labelWatermark: { ...draft.labelWatermark, enabled: false } })
+        }
+        onWatermark={(patch) => set({ labelWatermark: { ...draft.labelWatermark, ...patch } })}
+        onError={setError}
       />
 
       <div>

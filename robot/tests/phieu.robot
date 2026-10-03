@@ -454,6 +454,28 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
+Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được
+    [Documentation]    Logo lưu thành PNG đen trắng trong bản ghi shop của sổ chung (#51), nên đọc thẳng
+    ...    IndexedDB chứ không chỉ tin ảnh xem trước: giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
+    ...    Trần 40 000 ký tự vì oplog không bao giờ dọn và mỗi lần lưu thông tin quán chép logo hai lần.
+    Cài Logo Quán
+    ${logo}=    Đọc Logo Quán
+    Should Be True    ${logo}[png]    Logo trong sổ không phải data URL PNG.
+    Should Be True    0 < ${logo}[length] < 40000    Logo trong sổ dài ${logo}[length] ký tự.
+    Should Be Equal    ${logo}[watermark]    {"enabled":false,"position":"center","strength":"light"}
+
+    Reload
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Wait For Elements State    css=[data-shop-logo-preview]    visible
+
+    Bấm Nút    Gỡ logo
+    Wait For Elements State    css=[data-shop-logo-preview]    detached
+    Bấm Nút    LƯU THÔNG TIN
+    Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+    ${logo}=    Đọc Logo Quán
+    Should Be Equal As Integers    ${logo}[length]    0    Gỡ logo rồi mà sổ vẫn còn logo.
+
 In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
     [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
     ...    IN TEM thật và đọc được đúng byte TSPL app định gửi. Số tem đối chiếu với orderLines trong
