@@ -1,5 +1,25 @@
 # Ghi chú phát hành
 
+## 2.12.0 — tem xem trước đổi theo vị trí và mức đậm logo chìm (4/10/2026)
+
+> Không đổi Worker, schema IndexedDB, hợp đồng đồng bộ hay định dạng sao lưu: deploy theo thứ tự thường, máy chưa
+> cập nhật vẫn đồng bộ bình thường với máy đã cập nhật. APK tăng versionCode (9) để cài đè được.
+
+### Người bán thấy gì
+
+- **Cài đặt › Thông tin cửa hàng › Hình chìm trên tem:** có thêm **tem xem trước** — một tem mẫu ở đúng khổ tem của
+  máy này (mặc định 50×30) với tên quán đang gõ, mã đơn, tên món, tuỳ chọn, ghi chú và logo đặt đúng chỗ. Đổi
+  Giữa tem / Bên phải / Góc trên phải hay Nhạt / Vừa / Đậm thì ảnh đổi theo, đúng mẫu chấm sẽ in. Trước đây ba vị
+  trí trông giống hệt nhau vì ảnh xem trước chỉ có logo đứng một mình.
+- Số thứ tự `1/3` do máy in tự vẽ nên không có trong ảnh xem trước (có chú thích dưới ảnh).
+- Logo trong sổ bị hỏng: xem trước vẫn vẽ tem không logo và nhắc chọn lại ảnh, giống khi in.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Tem xem trước dựng bằng canvas ngay trong trình duyệt/WebView, dùng cùng mã chụp và ghép với đường in tem; byte
+  TSPL của tem in không đổi.
+- **Chưa in thử trên XP-365B thật** (ISSUE-013), kể cả bản xem trước trên điện thoại thật.
+
 ## 2.11.0 — logo chìm bên phải trên tem (3/10/2026)
 
 > **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.11.0 sau khi tag đã deploy xong.** Cấu hình hình chìm có thêm
