@@ -5,6 +5,7 @@ import { useShop } from './use-settings'
 import { saveShop } from '@/db/repositories/settings'
 import type { LabelWatermark, ShopSettings } from '@/domain/schema'
 import { Button } from '@/ui/button'
+import { LabelPreview } from './label-preview'
 import { SelectChip } from '@/ui/chip'
 import { logoPlacement, type LogoPlacement } from '@/features/receipt/label-layout'
 import { ListSkeleton } from '@/ui/empty-state'
@@ -39,12 +40,14 @@ const STRENGTHS: { value: LabelWatermark['strength']; label: string }[] = [
 ]
 
 function LogoSection({
+  shopName,
   logo,
   watermark,
   onLogo,
   onWatermark,
   onError,
 }: {
+  shopName: string
   logo: string | null
   watermark: LabelWatermark
   onLogo: (logo: string | null) => void
@@ -148,6 +151,7 @@ function LogoSection({
           <p className="text-[12px] text-muted">Cài chung cho mọi máy đã ghép.</p>
         </div>
       ) : null}
+      {logo ? <LabelPreview name={shopName} logo={logo} watermark={watermark} /> : null}
     </div>
   )
 }
@@ -224,6 +228,7 @@ function ShopForm({ shop }: { shop: ShopSettings }) {
       />
 
       <LogoSection
+        shopName={draft.name}
         logo={draft.logo}
         watermark={draft.labelWatermark}
         onLogo={(logo) =>
