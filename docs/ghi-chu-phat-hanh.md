@@ -1,5 +1,46 @@
 # Ghi chú phát hành
 
+## 2.13.0 — sao lưu & khôi phục làm lại (#48) (4/10/2026)
+
+> **Worker không đổi nên không cần deploy Worker trước**; không đổi schema IndexedDB, hợp đồng đồng bộ hay định dạng
+> file sao lưu (`BACKUP_VERSION` vẫn 4, file cũ v1–v4 vẫn nhập được). **APK phải cài lại bản mới**: có plugin Java mới
+> `DownloadFile` và versionCode tăng (10) để cài đè được — APK cũ không có đường lưu file vào Tải về.
+
+### Người bán thấy gì
+
+- **Màn riêng Thêm › Cài đặt › Sao lưu & khôi phục** (`/them/sao-luu`); Cài đặt chỉ còn một dòng dẫn tới, link
+  "Sao lưu ngay" của banner nhắc mở thẳng màn này. Xoá toàn bộ dữ liệu vẫn ở cuối Cài đặt.
+- **Sao lưu lưu thẳng vào thư mục Tải về (Download).** APK ghi qua plugin MediaStore và hiện "Đã lưu: Download/<tên
+  thật>" (trùng tên thì Android tự đổi); plugin báo lỗi thì báo lỗi và không tính là đã sao lưu. Trên web (PWA)
+  trình duyệt không báo lại, nên màn chỉ nói "Đã yêu cầu tải file …", không bao giờ nói "Đã lưu".
+- **Ô chọn file không còn lọc theo loại**: file đã qua Zalo/Drive, mất đuôi `.json`, vẫn chọn được.
+- **Khôi phục hỏi Ghi đè hay Gộp.**
+  - *Ghi đè*: xem trước số trong file và số đang có trên máy; vẫn tải file an toàn và hỏi "Đã thấy file" trước khi ghi.
+  - *Gộp* theo mã toàn cục (gid): thêm những gì chỉ có trong file (kể cả thứ đã xoá trên máy sau lần sao lưu — xem
+    trước liệt kê tên), cùng một dòng thì bản mới hơn thắng, không xoá gì, đơn trùng mã được cấp mã mới. Khoản thu
+    khác nhau giữa máy và file thì **hỏi từng khoản** (Giữ bản trên máy / Lấy bản trong file / Thêm riêng), không
+    chọn sẵn, kèm nợ của khách sau gộp theo đúng bộ lựa chọn và "Đã thu / Tổng nợ" trước → sau. File v1/v2 phải qua
+    cửa cảnh báo nhân đôi. **Trước khi gộp app tự lưu một file an toàn**; trên web phải xác nhận đã thấy file đó.
+  - Xong cả hai chế độ: app tải lại và hiện **báo cáo đối chiếu** (đơn, khách, mặt hàng, khoản thu, tổng nợ: kỳ vọng ⟷
+    trên máy), luôn kèm tên file an toàn; lệch thì báo LỆCH.
+- **Máy đã ghép, đang ghép hoặc bị thu hồi vẫn không khôi phục từ file được**, nhưng nay thấy câu giải thích vì sao và
+  đường đang có (khôi phục trên một máy chưa ghép, Kéo lại từ đầu, hoặc ghép lại) thay cho lỗi kỹ thuật.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- **Sửa tiền:** `recalcAll` bỏ sót khoản thu của đơn đã huỷ khi chạy trong khoá khôi phục (khoản thu cuối vẫn trừ
+  vào đơn huỷ). Nay bỏ phân bổ đủ, và báo cáo sau khôi phục kiểm thêm bất biến "không khoản thu nào trừ vào đơn đã
+  huỷ".
+- **Gộp dành cho cùng một máy cài lại** (hoặc khôi phục bản cũ của chính sổ này), **không** để gộp sổ của hai máy cùng
+  bán: cùng một lần trả ghi ở hai máy mang hai mã khác nhau, gộp không nhận ra là trùng (xem trước chỉ cảnh báo số
+  đơn sẽ thu vượt tổng).
+- **Chưa nghiệm nhánh Android 7–9** (API 24–28, ghi thẳng Download với quyền bộ nhớ) và chưa nghiệm MediaStore trên
+  máy thật (ISSUE-014).
+- ISSUE-015 (đơn bị cấp mã lần hai, chi phí xem trước trên máy yếu, phạm vi câu cảnh báo Thêm riêng) và ISSUE-016
+  (banner "Chưa sao lưu lần nào" sau Ghi đè, xem trước chật ở màn ngang, chưa giới hạn cỡ file, chip lọc sát mép) để
+  sau.
+- **#65:** phím Back của Android thoát app thay vì lùi màn — chưa xử lý trong bản này.
+
 ## 2.12.0 — tem xem trước đổi theo vị trí và mức đậm logo chìm (4/10/2026)
 
 > Không đổi Worker, schema IndexedDB, hợp đồng đồng bộ hay định dạng sao lưu: deploy theo thứ tự thường, máy chưa
