@@ -606,7 +606,8 @@ Huỷ ở cửa thứ hai thì cũng vẫn chưa ghi đè
 Cài đặt dẫn tới màn Sao lưu & khôi phục, còn banner nhắc thì mở thẳng màn đó
     [Documentation]    Sao lưu/khôi phục dời khỏi Cài đặt sang màn riêng; Cài đặt chỉ còn một dòng dẫn tới.
     Mở Màn    /them/cai-dat
-    Không Được Thấy Chữ    SAO LƯU RA FILE
+    # Chữ "Sao lưu ra file" còn trong câu giải thích ghim bộ nhớ của Cài đặt; chỉ nút mới là thứ phải biến mất.
+    Wait For Elements State    ${NÚT_SAO_LƯU}    detached
     Click    css=button:has-text("Sao lưu & khôi phục")
     Wait For Condition    Url    ==    ${BASE_URL}/them/sao-luu
     Wait For Elements State    ${NÚT_SAO_LƯU}    visible
