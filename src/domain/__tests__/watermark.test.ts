@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bytesPerRow, type Bitmap } from '../escpos/bitmap'
 import {
+  bitmapToRgba,
   compositeUnder,
   cropBitmap,
   dilate,
@@ -119,5 +120,19 @@ describe('dilate / compositeUnder', () => {
     for (const b of results) {
       for (let y = 0; y < b.height; y++) expect(b.data[y * bytesPerRow(13) + 1]! & 0b00000111).toBe(0)
     }
+  })
+})
+
+describe('bitmapToRgba', () => {
+  it('chấm mực thành đen, chấm trắng thành trắng, mọi chấm đục hẳn', () => {
+    const b = withInk(3, 2, (x, y) => x === y)
+    expect(Array.from(bitmapToRgba(b))).toEqual([
+      0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+      255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255,
+    ])
+  })
+
+  it('bỏ bit đệm cuối hàng: ảnh rộng 13 chấm ra đúng 13×4 chấm', () => {
+    expect(bitmapToRgba(solid(13, 4)).length).toBe(13 * 4 * 4)
   })
 })

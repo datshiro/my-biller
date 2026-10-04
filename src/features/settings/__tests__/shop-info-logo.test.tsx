@@ -11,6 +11,21 @@ import { installTestDevice } from '@/test-fixtures'
 
 const LOGO = 'data:image/png;base64,iVBORw0KGgo='
 vi.mock('../shop-logo', () => ({ logoDataUrlFromFile: vi.fn(async () => LOGO) }))
+// Tem xem trước dựng ảnh bằng canvas (jsdom không có); ở đây chỉ cần biết màn truyền đúng cấu hình cho nó.
+vi.mock('../label-preview', async () => {
+  const { createElement } = await import('react')
+  return {
+    LabelPreview: (props: { name: string; watermark: { enabled: boolean; position: string; align: string; strength: string } }) =>
+      createElement('div', {
+        'data-testid': 'label-preview',
+        'data-name': props.name,
+        'data-enabled': String(props.watermark.enabled),
+        'data-position': props.watermark.position,
+        'data-align': props.watermark.align,
+        'data-strength': props.watermark.strength,
+      }),
+  }
+})
 
 beforeEach(async () => {
   await db.open()
@@ -77,6 +92,26 @@ describe('logo cửa hàng trong Thông tin cửa hàng', () => {
     await waitFor(async () =>
       expect((await getShop()).labelWatermark).toEqual({ enabled: true, position: 'center', strength: 'dark', align: 'right' }),
     )
+  })
+
+  it('tem xem trước đổi theo vị trí và mức đậm đang chọn, và theo tên quán đang gõ', async () => {
+    renderPage()
+    expect(screen.queryByTestId('label-preview')).toBeNull()
+    await chọnẢnh()
+    const preview = () => screen.getByTestId('label-preview')
+    expect(preview().getAttribute('data-enabled')).toBe('false')
+
+    await userEvent.click(screen.getByLabelText('In logo chìm trên tem'))
+    expect(preview().getAttribute('data-enabled')).toBe('true')
+    await userEvent.click(screen.getByRole('button', { name: 'Bên phải' }))
+    expect([preview().getAttribute('data-position'), preview().getAttribute('data-align')]).toEqual(['center', 'right'])
+    await userEvent.click(screen.getByRole('button', { name: 'Đậm' }))
+    expect(preview().getAttribute('data-strength')).toBe('dark')
+    await userEvent.click(screen.getByRole('button', { name: 'Góc trên phải' }))
+    expect([preview().getAttribute('data-position'), preview().getAttribute('data-align')]).toEqual(['corner', 'center'])
+
+    await userEvent.type(screen.getByLabelText('Tên cửa hàng'), 'Quán Nhỏ')
+    expect(preview().getAttribute('data-name')).toBe('Quán Nhỏ')
   })
 
   it('gỡ logo → lưu → sổ không còn logo và hình chìm tắt', async () => {

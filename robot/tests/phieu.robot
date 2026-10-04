@@ -454,6 +454,41 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
+Thông tin quán: ba vị trí logo chìm chọn được từng nút, mức đậm chỉ có ở giữa tem và bên phải
+    [Documentation]    Mỗi nút vị trí phải sáng đúng một lần (`aria-pressed`) và ba nút mức đậm chỉ hiện khi logo
+    ...    chìm — ở góc trên phải logo in đặc nên không có mức. Lưu xong đọc thẳng IndexedDB: vị trí là
+    ...    `position` + `align` (`align` là trường riêng để máy 2.10.0 không kẹt đồng bộ vì giá trị lạ).
+    ...    Không có `Sleep` nên chạy nhanh trên CI; muốn xem từng bước thì chạy có cửa sổ, chậm 1 giây mỗi thao tác:
+    ...    `ROBOT_HEADED=1 ROBOT_SLOW_MO=1s ./robot/run.sh -t "Thông tin quán: ba vị trí*" robot/tests/phieu.robot`
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${CURDIR}/../resources/logo-mau.png
+    Wait For Elements State    css=[data-shop-logo-preview]    visible
+    Check Checkbox    css=[data-label-watermark] input[type="checkbox"]
+
+    Chọn Vị Trí Logo Chìm    Giữa tem
+    Mức Đậm Logo Chìm Phải Hiện
+    Chọn Mức Đậm Logo Chìm    Nhạt
+    Chọn Mức Đậm Logo Chìm    Vừa
+    Chọn Mức Đậm Logo Chìm    Đậm
+
+    Chọn Vị Trí Logo Chìm    Bên phải
+    Mức Đậm Logo Chìm Phải Hiện
+    Chọn Mức Đậm Logo Chìm    Nhạt
+    Chọn Mức Đậm Logo Chìm    Đậm
+
+    Chọn Vị Trí Logo Chìm    Góc trên phải
+    Get Element Count    css=[data-label-watermark] button:text-is("Nhạt")    ==    0
+    Get Element Count    css=[data-label-watermark] button:text-is("Vừa")    ==    0
+    Get Element Count    css=[data-label-watermark] button:text-is("Đậm")    ==    0
+
+    Chọn Vị Trí Logo Chìm    Bên phải
+    Bấm Nút    LƯU THÔNG TIN
+    Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+    ${logo}=    Đọc Logo Quán
+    Should Be Equal    ${logo}[watermark]    {"enabled":true,"position":"center","strength":"dark","align":"right"}
+    ...    Vị trí hoặc mức đậm trong sổ khác lựa chọn cuối trên màn hình.
+
 Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được, chặn ảnh quá lớn
     [Documentation]    Logo lưu thành PNG đen trắng trong bản ghi shop của sổ chung (#51), nên đọc thẳng
     ...    IndexedDB chứ không chỉ tin ảnh xem trước: giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
@@ -483,6 +518,52 @@ Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ đư�
     Upload File By Selector    css=[data-shop-logo-input]    ${quá_lớn}
     Chờ Thấy Chữ    Ảnh quá lớn
     Get Element Count    css=[data-shop-logo-preview]    ==    0
+
+Thông tin quán: tem xem trước đổi theo vị trí và mức đậm của logo chìm
+    [Documentation]    Trước đây ảnh xem trước chỉ có logo đứng một mình nên Giữa tem và Bên phải trông giống hệt
+    ...    nhau (#60). Tem xem trước giờ dựng bằng chính đường in; ca này đọc điểm ảnh của canvas trên Chrome thật,
+    ...    theo vùng, như ca "In tem:" đọc byte TSPL. Tem 50×30 = 400×240 chấm: nửa trái x 0–200, nửa phải
+    ...    x 220–390, ô góc trên phải x 340–392 × y 10–58. So `trái_góc == trái_gốc` tuyệt đối dựa vào việc đầu tem
+    ...    chế độ góc chỉ chừa chỗ bên phải (`label-view.tsx`) mà không làm dịch chữ ở nửa trái — đổi bố cục đầu tem
+    ...    thì sửa phép so này chứ đừng nới nó.
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${CURDIR}/../resources/logo-mau.png
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_gốc}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_gốc}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    ${góc_gốc}=    Đếm Mực Tem Xem Trước    340    10    392    58
+
+    Check Checkbox    css=[data-label-watermark] input[type="checkbox"]
+    Click    css=[data-label-watermark] button:text-is("Giữa tem")
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_giữa}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_giữa}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be True    ${trái_giữa} > ${trái_gốc} + 200    Giữa tem không có logo ở nửa trái.
+    Should Be True    ${phải_giữa} > ${phải_gốc} + 200    Giữa tem không có logo ở nửa phải.
+
+    Click    css=[data-label-watermark] button:text-is("Bên phải")
+    Chờ Tem Xem Trước Dựng Xong
+    ${trái_phải}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    ${phải_phải}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be Equal As Integers    ${trái_phải}    ${trái_gốc}    Bên phải mà nửa trái tem vẫn có logo.
+    Should Be True    ${phải_phải} > ${phải_gốc} + 200    Bên phải không có logo ở nửa phải.
+    Should Be True    ${trái_giữa} > ${trái_phải}    Giữa tem và Bên phải cho cùng một ảnh xem trước.
+
+    Click    css=[data-label-watermark] button:text-is("Nhạt")
+    Chờ Tem Xem Trước Dựng Xong
+    ${phải_nhạt}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Click    css=[data-label-watermark] button:text-is("Đậm")
+    Chờ Tem Xem Trước Dựng Xong
+    ${phải_đậm}=    Đếm Mực Tem Xem Trước    220    30    390    190
+    Should Be True    ${phải_đậm} > ${phải_nhạt}    Mức Đậm không nhiều mực hơn mức Nhạt.
+
+    Click    css=[data-label-watermark] button:text-is("Góc trên phải")
+    Chờ Tem Xem Trước Dựng Xong
+    ${góc}=    Đếm Mực Tem Xem Trước    340    10    392    58
+    ${trái_góc}=    Đếm Mực Tem Xem Trước    0    0    200    240
+    Should Be True    ${góc} > ${góc_gốc} + 300    Góc trên phải không có logo đặc.
+    Should Be Equal As Integers    ${trái_góc}    ${trái_gốc}    Logo góc lấn sang nửa trái tem.
 
 In tem: mỗi phần một tem đánh số i/n, gửi tới máy in TEM chứ không phải máy in phiếu
     [Documentation]    Chrome thật đóng vai APK (cầu nối Capacitor giả, `gia-lap-apk.cjs`) nên lái được nút
@@ -741,6 +822,41 @@ In tem: trên web không có nút IN TEM, khổ tem lưu được và còn sau k
     Should Be Equal    ${rộng}    50
 
 *** Keywords ***
+Chờ Tem Xem Trước Dựng Xong
+    [Documentation]    Canvas tem xem trước dựng lại sau mỗi lần đổi cấu hình (có trễ ngắn để khỏi dựng theo từng phím
+    ...    gõ). `data-ready` về false ngay khi cấu hình đổi, nên chờ true là chờ đúng ảnh của cấu hình mới.
+    Wait For Elements State    css=canvas[data-label-preview][data-ready="true"]    attached    timeout=15s
+
+Đếm Mực Tem Xem Trước
+    [Documentation]    Số chấm tối trong vùng [x0, x1) × [y0, y1) của canvas tem xem trước (400×240 chấm).
+    [Arguments]    ${x0}    ${y0}    ${x1}    ${y1}
+    ${mực}=    Evaluate JavaScript    css=canvas[data-label-preview]
+    ...    (canvas, [x0, y0, x1, y1]) => { const { data, width } = canvas.getContext('2d')
+    ...    .getImageData(0, 0, canvas.width, canvas.height); let ink = 0;
+    ...    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (data[(y * width + x) * 4] < 128) ink++
+    ...    return ink }
+    ...    arg=${{ [int($x0), int($y0), int($x1), int($y1)] }}
+    RETURN    ${mực}
+
+Chọn Vị Trí Logo Chìm
+    [Documentation]    Bấm một nút vị trí rồi khẳng định đúng nút đó sáng và hai nút kia tắt.
+    [Arguments]    ${nhãn}
+    Click    css=[data-label-watermark] button:text-is("${nhãn}")
+    FOR    ${vị_trí}    IN    Giữa tem    Bên phải    Góc trên phải
+        ${sáng}=    Set Variable If    $vị_trí == $nhãn    true    false
+        Get Attribute    css=[data-label-watermark] button:text-is("${vị_trí}")    aria-pressed    ==    ${sáng}
+    END
+
+Mức Đậm Logo Chìm Phải Hiện
+    FOR    ${mức}    IN    Nhạt    Vừa    Đậm
+        Wait For Elements State    css=[data-label-watermark] button:text-is("${mức}")    visible
+    END
+
+Chọn Mức Đậm Logo Chìm
+    [Arguments]    ${nhãn}
+    Click    css=[data-label-watermark] button:text-is("${nhãn}")
+    Get Attribute    css=[data-label-watermark] button:text-is("${nhãn}")    aria-pressed    ==    true
+
 Cài Máy In Tem Và Chốt Đơn Ba Ly
     [Documentation]    Máy in tem LAN giả ở 192.168.1.60, khổ mặc định 50×30, rồi chốt một đơn ba ly (Trà đá ×2,
     ...    Cà phê sữa) như ca "In tem: mỗi phần một tem…". Trả về đơn vừa chốt.
