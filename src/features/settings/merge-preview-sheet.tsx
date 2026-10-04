@@ -230,6 +230,7 @@ function MergeBody({
           choice={choices[conflict.gid]}
           effects={preview.optionEffects[conflict.gid]!}
           losesExcess={preview.appendLosesExcess[conflict.gid] === true}
+          fileSameAsDevice={preview.fileSameAsDevice[conflict.gid] === true}
           deviceSide={deviceSide}
           fileSide={fileSide}
           customerName={customerName}
@@ -275,6 +276,7 @@ function ConflictCard({
   choice,
   effects,
   losesExcess,
+  fileSameAsDevice,
   deviceSide,
   fileSide,
   customerName,
@@ -285,6 +287,7 @@ function ConflictCard({
   choice: PaymentChoice | undefined
   effects: Preview['optionEffects'][string]
   losesExcess: boolean
+  fileSameAsDevice: boolean
   deviceSide: Side
   fileSide: Side
   customerName: (gid: string) => string
@@ -331,6 +334,11 @@ function ConflictCard({
                     </p>
                   ))
                 : <p>Chọn cái này thì Đã thu sau gộp: {formatVnd(effect.collected)}</p>}
+              {option.value === 'file' && fileSameAsDevice ? (
+                <p>
+                  Đơn mà bản trong file trừ vào đã huỷ trên máy, nên sau khi gộp khoản thu ra y như Giữ bản trên máy.
+                </p>
+              ) : null}
               {option.value === 'append' ? (
                 <>
                   <p>

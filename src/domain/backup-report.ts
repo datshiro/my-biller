@@ -47,10 +47,18 @@ export function expectedAfterReplace(data: BackupData): DerivedLedger {
   return withDerivedPaid({ ...data, customerPrices: cleanPriceRows(data).rows })
 }
 
-export type RestoreActual = { counts: Record<CountedTable, number>; debtTotal: number }
+export type RestoreActual = {
+  counts: Record<CountedTable, number>
+  debtTotal: number
+  /**
+   * Khoản thu còn trừ vào đơn đã huỷ trên sổ đọc lại. `recalcAll` phải đưa số này về 0; số đếm và tổng nợ có thể
+   * vẫn khớp (khách không còn nợ để trừ tín dụng) nên phải kiểm riêng.
+   */
+  paymentsOnVoidOrders?: number
+}
 
 export type RestoreReportRow = {
-  key: CountedTable | 'debtTotal'
+  key: CountedTable | 'debtTotal' | 'paymentsOnVoidOrders'
   label: string
   expected: number
   actual: number
@@ -81,13 +89,17 @@ export function buildRestoreReport(expected: DerivedLedger, actual: RestoreActua
     return { key, label: TABLE_LABELS[key], expected: want, actual: got, matches: want === got }
   })
   const debtTotal = ledgerTotals(expected.data).debtTotal
-  const rows = [
+  const onVoid = actual.paymentsOnVoidOrders ?? 0
+  const rows: RestoreReportRow[] = [
     ...tableRows.filter((row) => ALWAYS_SHOWN.includes(row.key as CountedTable) || !row.matches),
-    { key: 'debtTotal' as const, label: 'Tổng nợ', expected: debtTotal, actual: actual.debtTotal, matches: debtTotal === actual.debtTotal },
+    { key: 'debtTotal', label: 'Tổng nợ', expected: debtTotal, actual: actual.debtTotal, matches: debtTotal === actual.debtTotal },
+    ...(onVoid > 0
+      ? [{ key: 'paymentsOnVoidOrders' as const, label: 'Khoản thu trừ vào đơn đã huỷ', expected: 0, actual: onVoid, matches: false }]
+      : []),
   ]
   return {
     rows,
-    ok: tableRows.every((row) => row.matches) && rows[rows.length - 1]!.matches,
+    ok: tableRows.every((row) => row.matches) && rows.every((row) => row.matches),
     overpaidOrders: expected.overpaidOrders,
   }
 }

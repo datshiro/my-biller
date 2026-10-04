@@ -190,3 +190,25 @@ describe('expectedAfterReplace', () => {
     expect(expected.orders[0]?.paidAmount).toBe(0)
   })
 })
+
+describe('bất biến: không khoản thu nào trừ vào đơn đã huỷ', () => {
+  it('sổ đọc lại còn khoản thu trừ vào đơn huỷ ⇒ dòng riêng LỆCH, ok=false, dù số dòng và tổng nợ khớp', () => {
+    const actual = { ...actualOf(ledgerK()), paymentsOnVoidOrders: 1 }
+
+    const report = buildRestoreReport(withDerivedPaid(ledgerK()), actual)
+
+    expect(report.ok).toBe(false)
+    expect(report.rows.find((row) => row.key === 'paymentsOnVoidOrders')).toMatchObject({
+      label: 'Khoản thu trừ vào đơn đã huỷ',
+      expected: 0,
+      actual: 1,
+      matches: false,
+    })
+  })
+
+  it('không có ⇒ không thêm dòng', () => {
+    const report = buildRestoreReport(withDerivedPaid(ledgerK()), { ...actualOf(ledgerK()), paymentsOnVoidOrders: 0 })
+
+    expect(report.rows.some((row) => row.key === 'paymentsOnVoidOrders')).toBe(false)
+  })
+})

@@ -482,19 +482,34 @@ export type MergePreview =
       complete: boolean
       debtByCustomer: Record<string, { now: number; after: number }>
       optionEffects: Record<string, Record<PaymentChoice, ChoiceEffect>>
-      /** *Thêm riêng* một khoản đã trừ vào đơn: phần vượt số đơn còn nợ mất khỏi công nợ. */
+      /**
+       * *Thêm riêng* làm đơn mà dòng file trừ vào thu vượt tổng: phần vượt mất khỏi công nợ. Tính trên sổ gộp đã dựng
+       * lại tiền, nên đơn còn nợ đủ hoặc đơn đã huỷ trên máy (recalc đưa khoản về chưa trừ) không bị cảnh báo.
+       */
       appendLosesExcess: Record<string, boolean>
+      /** *Lấy bản trong file* ra y hệt *Giữ bản trên máy* sau khi dựng lại tiền (vd đơn file trừ vào đã huỷ trên máy). */
+      fileSameAsDevice: Record<string, boolean>
       integrity: string | null
       willAdd: WillAdd
       totals: {
         collected: { now: number; after: number }
         debtTotal: { now: number; after: number }
+        /** Đơn mà sổ sau gộp làm thu vượt tổng — đơn đã thu vượt từ trước trên máy không tính. */
         overpaidOrders: number
       }
       summary: MergeSummary
     }
 
 const CHOICES: readonly PaymentChoice[] = ['device', 'file', 'append']
+
+const overpaidOrderGids = (data: BackupData) =>
+  new Set(data.orders.filter((order) => order.status !== 'void' && order.paidAmount > order.total).map((order) => order.gid))
+
+/** Một khoản thu trong sổ đã dựng lại tiền, nhìn theo gid (khoá ngoại thay bằng gid cha), để so hai kết quả. */
+function paymentView(data: BackupData, gid: string): string {
+  const row = data.payments.find((payment) => payment.gid === gid)
+  return row ? canonical([normalizePayment(row, refsOf(data))]) : ''
+}
 
 /**
  * Mọi số màn xem trước Gộp cần, tính cho **đúng bộ lựa chọn đang có** — không bao giờ giả định các xung đột
@@ -520,6 +535,7 @@ export function previewMerge(
   }
   const main = run(effective)
   const now = ledgerTotals(current)
+  const overpaidBefore = overpaidOrderGids(withDerivedPaid(current).data)
 
   const deviceCustomers = new Map(current.customers.map((row) => [row.id, row.gid]))
   const fileCustomers = new Map(incoming.customers.map((row) => [row.id, row.gid]))
@@ -537,6 +553,8 @@ export function previewMerge(
   const debtByCustomer: Record<string, { now: number; after: number }> = {}
   const optionEffects: Record<string, Record<PaymentChoice, ChoiceEffect>> = {}
   const appendLosesExcess: Record<string, boolean> = {}
+  const fileSameAsDevice: Record<string, boolean> = {}
+  const fileOrders = new Map(incoming.orders.map((order) => [order.id, order.gid]))
   for (const conflict of conflicts) {
     const gids = touched(conflict)
     for (const gid of gids) {
@@ -546,12 +564,18 @@ export function previewMerge(
       }
     }
     const effects = {} as Record<PaymentChoice, ChoiceEffect>
+    const runs = {} as Record<PaymentChoice, ReturnType<typeof run>>
     for (const option of CHOICES) {
-      const totals = option === effective[conflict.gid] ? main.totals : run({ ...effective, [conflict.gid]: option }).totals
+      runs[option] = option === effective[conflict.gid] ? main : run({ ...effective, [conflict.gid]: option })
+      const { totals } = runs[option]
       effects[option] = { debtByCustomer: debtFor(totals, gids), collected: totals.collected }
     }
     optionEffects[conflict.gid] = effects
-    appendLosesExcess[conflict.gid] = conflict.file.allocatedOrderId !== 0
+    const targetGid = conflict.file.allocatedOrderId === 0 ? undefined : fileOrders.get(conflict.file.allocatedOrderId)
+    const target = runs.append.derived.data.orders.find((order) => order.gid === targetGid)
+    appendLosesExcess[conflict.gid] = target !== undefined && target.status !== 'void' && target.paidAmount > target.total
+    fileSameAsDevice[conflict.gid] =
+      paymentView(runs.file.derived.data, conflict.gid) === paymentView(runs.device.derived.data, conflict.gid)
   }
 
   const namesOnlyInFile = <T extends { gid: string; name: string }>(local: readonly T[], file: readonly T[]) => {
@@ -566,6 +590,7 @@ export function previewMerge(
     debtByCustomer,
     optionEffects,
     appendLosesExcess,
+    fileSameAsDevice,
     integrity: validateBackupIntegrity(main.merged),
     willAdd: {
       itemGroups: namesOnlyInFile(current.itemGroups, incoming.itemGroups),
@@ -579,7 +604,7 @@ export function previewMerge(
     totals: {
       collected: { now: now.collected, after: main.totals.collected },
       debtTotal: { now: now.debtTotal, after: main.totals.debtTotal },
-      overpaidOrders: main.derived.overpaidOrders,
+      overpaidOrders: [...overpaidOrderGids(main.derived.data)].filter((gid) => !overpaidBefore.has(gid)).length,
     },
     summary: main.summary,
   }

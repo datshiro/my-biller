@@ -66,6 +66,15 @@ type ImportStep =
   | ({ phase: 'safety'; saved: BackupOutcome; problem: string | null } & Picked)
   | ({ phase: 'accept'; saved: BackupOutcome; problem: string } & Picked)
 
+/**
+ * Trình duyệt ném `DOMException` (NotReadableError, NotFoundError, SecurityError…) khi file đã chọn không đọc được:
+ * file bị xoá/đổi chỗ sau khi chọn, hoặc app không còn quyền mở. Câu gốc tiếng Anh không nói người bán làm gì.
+ */
+const pickError = (caught: unknown) =>
+  caught instanceof DOMException
+    ? 'Không đọc được file này — có thể file vừa bị xoá, đổi chỗ, hoặc app chưa được phép mở. Chọn lại file trong thư mục Tải về.'
+    : message(caught)
+
 /** Lỗi chốt chặn trong khoá ghi (hai tab đua nhau) dịch sang đúng câu giải thích, không câu kỹ thuật. */
 const restoreError = (caught: unknown) =>
   caught instanceof RestoreBlockedError ? RESTORE_BLOCK_TEXT[caught.reason] : message(caught)
@@ -223,7 +232,7 @@ export function SaoLuuPage() {
     try {
       setStep({ phase: 'mode', file: await readBackupFile(file), sourceName: file.name })
     } catch (caught) {
-      setError(message(caught))
+      setError(pickError(caught))
     }
   }
 

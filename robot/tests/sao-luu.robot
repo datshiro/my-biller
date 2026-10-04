@@ -264,6 +264,34 @@ Gộp: bản mới hơn thắng, bản cũ hơn thua
     Xác Nhận Gộp
     Giá Món Phải Là    ${trà}[gid]    4000
 
+Gộp: Thêm riêng khoản thu của đơn đã huỷ trên máy không để khoản thu trừ vào đơn huỷ
+    [Documentation]    Lỗi cũ: recalcAll duyệt payments bằng each(async …) không chờ lần sửa, nên dòng cuối trừ vào
+    ...    đơn đã huỷ không được bỏ phân bổ khi chạy trong khoá nhập. Bán có thu tiền cho Anh Hùng, sao lưu, huỷ
+    ...    đơn trên máy rồi Gộp file chọn Thêm riêng: khoản thêm vào phải về chưa trừ (đơn đã huỷ), không khoản
+    ...    nào còn trừ vào đơn huỷ, và nợ Anh Hùng tính từ sổ bằng số "Nợ sau gộp" đã hiện.
+    [Tags]    regression
+    ${đơn}=    Bán Có Thu Tiền Cho Anh Hùng    Cà phê sữa
+    ${phiếu}=    Đọc Bảng    payments
+    ${khoản}=    Evaluate    next(p for p in $phiếu if p['orderId'] == ${đơn}[id])
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    Huỷ Đơn Đang Mở    ${đơn}
+
+    Mở Xem Trước Gộp    ${f}
+    Chọn Cho Xung Đột    ${khoản}[gid]    Thêm riêng
+    Chờ Thấy Chữ    ra y như Giữ bản trên máy
+    Chờ Thấy Chữ    Anh Hùng: hiện 80.000 đ → sau gộp 60.000 đ
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+
+    ${sau}=    Đọc Bảng    payments
+    ${trừ_vào_đơn_huỷ}=    Evaluate    [p for p in $sau if p['allocatedOrderId'] == ${đơn}[id]]
+    Should Be Empty    ${trừ_vào_đơn_huỷ}    Còn khoản thu trừ vào đơn đã huỷ sau khi gộp.
+    ${số_trước}=    Evaluate    len($phiếu) + 1
+    Length Should Be    ${sau}    ${số_trước}
+    ${nợ}=    Nợ Anh Hùng Từ Sổ
+    Should Be Equal As Integers    ${nợ}    60000
+
 Gộp: hai xung đột của cùng một khách — nợ sau gộp đúng theo cả bộ lựa chọn
     [Documentation]    Anh Hùng có hai khoản thu chưa trừ đơn (20.000 và 3.000); sao lưu; trên máy trả lại khoản 1 và
     ...    bỏ khoản 2. Gộp file: hai thẻ, không chọn sẵn, GỘP khoá tới khi chọn đủ; "Nợ sau gộp" đổi theo
@@ -897,10 +925,8 @@ Gộp Với Một Lựa Chọn
     Bấm Gộp Qua Cửa File An Toàn
     Xác Nhận Gộp
 
-Dựng Khoản Thu Chưa Trừ Của Anh Hùng
-    [Documentation]    App không có trả trước hay thu dư: khoản thu chưa trừ đơn nào của một khách có tên chỉ sinh
-    ...    ra khi huỷ một đơn đã thu tiền. Bán món cho Anh Hùng trả tiền mặt rồi huỷ đơn; Anh Hùng vẫn nợ đơn
-    ...    mẫu 100.000 đ nên tín dụng trừ nợ thấy được. Trả về dòng payments.
+Bán Có Thu Tiền Cho Anh Hùng
+    [Documentation]    Bán món cho Anh Hùng trả đủ tiền mặt; trả về đơn vừa bán.
     [Arguments]    ${món}
     Mở Màn    /
     Chọn Món    ${món}
@@ -909,11 +935,24 @@ Dựng Khoản Thu Chưa Trừ Của Anh Hùng
     Mở Sheet Thu Tiền
     Chốt Đơn
     ${đơn}=    Đơn Mới Nhất
-    Mở Chi Tiết Đơn Mới Nhất
+    RETURN    ${đơn}
+
+Huỷ Đơn Đang Mở
+    [Arguments]    ${đơn}
+    Mở Màn    /don/${đơn}[id]
+    Chờ Thấy Chữ    MẶT HÀNG
     Bấm Nút    Huỷ đơn
     Chờ Hộp Xác Nhận    Huỷ đơn này?
     Xác Nhận Trong Hộp    Huỷ đơn
     Chờ Thấy Chữ    Đơn này đã huỷ
+
+Dựng Khoản Thu Chưa Trừ Của Anh Hùng
+    [Documentation]    App không có trả trước hay thu dư: khoản thu chưa trừ đơn nào của một khách có tên chỉ sinh
+    ...    ra khi huỷ một đơn đã thu tiền. Bán món cho Anh Hùng trả tiền mặt rồi huỷ đơn; Anh Hùng vẫn nợ đơn
+    ...    mẫu 100.000 đ nên tín dụng trừ nợ thấy được. Trả về dòng payments.
+    [Arguments]    ${món}
+    ${đơn}=    Bán Có Thu Tiền Cho Anh Hùng    ${món}
+    Huỷ Đơn Đang Mở    ${đơn}
     ${phiếu}=    Đọc Bảng    payments
     ${của_đơn}=    Evaluate    [p for p in $phiếu if p['orderId'] == ${đơn}[id]]
     Length Should Be    ${của_đơn}    1

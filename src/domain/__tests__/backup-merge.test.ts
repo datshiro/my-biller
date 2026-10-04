@@ -669,3 +669,57 @@ describe('mergeByGid — file v1/v2', () => {
     expect(validateBackupIntegrity(result)).toBeNull()
   })
 })
+
+describe('previewMerge — cảnh báo chỉ khi thật sự xảy ra', () => {
+  it('Thêm riêng khoản đã trừ vào đơn còn nợ đủ ⇒ không cảnh báo mất phần dư', () => {
+    const device = ledgerK()
+    const file = shiftIds(ledgerK(), 10)
+    // File trừ khoản 3 (60k) vào đơn 1 còn nợ 500k: thêm riêng không làm đơn nào thu vượt.
+    file.payments[2] = { ...file.payments[2]!, allocatedOrderId: 11 }
+
+    const preview = previewMerge(device, file, {}, 'A')
+    if (preview.blocked !== null) throw new Error('blocked')
+
+    expect(preview.appendLosesExcess[device.payments[2]!.gid]).toBe(false)
+  })
+
+  it('Thêm riêng khoản trừ vào đơn mà máy đã huỷ ⇒ không cảnh báo (recalc đưa nó về chưa trừ)', () => {
+    const device = ledgerK()
+    device.orders[3] = { ...device.orders[3]!, status: 'void', paidAmount: 0, updatedAt: 9 }
+    device.payments[2] = { ...device.payments[2]!, allocatedOrderId: 0 }
+    const file = shiftIds(ledgerK(), 10)
+
+    const preview = previewMerge(device, file, {}, 'A')
+    if (preview.blocked !== null) throw new Error('blocked')
+
+    expect(preview.appendLosesExcess[device.payments[2]!.gid]).toBe(false)
+  })
+
+  it('đơn đã thu vượt từ trước trên máy ⇒ không tính là đơn gộp làm thu vượt', () => {
+    const device = ledgerK()
+    device.payments.push(mk.payment(9, 71, 4, 90_000))
+    device.orders[3] = { ...device.orders[3]!, paidAmount: 150_000, status: 'paid' }
+    const file = shiftIds(device, 10)
+
+    const preview = previewMerge(device, file, {}, 'A')
+    if (preview.blocked !== null) throw new Error('blocked')
+
+    expect(preview.totals.overpaidOrders).toBe(0)
+  })
+
+  it('đơn mà bản trong file trừ vào đã huỷ trên máy ⇒ Lấy bản trong file ra y như Giữ bản trên máy', () => {
+    const device = ledgerK()
+    device.orders[3] = { ...device.orders[3]!, status: 'void', paidAmount: 0, updatedAt: 9 }
+    device.payments[2] = { ...device.payments[2]!, allocatedOrderId: 0 }
+    const file = shiftIds(ledgerK(), 10)
+    const other = shiftIds(ledgerK(), 10)
+    other.payments[2] = { ...other.payments[2]!, amount: 61_000 }
+
+    const same = previewMerge(device, file, {}, 'A')
+    const differs = previewMerge(device, other, {}, 'A')
+    if (same.blocked !== null || differs.blocked !== null) throw new Error('blocked')
+
+    expect(same.fileSameAsDevice[device.payments[2]!.gid]).toBe(true)
+    expect(differs.fileSameAsDevice[device.payments[2]!.gid]).toBe(false)
+  })
+})

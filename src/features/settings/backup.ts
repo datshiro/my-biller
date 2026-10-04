@@ -1,5 +1,6 @@
 import {
   collectBackup,
+  countPaymentsOnVoidOrders,
   mergeAllDataAndRecalculate,
   replaceAllDataAndRecalculate,
   wipeAllData,
@@ -199,7 +200,8 @@ export async function saveSafetyFile(): Promise<BackupOutcome> {
  */
 async function reportAfterWrite(expected: DerivedLedger): Promise<RestoreReport | null> {
   try {
-    return buildRestoreReport(expected, toReportActual(await getLedgerOverview()))
+    const actual = toReportActual(await getLedgerOverview())
+    return buildRestoreReport(expected, { ...actual, paymentsOnVoidOrders: await countPaymentsOnVoidOrders() })
   } catch {
     return null
   }

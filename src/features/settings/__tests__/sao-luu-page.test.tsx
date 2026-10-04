@@ -588,3 +588,58 @@ describe('xem trước Gộp đang ghi', () => {
     expect(radios.every((radio) => radio.disabled)).toBe(true)
   })
 })
+
+describe('thẻ xung đột nói đúng hệ quả', () => {
+  const sheet = (device: BackupData, file: BackupData) => (
+    <MergePreviewSheet
+      current={device}
+      incoming={file}
+      choices={{}}
+      fallbackLetter="A"
+      notice={null}
+      busy={false}
+      onChoose={() => {}}
+      onMerge={() => {}}
+      onClose={() => {}}
+    />
+  )
+
+  it('đơn bản trong file trừ vào đã huỷ trên máy ⇒ nói Lấy bản trong file ra y như Giữ bản trên máy, không cảnh báo mất phần dư', () => {
+    const device = ledgerK()
+    device.orders[3] = { ...device.orders[3]!, status: 'void', paidAmount: 0, updatedAt: 9 }
+    device.payments[2] = { ...device.payments[2]!, allocatedOrderId: 0 }
+    render(sheet(device, shiftIds(ledgerK(), 10)))
+
+    const conflict = card(device.payments[2]!.gid)
+    expect(within(conflict).getByText(/ra y như Giữ bản trên máy/)).toBeDefined()
+    expect(within(conflict).queryByText(/mất khỏi công nợ/)).toBeNull()
+  })
+
+  it('Thêm riêng vào đơn còn nợ đủ ⇒ không cảnh báo mất phần dư', () => {
+    const device = ledgerK()
+    const file = shiftIds(ledgerK(), 10)
+    file.payments[2] = { ...file.payments[2]!, allocatedOrderId: 11 }
+    render(sheet(device, file))
+
+    const conflict = card(device.payments[2]!.gid)
+    expect(within(conflict).getByText(/Có thể tính tiền hai lần/)).toBeDefined()
+    expect(within(conflict).queryByText(/mất khỏi công nợ/)).toBeNull()
+    expect(within(conflict).queryByText(/ra y như Giữ bản trên máy/)).toBeNull()
+  })
+})
+
+describe('lỗi đọc file của trình duyệt', () => {
+  it('file không đọc được (quyền, đã xoá) ⇒ câu tiếng Việt, không phải lỗi kỹ thuật', async () => {
+    renderPage()
+    const file = new File(['{}'], 'ban-sao.json', { type: 'application/json' })
+    Object.defineProperty(file, 'text', {
+      value: () => Promise.reject(new DOMException('The requested file could not be read', 'NotReadableError')),
+    })
+
+    fireEvent.change(await screen.findByLabelText('Chọn file sao lưu'), { target: { files: [file] } })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/Không đọc được file này/)
+    expect(alert.textContent).not.toMatch(/requested file/)
+  })
+})

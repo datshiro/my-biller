@@ -240,6 +240,15 @@ export async function mergeAllDataAndRecalculate(
   })
 }
 
+/** Khoản thu còn trừ vào đơn đã huỷ — bất biến sau `recalcAll` là 0; báo cáo sau khôi phục kiểm số này. */
+export async function countPaymentsOnVoidOrders(): Promise<number> {
+  return db.transaction('r', db.orders, db.payments, async () => {
+    const voidIds = await db.orders.filter((order) => order.status === 'void').primaryKeys()
+    if (voidIds.length === 0) return 0
+    return db.payments.where('allocatedOrderId').anyOf(voidIds).count()
+  })
+}
+
 export async function countAllRecords(): Promise<number> {
   const counts = await Promise.all(ledgerTables().map((table) => table.count()))
   return counts.reduce((total, count) => total + count, 0)

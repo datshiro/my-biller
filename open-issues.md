@@ -259,3 +259,15 @@
   trên máy đã huỷ (khi ấy `recalcAll` đưa khoản thêm về chưa trừ, phần dư không mất) — cảnh báo rộng hơn thực tế.
 - Mitigation: (b) đo trên S25 ở phase nghiệm thu; chậm thì chỉ tính hiệu ứng của một thẻ khi mở thẻ. (a), (c) chờ có
   ca thật; số tiền không sai trong cả ba trường hợp, báo cáo đối chiếu sau ghi vẫn bắt lệch.
+
+### ISSUE-016 — Màn Sao lưu & khôi phục: bốn điểm giao diện từ lượt Reality Check trên emulator, để sau
+- State: deferred
+- Severity: low
+- Raised by / Date: Reality Check nhánh `feature/sao-luu-khoi-phuc` trên emulator Android / 04/10/2026
+- Related task: #48 sao lưu & khôi phục
+- Description:
+  (D9) Ghi đè xong, banner nhắc nói "Chưa sao lưu lần nào" vì `lastBackupAt` nằm trong bảng `settings` và đi theo
+  file (file cũ chưa có mốc). (D6) Xem trước Gộp ở màn ngang bị chật. (D8) Chưa giới hạn cỡ file khi chọn file
+  khôi phục. (D10) Chip lọc báo cáo nằm sát mép màn (theo ghi chú review, chưa xác định màn).
+- Mitigation: chưa đụng — không sai tiền, không mất dữ liệu. Xét lại cùng lượt nghiệm thu máy thật (ISSUE-014);
+  D9 cần chốt ý muốn: giữ mốc của máy khi Ghi đè hay mốc trong file.
