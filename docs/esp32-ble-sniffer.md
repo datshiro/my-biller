@@ -19,17 +19,23 @@ brew install arduino-cli
 arduino-cli core install esp32:esp32
 FQBN=esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,CDCOnBoot=default
 arduino-cli compile --fqbn $FQBN firmware/esp32-ble-sniffer
-arduino-cli upload  --fqbn $FQBN -p /dev/cu.usbserial-XXXX firmware/esp32-ble-sniffer
+arduino-cli upload  --fqbn $FQBN -p /dev/cu.usbmodemXXXX firmware/esp32-ble-sniffer
 ```
 
-Board có **hai cổng Type-C**. Cắm vào cổng ghi **COM** (UART) — dùng cổng này cho cả nạp lẫn đọc nhật ký. Tên cổng
-xem bằng `arduino-cli board list`. Nếu nạp báo không kết nối được: giữ nút `BOOT`, bấm `RST`, thả `BOOT`, rồi nạp lại.
+Board có **hai cổng Type-C**. Cắm vào cổng ghi **COM** (chip cầu nối WCH CH343) — dùng cổng này cho cả nạp lẫn đọc
+nhật ký. macOS đặt tên cổng này là `/dev/cu.usbmodem…` (không phải `usbserial`); xem bằng `arduino-cli board list`.
+Giữ `CDCOnBoot=default`: đổi sang `cdc` thì `Serial` chuyển sang cổng USB gốc và cổng COM chỉ còn rác.
+Nếu nạp báo không kết nối được: giữ nút `BOOT`, bấm `RST`, thả `BOOT`, rồi nạp lại.
 
 ## Xem phiếu bắt được
 
 ```bash
-node scripts/nghe-esp32.mjs /dev/cu.usbserial-XXXX
+node scripts/nghe-esp32.mjs /dev/cu.usbmodemXXXX
 ```
+
+Nhật ký đi qua UART ở 921600 baud. Lúc rảnh firmware phát lại `READY GCPS01-0001` mỗi 10 giây, nên bật script nghe
+muộn vẫn thấy board còn sống. Script phải cài tốc độ và đọc trên cùng một lần mở cổng (macOS không giữ tốc độ sau
+khi đóng cổng), nên đừng thay bằng `stty` chạy riêng rồi đọc bằng công cụ khác.
 
 Mỗi lần in ra một file `captures/grab-<ngày-giờ>-<số>.bin` (thư mục này không vào git: phiếu thật có tên và số
 điện thoại khách) kèm tóm tắt:

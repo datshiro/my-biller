@@ -1,28 +1,29 @@
 #!/usr/bin/env node
 // Nghe nhật ký của firmware firmware/esp32-ble-sniffer rồi lưu mỗi lần in thành một file .bin:
-//   node scripts/nghe-esp32.mjs /dev/cu.usbserial-110     cổng COM của board (macOS)
+//   node scripts/nghe-esp32.mjs /dev/cu.usbmodem5CCC…     cổng COM của board (macOS)
 //   node scripts/nghe-esp32.mjs nhat-ky.log               phát lại một file nhật ký, để thử không cần board
 // Một lần in = các dòng DATA từ lúc nối tới khi ngắt, hoặc tới khi im quá IDLE_MS (Grab có thể giữ nối).
 import { createReadStream, mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { formatSummary, parseSnifferLine, summarizeCapture } from '../src/domain/escpos/capture-summary.ts'
 
-const BAUD = '921600'
 const IDLE_MS = 2000
 const OUT_DIR = 'captures'
 
 const target = process.argv[2]
 if (!target) {
-  console.error('Cần cổng serial của board (/dev/cu.usbserial-…) hoặc file nhật ký.')
+  console.error('Cần cổng serial của board (/dev/cu.usbmodem…) hoặc file nhật ký.')
   process.exit(1)
 }
 
-const isPort = !statSync(target).isFile()
-if (isPort) {
-  const flag = process.platform === 'darwin' ? '-f' : '-F'
-  execFileSync('stty', [flag, target, BAUD, 'raw', '-echo'])
-}
+// macOS không giữ tốc độ sau khi đóng cổng (và mở cổng chưa `clocal` thì treo), nên cài tốc độ và đọc phải
+// cùng một lần mở: shell mở cổng, `stty` cài, rồi `cat` đọc tiếp trên chính fd đó.
+const reader = statSync(target).isFile()
+  ? null
+  : spawn('sh', ['-c', 'exec <"$1"; stty 921600 raw -echo clocal && exec cat', 'sh', target], {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    })
 
 const clock = () => new Date().toTimeString().slice(0, 8)
 const stamp = () => {
@@ -34,6 +35,7 @@ const say = (text) => console.log(`${clock()} ${text}`)
 
 let session = null
 let jobCount = 0
+let lastOther = ''
 
 const openSession = (device) => ({ device, parts: [], chars: new Set(), timer: null })
 
@@ -79,12 +81,13 @@ function handle(raw) {
     flush()
     session = null
     say('✗ ngắt')
-  } else if (event.line) {
+  } else if (event.line && event.line !== lastOther) {
+    lastOther = event.line
     console.log(`  ${event.line}`)
   }
 }
 
-const lines = createInterface({ input: createReadStream(target) })
+const lines = createInterface({ input: reader ? reader.stdout : createReadStream(target) })
 lines.on('line', handle)
 lines.on('close', () => {
   flush()
@@ -92,5 +95,6 @@ lines.on('close', () => {
 })
 process.on('SIGINT', () => {
   flush()
+  reader?.kill()
   process.exit(0)
 })

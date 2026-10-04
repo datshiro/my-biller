@@ -113,11 +113,16 @@ void setup() {
   advertising->setScanResponse(true);
   BLEDevice::startAdvertising();
 
-  Serial.println("READY " PRINTER_NAME);
 }
 
+// Cổng USB gốc ngắt rồi nối lại khi board khởi động, nên một dòng READY lúc setup luôn bị lỡ: nhắc lại định kỳ.
 void loop() {
   static char line[MAX_WRITE * 4 / 3 + 64];
+  static uint32_t lastReady = 0;
+  if (millis() - lastReady >= 10000) {
+    lastReady = millis();
+    Serial.println("READY " PRINTER_NAME);
+  }
   size_t length = xMessageBufferReceive(logBuffer, line, sizeof line, pdMS_TO_TICKS(1000));
   if (length > 0) Serial.write((const uint8_t*)line, length);
   if (dropped > 0) {
