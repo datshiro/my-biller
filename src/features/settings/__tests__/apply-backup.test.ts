@@ -109,6 +109,39 @@ describe('applyBackup', () => {
     expect(await db.orders.count()).toBe(1)
     expect((await db.orders.toArray())[0]?.total).toBe(110_000)
   })
+
+  it('trả báo cáo đối chiếu khớp: kỳ vọng tính thuần từ file, thực tế đọc sau khi ghi', async () => {
+    await sellOnCredit(110_000, 40_000)
+    const file = await collectBackup(NOW)
+    await sellOnCredit(200_000, 0)
+
+    const report = await applyBackup(file.data)
+
+    expect(report?.ok).toBe(true)
+    expect(report?.rows.find((row) => row.key === 'orders')).toMatchObject({ expected: 1, actual: 1 })
+    expect(report?.rows.find((row) => row.key === 'debtTotal')).toMatchObject({ expected: 70_000, actual: 70_000 })
+  })
+
+  /**
+   * Chốt chặn duy nhất nằm trong khoá ghi. Một kiểm tra riêng trước khoá ném câu kỹ thuật cũ và che mất
+   * lý do có kiểu, nên màn không dịch được sang lời giải thích cho người bán.
+   */
+  it('máy đã ghép ⇒ ném RestoreBlockedError mang lý do, dữ liệu nguyên', async () => {
+    await sellOnCredit(110_000, 40_000)
+    const file = await collectBackup(NOW)
+    await db.deviceState.put({
+      key: 'connection',
+      shopId: testGid(500),
+      token: 'token-thu-nghiem-du-dai-cho-ket-noi-1234567890',
+      syncUrl: 'https://sync.example.com',
+    })
+
+    await expect(applyBackup({ ...file.data, orders: [] })).rejects.toMatchObject({
+      name: 'RestoreBlockedError',
+      reason: 'connected',
+    })
+    expect(await db.orders.count()).toBe(1)
+  })
 })
 
 /**
@@ -141,14 +174,16 @@ describe('exportBackup', () => {
     const outcome = await exportBackup(NOW)
 
     expect(outcome).toEqual({
-      filename: 'my-biller-backup-260807-1400.json',
+      savedAs: 'my-biller-backup-260807-1400.json',
+      location: 'Tải về (Download)',
+      verified: false,
       importable: true,
       problem: null,
     })
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
 
-  it('prepare chỉ giữ đúng một File, chưa tải và chưa đóng dấu cho tới lúc phát download', async () => {
+  it('prepare chưa tải và chưa đóng dấu; lúc phát download ghi đúng nội dung của File đã chuẩn bị', async () => {
     await sellOnCredit(110_000, 110_000)
 
     const prepared = await prepareBackup(NOW)
@@ -162,7 +197,9 @@ describe('exportBackup', () => {
 
     await downloadPreparedBackup(prepared)
 
-    expect(URL.createObjectURL).toHaveBeenCalledWith(prepared.file)
+    const downloaded = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0] as Blob
+    expect(downloaded.type).toBe('application/json')
+    expect(await downloaded.text()).toBe(await prepared.file.text())
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
     expect((await getAppState()).lastBackupAt).toBe(NOW)
   })
@@ -198,7 +235,7 @@ describe('exportBackup', () => {
 
     const outcome = await exportBackup(NOW)
 
-    expect(outcome.filename).toBe('my-biller-backup-260807-1400.json')
+    expect(outcome.savedAs).toBe('my-biller-backup-260807-1400.json')
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
   })
 

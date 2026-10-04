@@ -1,30 +1,37 @@
-import { collectBackup, replaceAllDataAndRecalculate, wipeAllData } from '@/db/backup'
+import {
+  collectBackup,
+  countPaymentsOnVoidOrders,
+  mergeAllDataAndRecalculate,
+  replaceAllDataAndRecalculate,
+  wipeAllData,
+} from '@/db/backup'
 import { saveLastBackupAt } from '@/db/repositories/settings'
 import {
   backupFilename,
   countOperationalRecords,
+  countRecords,
   parseBackupFile,
   type BackupCounts,
 } from '@/domain/backup'
 import type { BackupData, BackupFile } from '@/domain/schema'
 import { getDeviceConnection } from '@/db/repositories/device-state'
-
-function downloadJson(filename: string, file: File): void {
-  const url = URL.createObjectURL(file)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.append(link)
-  link.click()
-  link.remove()
-  // Thu hồi ngay lập tức thì Safari huỷ luôn cú tải vừa bắt đầu — nhả sang nhịp sau.
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
+import { getLedgerOverview } from '@/db/doi-soat-snapshot'
+import {
+  buildRestoreReport,
+  expectedAfterReplace,
+  toReportActual,
+  type DerivedLedger,
+  type RestoreReport,
+} from '@/domain/backup-report'
+import { saveToDownloads, type SavedFile } from './download-sink'
+import type { MergeSummary, PaymentChoice } from '@/domain/backup-merge'
 
 export type PreparedBackup = {
   at: number
   filename: string
-  /** Một representation duy nhất cho cả cú tải và Web Share. */
+  /** Đúng nội dung của `file`: cửa ra file nhận chữ, Web Share nhận `File`. */
+  text: string
+  /** Bản `File` cho Web Share, cùng nội dung với `text`. */
   file: File
   counts: BackupCounts
   importable: boolean
@@ -35,8 +42,7 @@ export type PreparedBackup = {
  * Kết quả một lần sao lưu. File **luôn** ra khỏi máy, nhưng "đã sao lưu" thì không phải lúc nào
  * cũng đúng — `importable` là thứ phân biệt hai chuyện đó.
  */
-export type BackupOutcome = {
-  filename: string
+export type BackupOutcome = SavedFile & {
   /** File này nhập lại được. Chỉ khi đó mới có nghĩa là người bán thật sự có đường về. */
   importable: boolean
   /** Chỗ hỏng khiến file không nhập lại được, để màn hình chỉ đúng chỗ cần sửa tay. */
@@ -63,6 +69,7 @@ export async function prepareBackup(at: number): Promise<PreparedBackup> {
   return {
     at,
     filename,
+    text,
     file,
     counts: countOperationalRecords(collected.data),
     importable: problem === null,
@@ -70,28 +77,34 @@ export async function prepareBackup(at: number): Promise<PreparedBackup> {
   }
 }
 
-/** Phát đúng prepared `File`; file lành mới được atomically ghi mốc sao lưu không lùi. */
-export async function downloadPreparedBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
-  downloadJson(prepared.filename, prepared.file)
-  if (prepared.importable) await saveLastBackupAt(prepared.at)
-  return {
+/** Ghi đúng nội dung của prepared `File` ra thư mục Tải về qua cửa ra file chung. */
+async function savePrepared(prepared: PreparedBackup): Promise<BackupOutcome> {
+  const saved = await saveToDownloads({
     filename: prepared.filename,
-    importable: prepared.importable,
-    problem: prepared.problem,
-  }
+    mimeType: 'application/json',
+    text: prepared.text,
+  })
+  return { ...saved, importable: prepared.importable, problem: prepared.problem }
+}
+
+/**
+ * Lưu file rồi mới đóng dấu mốc sao lưu, và chỉ cho file nhập lại được. Trong APK plugin báo lỗi thì
+ * `saveToDownloads` ném trước khi tới đây — mốc không bị đóng dấu cho một file không có trên máy (lỗi cũ:
+ * WebView nuốt `<a download>` mà banner nhắc vẫn tắt). Trên web trình duyệt không báo lại được, nên vẫn đóng
+ * dấu ngay sau khi yêu cầu tải: Chrome Android tải blob cùng nguồn bằng đường tải chuẩn của nó.
+ */
+export async function downloadPreparedBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
+  const outcome = await savePrepared(prepared)
+  if (prepared.importable) await saveLastBackupAt(prepared.at)
+  return outcome
 }
 
 /**
  * Recovery chỉ đọc không được ghi `lastBackupAt`: settings là ledger table, nên đóng dấu thành công
  * sẽ tạo outbox trên máy đã ghép. Artifact sự cố chỉ phát file và giữ nguyên toàn bộ state cục bộ.
  */
-export async function downloadRecoveryBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
-  downloadJson(prepared.filename, prepared.file)
-  return {
-    filename: prepared.filename,
-    importable: prepared.importable,
-    problem: prepared.problem,
-  }
+export function downloadRecoveryBackup(prepared: PreparedBackup): Promise<BackupOutcome> {
+  return savePrepared(prepared)
 }
 
 /** Chỉ hiện CTA khi trình duyệt chấp nhận chính file JSON sẽ gửi. Probe lỗi = không hỗ trợ. */
@@ -153,11 +166,58 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
  * `recalcAll()` chạy sau cùng để `paidAmount`/`status` được dựng lại từ `payments` thay vì tin vào
  * con số đã lưu trong file.
  */
-export async function applyBackup(data: BackupData): Promise<void> {
-  if (await getDeviceConnection()) {
-    throw new Error('Máy đã ghép không nhập file sao lưu. Hãy dùng “Kéo lại từ đầu”.')
-  }
+export async function applyBackup(data: BackupData): Promise<RestoreReport | null> {
+  // Không kiểm "đã ghép" ở đây: chốt chặn nằm trong khoá ghi và ném `RestoreBlockedError` có lý do, để màn
+  // dịch sang lời giải thích. Kiểm trước khoá vừa thừa vừa che mất lý do đó.
   await replaceAllDataAndRecalculate(data)
+  // Đọc sau khi khoá đóng; kỳ vọng tính thuần từ file, không đọc lại DB.
+  return reportAfterWrite(expectedAfterReplace(data))
+}
+
+/** Số bản ghi đang có trên máy — cho xem trước Ghi đè ("Đang có trên máy: …"). */
+export async function currentCounts(at: number): Promise<BackupCounts> {
+  return countRecords((await collectBackup(at)).data)
+}
+
+/** Sổ trên máy lúc mở xem trước Gộp. Đọc một lần: xem trước tính trên đúng bản này, lựa chọn đổi không đọc lại. */
+export async function readLedger(): Promise<BackupData> {
+  return (await collectBackup(Date.now())).data
+}
+
+/**
+ * File an toàn ngay trước Gộp. Gọi thẳng cửa ra file, **không** qua `downloadPreparedBackup`: hàm đó đóng
+ * dấu `lastBackupAt`, tức là ghi vào sổ giữa lúc xem trước và lúc khoá gộp.
+ */
+export async function saveSafetyFile(): Promise<BackupOutcome> {
+  const prepared = await prepareBackup(Date.now())
+  const saved = await saveToDownloads({ filename: prepared.filename, mimeType: 'application/json', text: prepared.text })
+  return { ...saved, importable: prepared.importable, problem: prepared.problem }
+}
+
+/**
+ * Báo cáo đối chiếu sau khi ghi. Ghi đã xong thì lỗi ở đây chỉ làm mất báo cáo, không được ném ra: người
+ * gọi phải coi lần ghi là xong, không đưa người bán về để ghi lần nữa.
+ */
+async function reportAfterWrite(expected: DerivedLedger): Promise<RestoreReport | null> {
+  try {
+    const actual = toReportActual(await getLedgerOverview())
+    return buildRestoreReport(expected, { ...actual, paymentsOnVoidOrders: await countPaymentsOnVoidOrders() })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Gộp file vào sổ máy: gộp lại trong khoá ghi (không dùng kết quả xem trước), rồi đối chiếu bản kỳ vọng
+ * thuần với sổ đọc lại sau khi khoá đóng.
+ */
+export async function applyMerge(
+  data: BackupData,
+  paymentChoices: Readonly<Record<string, PaymentChoice>>,
+  answeredFingerprints: readonly string[],
+): Promise<{ report: RestoreReport | null; summary: MergeSummary }> {
+  const { expected, summary } = await mergeAllDataAndRecalculate(data, paymentChoices, answeredFingerprints)
+  return { report: await reportAfterWrite(expected), summary }
 }
 
 /** Xoá sạch. Cũng chỉ gọi sau khi người bán xác nhận đã thấy file an toàn — xem `applyBackup`. */

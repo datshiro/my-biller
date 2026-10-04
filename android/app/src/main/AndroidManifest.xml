@@ -42,4 +42,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <!-- Lưu file vào Tải về: API 29+ ghi qua MediaStore không cần quyền; chỉ API 24–28 cần quyền ghi bộ nhớ. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 </manifest>

@@ -21,6 +21,7 @@ import { ShopInfoPage } from '@/features/settings/shop-info-page'
 import { DeviceSetupPage } from '@/features/settings/device-setup-page'
 import { DoiSoatPage } from '@/features/settings/doi-soat-page'
 import { GhepMayPage } from '@/features/settings/ghep-may-page'
+import { SaoLuuPage } from '@/features/settings/sao-luu-page'
 
 export function AppRoutes() {
   return (
@@ -39,6 +40,7 @@ export function AppRoutes() {
           <Route path="/them/khach-hang/:id" element={<CustomerDetailPage />} />
           <Route path="/them/cai-dat" element={<SettingsPage />} />
           <Route path="/them/doi-soat" element={<DoiSoatPage />} />
+          <Route path="/them/sao-luu" element={<SaoLuuPage />} />
           <Route path="/them/nhom-mat-hang" element={<ItemGroupPage />} />
           <Route path="/them/loai-chi-phi" element={<ExpenseCategoryPage />} />
         </Route>

@@ -55,19 +55,20 @@ export async function recalcAll(): Promise<number> {
     )
     const allocationRepairs = new Set<number>()
     const paidByOrder = new Map<number, number>()
-    await db.payments.each(async (payment) => {
+    // Đọc hết rồi mới sửa, chờ từng lần ghi. `each(async …)` không chờ callback: lần `update` cuối có thể chạy
+    // sau khi transaction (lồng trong khoá nhập) đã đóng và mất im lặng — khoản thu vẫn trừ vào đơn đã huỷ.
+    for (const payment of await db.payments.toArray()) {
       if (voidOrderIds.has(payment.allocatedOrderId)) {
-        const allocatedOrderId = payment.allocatedOrderId
-        allocationRepairs.add(allocatedOrderId)
+        allocationRepairs.add(payment.allocatedOrderId)
         if (payment.id !== undefined) await db.payments.update(payment.id, { allocatedOrderId: 0 })
-        return
+        continue
       }
-      if (payment.allocatedOrderId === 0) return
+      if (payment.allocatedOrderId === 0) continue
       paidByOrder.set(
         payment.allocatedOrderId,
         (paidByOrder.get(payment.allocatedOrderId) ?? 0) + payment.amount,
       )
-    })
+    }
 
     let repairs = 0
     for (const order of orders) {

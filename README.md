@@ -96,16 +96,31 @@ hay runner đồng bộ. Vì IndexedDB bị cô lập theo origin, artifact này
 ## Sao lưu
 
 Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không thay file sao lưu độc lập**. Màn
-*Thêm → Cài đặt*:
+*Thêm → Cài đặt → Sao lưu & khôi phục* (`/them/sao-luu`; *Xoá toàn bộ dữ liệu* vẫn ở cuối Cài đặt):
 
-- **Sao lưu ra file** → tải `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được).
+- **Sao lưu ra file** → `my-biller-backup-YYMMDD-HHmm.json` (JSON thuần, đọc và sửa tay được) vào thư mục
+  Tải về. Trong APK file đi qua plugin `DownloadFile` (MediaStore) và màn hiện "Đã lưu: Download/<tên thật>"
+  (trùng tên thì Android tự đổi); plugin báo lỗi thì không tính là đã sao lưu. Trên web trình duyệt không báo
+  lại file đã lưu hay tên cuối cùng, nên màn chỉ nói "Đã yêu cầu tải file …".
   Nếu bản sao không có đơn, mặt hàng, khách, khoản chi hay giá riêng còn dùng được, app sẽ cảnh báo
   trước khi tải; file vẫn có thể chứa thông tin cửa hàng, nhóm/loại và cấu hình.
-- Máy chưa ghép có thể **Nhập từ file** → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
+- Máy chưa ghép có thể **Nhập từ file** (ô chọn không lọc theo loại file, để file đã qua Zalo/Drive
+  mất đuôi `.json` vẫn chọn được) → kiểm định dạng trước, sai thì dừng và **không đụng DB**;
   đúng thì hỏi xác nhận, tự tải một file của dữ liệu hiện tại về máy, rồi mới ghi đè trong một
   transaction và chạy `recalcAll()`.
+- Chọn file xong app hỏi **Ghi đè** (thay cả sổ) hay **Gộp vào sổ trên máy**. Gộp theo mã toàn cục: dòng chỉ có
+  trong file được thêm (kể cả thứ đã xoá trên máy sau lần sao lưu — xem trước liệt kê tên), cùng một dòng thì
+  bản mới hơn thắng, không xoá gì; đơn trùng mã được cấp mã mới. Khoản thu khác nhau giữa máy và file thì hỏi
+  từng khoản (*Giữ bản trên máy* / *Lấy bản trong file* / *Thêm riêng*), không chọn sẵn, kèm nợ của khách sau
+  gộp theo đúng bộ lựa chọn đang có, "Đã thu / Tổng nợ" trước → sau và số đơn sẽ thu vượt tổng. File v1/v2
+  phải qua cửa cảnh báo nhân đôi. Trước khi gộp app tự lưu một file an toàn; trên web phải xác nhận đã thấy
+  file đó trong Tải về rồi mới ghi.
+- Ghi đè hoặc Gộp xong app tự tải lại và hiện **báo cáo đối chiếu** một lần: số đơn, khách, mặt hàng, khoản thu và
+  tổng nợ kỳ vọng (tính từ file) so với số đọc lại trên máy; lệch thì báo **LỆCH** kèm tên file an toàn,
+  và nói số đơn có tiền thu vượt tổng đơn nếu có.
 - Máy đã ghép dùng **Kéo lại từ đầu** để dựng lại bản sao từ sổ chung; không cho nhập file đè lên
-  dữ liệu của các máy khác.
+  dữ liệu của các máy khác. Máy đã ghép, đang ghép hoặc bị thu hồi không thấy nút nhập mà thấy câu giải
+  thích vì sao và đường đang có (khôi phục trên một máy chưa ghép, Kéo lại từ đầu, hoặc ghép lại).
 - Safari và app đã thêm vào Màn hình chính là hai kho dữ liệu tách biệt. Luôn sao lưu ở đúng nơi đang
   nhìn thấy sổ; nếu Safari báo bản sao chưa có dữ liệu bán hàng, hãy mở biểu tượng app trên Màn hình
   chính rồi kiểm tra lại.
@@ -113,7 +128,8 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
   vừa tải. Máy không hỗ trợ vẫn dùng file trong Tải về để gửi qua Zalo hoặc lưu Drive. File chứa toàn
   bộ sổ và thông tin khách, chỉ gửi tới nơi tin cậy.
 - File sao lưu không chứa token, mã máy hay trạng thái đồng bộ trong `deviceState`.
-- Quá 7 ngày chưa sao lưu thì có banner nhắc ở màn Bán và màn Cài đặt.
+- Quá 7 ngày chưa sao lưu thì có banner nhắc ở màn Bán, Cài đặt và Sao lưu & khôi phục; link trong banner
+  mở thẳng màn Sao lưu & khôi phục.
 - **Ghim bộ nhớ** (`navigator.storage.persist()`) giảm khả năng hệ điều hành xoá dữ liệu, nhưng không
   thay được việc sao lưu.
 

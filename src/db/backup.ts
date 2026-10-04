@@ -2,6 +2,14 @@ import { version as APP_VERSION } from '../../package.json'
 import { db } from './db'
 import { recalcAll } from './recalc'
 import { BACKUP_VERSION, cleanPriceRows } from '@/domain/backup'
+import {
+  findPaymentConflicts,
+  MergeReviewError,
+  mergeByGid,
+  type MergeSummary,
+  type PaymentChoice,
+} from '@/domain/backup-merge'
+import { expectedAfterReplace, type DerivedLedger } from '@/domain/backup-report'
 import { BackupFileSchema, type BackupData, type BackupFile } from '@/domain/schema'
 
 /** Các bảng thuộc cuốn sổ. Trạng thái riêng của máy tuyệt đối không đi theo sao lưu/phục hồi. */
@@ -83,16 +91,45 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
 
 const clearLedger = () => Promise.all(ledgerTables().map((table) => table.clear()))
 
-async function assertOfflineLedgerWriteAllowed(action: 'xoá' | 'nhập'): Promise<void> {
+export type RestoreBlock = 'connected' | 'pairing' | 'revoked'
+
+/** Chốt chặn ghi đè sổ cục bộ; `reason` để màn dịch sang lời giải thích, `message` giữ câu cũ. */
+export class RestoreBlockedError extends Error {
+  override name = 'RestoreBlockedError'
+  readonly reason: RestoreBlock
+
+  constructor(reason: RestoreBlock, message: string) {
+    super(message)
+    this.reason = reason
+  }
+}
+
+/**
+ * Vì sao máy này không được ghi đè/gộp sổ cục bộ — một nguồn sự thật cho màn hình (`useLiveQuery`) và cho
+ * chốt chặn trong khoá ghi. Chỉ đọc Dexie nên gọi lồng trong transaction được.
+ *
+ * Đang ghép đứng trước: ghép lại một máy đã bị thu hồi thì `writeBlock` còn tới khi ghép xong, và lúc lưu
+ * kết nối thì `connection` có trước khi khoá `pairing` được gỡ — trong cả hai cảnh, việc đang diễn ra là ghép.
+ */
+export async function getRestoreBlock(): Promise<RestoreBlock | null> {
   const [connection, pairing, writeBlock] = await Promise.all([
     db.deviceState.get('connection'),
     db.deviceState.get('pairing'),
     db.deviceState.get('writeBlock'),
   ])
-  if (!connection && !pairing && !writeBlock) return
+  if (pairing) return 'pairing'
+  if (writeBlock) return 'revoked'
+  if (connection) return 'connected'
+  return null
+}
+
+async function assertOfflineLedgerWriteAllowed(action: 'xoá' | 'nhập'): Promise<void> {
+  const reason = await getRestoreBlock()
+  if (!reason) return
 
   const verb = action === 'xoá' ? 'xoá sổ cục bộ' : 'nhập file sao lưu'
-  throw new Error(
+  throw new RestoreBlockedError(
+    reason,
     `Máy đã ghép, đang ghép hoặc đã bị thu hồi không thể ${verb} từ đây. Hãy dùng “Kéo lại từ đầu” hoặc ghép lại.`,
   )
 }
@@ -156,6 +193,59 @@ export async function replaceAllDataAndRecalculate(data: BackupData): Promise<nu
   return offlineLedgerTransaction('nhập', async () => {
     await replaceLedger(data)
     return recalcAll()
+  })
+}
+
+/**
+ * Gộp file vào sổ máy theo gid, trong cùng khoá nhập với Ghi đè. Sổ được đọc lại và gộp lại **trong khoá**
+ * — không dùng kết quả xem trước — rồi `replaceLedger` + `recalcAll`.
+ *
+ * `answeredFingerprints` là dấu vân tay của các xung đột khoản thu người bán đã trả lời ở xem trước. Tập
+ * tính lại trong khoá khác tập đó (thêm/bớt xung đột, hoặc cùng gid mà nội dung đổi) ⇒ ném, không ghi gì.
+ *
+ * Trong callback chỉ được chờ promise của Dexie: chờ một promise khác (vd `crypto.subtle`) là Dexie tự
+ * commit transaction giữa chừng và phần ghi sau rơi ra ngoài khoá. Vì vậy dấu vân tay là chuỗi so đồng bộ.
+ *
+ * `expected` tính thuần từ sổ gộp, không đọc lại DB — so với `getLedgerOverview()` gọi sau khi khoá đóng.
+ */
+export async function mergeAllDataAndRecalculate(
+  incoming: BackupData,
+  paymentChoices: Readonly<Record<string, PaymentChoice>>,
+  answeredFingerprints: readonly string[],
+): Promise<{ expected: DerivedLedger; summary: MergeSummary }> {
+  return offlineLedgerTransaction('nhập', async () => {
+    const current = (await collectBackup(Date.now())).data
+    const identity = await db.deviceState.get('identity')
+
+    const now = findPaymentConflicts(current, incoming).map((conflict) => conflict.fingerprint).sort()
+    const answered = [...answeredFingerprints].sort()
+    if (now.length !== answered.length || now.some((fingerprint, index) => fingerprint !== answered[index])) {
+      throw new MergeReviewError('Sổ vừa thay đổi, mở lại xem trước rồi chọn lại.')
+    }
+
+    const outcome = mergeByGid(
+      current,
+      incoming,
+      paymentChoices,
+      identity?.key === 'identity' ? identity.letter : 'B',
+    )
+    if (outcome.blocked !== null) {
+      throw new MergeReviewError(`Sổ trên máy đang có chỗ hỏng: ${outcome.blocked} — lần này chỉ Ghi đè được.`)
+    }
+
+    await replaceLedger(outcome.merged)
+    await recalcAll()
+    // Cùng luật với `replaceLedger`: dòng giá mồ côi bị bỏ khi ghi, nên bản kỳ vọng cũng bỏ — không thì báo LỆCH giả.
+    return { expected: expectedAfterReplace(outcome.merged), summary: outcome.summary }
+  })
+}
+
+/** Khoản thu còn trừ vào đơn đã huỷ — bất biến sau `recalcAll` là 0; báo cáo sau khôi phục kiểm số này. */
+export async function countPaymentsOnVoidOrders(): Promise<number> {
+  return db.transaction('r', db.orders, db.payments, async () => {
+    const voidIds = await db.orders.filter((order) => order.status === 'void').primaryKeys()
+    if (voidIds.length === 0) return 0
+    return db.payments.where('allocatedOrderId').anyOf(voidIds).count()
   })
 }
 
