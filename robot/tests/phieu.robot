@@ -454,6 +454,41 @@ Bản nhiệt của khách nợ cũ ghi nợ cũ và tổng phải trả đúng 
     Should Contain    ${chữ}    155.000 đ    Bản nhiệt thiếu tổng phải trả đúng số.
 
 
+Thông tin quán: ba vị trí logo chìm chọn được từng nút, mức đậm chỉ có ở giữa tem và bên phải
+    [Documentation]    Mỗi nút vị trí phải sáng đúng một lần (`aria-pressed`) và ba nút mức đậm chỉ hiện khi logo
+    ...    chìm — ở góc trên phải logo in đặc nên không có mức. Lưu xong đọc thẳng IndexedDB: vị trí là
+    ...    `position` + `align` (`align` là trường riêng để máy 2.10.0 không kẹt đồng bộ vì giá trị lạ).
+    ...    Không có `Sleep` nên chạy nhanh trên CI; muốn xem từng bước thì chạy có cửa sổ, chậm 1 giây mỗi thao tác:
+    ...    `ROBOT_HEADED=1 ROBOT_SLOW_MO=1s ./robot/run.sh -t "Thông tin quán: ba vị trí*" robot/tests/phieu.robot`
+    Mở Màn    /them/cai-dat
+    Click    css=button:has-text("Thông tin cửa hàng")
+    Upload File By Selector    css=[data-shop-logo-input]    ${CURDIR}/../resources/logo-mau.png
+    Wait For Elements State    css=[data-shop-logo-preview]    visible
+    Check Checkbox    css=[data-label-watermark] input[type="checkbox"]
+
+    Chọn Vị Trí Logo Chìm    Giữa tem
+    Mức Đậm Logo Chìm Phải Hiện
+    Chọn Mức Đậm Logo Chìm    Nhạt
+    Chọn Mức Đậm Logo Chìm    Vừa
+    Chọn Mức Đậm Logo Chìm    Đậm
+
+    Chọn Vị Trí Logo Chìm    Bên phải
+    Mức Đậm Logo Chìm Phải Hiện
+    Chọn Mức Đậm Logo Chìm    Nhạt
+    Chọn Mức Đậm Logo Chìm    Đậm
+
+    Chọn Vị Trí Logo Chìm    Góc trên phải
+    Get Element Count    css=[data-label-watermark] button:text-is("Nhạt")    ==    0
+    Get Element Count    css=[data-label-watermark] button:text-is("Vừa")    ==    0
+    Get Element Count    css=[data-label-watermark] button:text-is("Đậm")    ==    0
+
+    Chọn Vị Trí Logo Chìm    Bên phải
+    Bấm Nút    LƯU THÔNG TIN
+    Wait For Condition    Url    ==    ${BASE_URL}/them/cai-dat
+    ${logo}=    Đọc Logo Quán
+    Should Be Equal    ${logo}[watermark]    {"enabled":true,"position":"center","strength":"dark","align":"right"}
+    ...    Vị trí hoặc mức đậm trong sổ khác lựa chọn cuối trên màn hình.
+
 Thông tin quán: cài logo, xem bản đen trắng, lưu vào sổ, gỡ được, chặn ảnh quá lớn
     [Documentation]    Logo lưu thành PNG đen trắng trong bản ghi shop của sổ chung (#51), nên đọc thẳng
     ...    IndexedDB chứ không chỉ tin ảnh xem trước: giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
@@ -802,6 +837,25 @@ Chờ Tem Xem Trước Dựng Xong
     ...    return ink }
     ...    arg=${{ [int($x0), int($y0), int($x1), int($y1)] }}
     RETURN    ${mực}
+
+Chọn Vị Trí Logo Chìm
+    [Documentation]    Bấm một nút vị trí rồi khẳng định đúng nút đó sáng và hai nút kia tắt.
+    [Arguments]    ${nhãn}
+    Click    css=[data-label-watermark] button:text-is("${nhãn}")
+    FOR    ${vị_trí}    IN    Giữa tem    Bên phải    Góc trên phải
+        ${sáng}=    Set Variable If    $vị_trí == $nhãn    true    false
+        Get Attribute    css=[data-label-watermark] button:text-is("${vị_trí}")    aria-pressed    ==    ${sáng}
+    END
+
+Mức Đậm Logo Chìm Phải Hiện
+    FOR    ${mức}    IN    Nhạt    Vừa    Đậm
+        Wait For Elements State    css=[data-label-watermark] button:text-is("${mức}")    visible
+    END
+
+Chọn Mức Đậm Logo Chìm
+    [Arguments]    ${nhãn}
+    Click    css=[data-label-watermark] button:text-is("${nhãn}")
+    Get Attribute    css=[data-label-watermark] button:text-is("${nhãn}")    aria-pressed    ==    true
 
 Cài Máy In Tem Và Chốt Đơn Ba Ly
     [Documentation]    Máy in tem LAN giả ở 192.168.1.60, khổ mặc định 50×30, rồi chốt một đơn ba ly (Trà đá ×2,
