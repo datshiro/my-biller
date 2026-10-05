@@ -36,8 +36,8 @@ async function post(path: string, body: unknown): Promise<Response> {
   })
 }
 
-async function push(syncEvent: SyncEvent, epoch = 1): Promise<Response> {
-  return post(`/shop/${shopId}/events`, { epoch, event: syncEvent, deviceId: crypto.randomUUID() })
+async function push(syncEvent: SyncEvent, epoch = 1, caps: string[] = []): Promise<Response> {
+  return post(`/shop/${shopId}/events`, { epoch, event: syncEvent, deviceId: crypto.randomUUID(), caps })
 }
 
 async function pullAll(): Promise<Array<SyncEvent & { seq: number }>> {
@@ -896,5 +896,174 @@ describe('kéo oplog theo trang', () => {
 
     const empty = await (await pull(all.at(-1)!.seq)).json<{ events: unknown[]; hasMore: boolean }>()
     expect(empty).toEqual({ events: [], hasMore: false })
+  })
+})
+
+describe('tên món trùng', () => {
+  const named = (gid: string, name: string, overrides: Record<string, unknown> = {}) => ({
+    ...itemRow(gid),
+    name,
+    ...overrides,
+  })
+
+  it('create món đang bán trùng tên một món đang bán khác bị chặn (máy có caps)', async () => {
+    const existingGid = crypto.randomUUID()
+    expect((await push(event('items', existingGid, named(existingGid, 'Trà'), { groupId: null }))).status).toBe(201)
+
+    const newGid = crypto.randomUUID()
+    const response = await push(event('items', newGid, named(newGid, 'TRÀ '), { groupId: null }), 1, ['item-name-taken'])
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'item-name-taken',
+      existingGid,
+      existingName: 'Trà',
+    })
+    expect(await pullAll()).toHaveLength(1)
+  })
+
+  it('sổ có sẵn hai món trùng tên từ trước: luôn nối vào món tạo trước (updatedSeq nhỏ hơn), tất định', async () => {
+    const firstGid = crypto.randomUUID()
+    const secondGid = crypto.randomUUID()
+    // Cả hai push KHÔNG kèm caps để mô phỏng dữ liệu trùng có từ trước luật (máy cũ tạo ra).
+    expect((await push(event('items', firstGid, named(firstGid, 'Trà'), { groupId: null }))).status).toBe(201)
+    expect((await push(event('items', secondGid, named(secondGid, 'Trà'), { groupId: null }))).status).toBe(201)
+
+    const newGid = crypto.randomUUID()
+    const response = await push(event('items', newGid, named(newGid, 'TRÀ'), { groupId: null }), 1, ['item-name-taken'])
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: firstGid })
+  })
+
+  it('create trùng tên một món đang ngừng bán thì vẫn nhận', async () => {
+    const existingGid = crypto.randomUUID()
+    expect((await push(event('items', existingGid, named(existingGid, 'Trà', { isActive: 0 }), { groupId: null }))).status).toBe(201)
+
+    const newGid = crypto.randomUUID()
+    const response = await push(event('items', newGid, named(newGid, 'Trà'), { groupId: null }), 1, ['item-name-taken'])
+    expect(response.status).toBe(201)
+  })
+
+  it('put đổi tên sang tên của một món đang bán khác bị chặn', async () => {
+    const aGid = crypto.randomUUID()
+    const bGid = crypto.randomUUID()
+    expect((await push(event('items', aGid, named(aGid, 'Trà đá'), { groupId: null }))).status).toBe(201)
+    const before = named(bGid, 'Cà phê')
+    expect((await push(event('items', bGid, before, { groupId: null }))).status).toBe(201)
+
+    const after = { ...before, name: 'Trà đá' }
+    const pulledBefore = await pullAll()
+    const response = await push(event('items', bGid, after, { groupId: null }, 'put', before), 1, ['item-name-taken'])
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: aGid })
+    expect(await pullAll()).toEqual(pulledBefore)
+  })
+
+  it('put bán lại (ngừng bán → đang bán) trùng tên một món đang bán khác bị chặn', async () => {
+    const aGid = crypto.randomUUID()
+    const bGid = crypto.randomUUID()
+    expect((await push(event('items', aGid, named(aGid, 'Bánh flan'), { groupId: null }))).status).toBe(201)
+    const before = named(bGid, 'Bánh flan', { isActive: 0 })
+    expect((await push(event('items', bGid, before, { groupId: null }))).status).toBe(201)
+
+    const after = { ...before, isActive: 1 }
+    const pulledBefore = await pullAll()
+    const response = await push(event('items', bGid, after, { groupId: null }, 'put', before), 1, ['item-name-taken'])
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: aGid })
+    expect(await pullAll()).toEqual(pulledBefore)
+  })
+
+  it('put không đổi khoá tên (giá, hoa thường) trên món đang bán vẫn nhận, kể cả trùng từ trước', async () => {
+    const aGid = crypto.randomUUID()
+    const bGid = crypto.randomUUID()
+    // Hai món cùng tên có từ trước khi luật có hiệu lực: đẩy không kèm caps nên được nhận như cũ.
+    expect((await push(event('items', aGid, named(aGid, 'Trà đá'), { groupId: null }))).status).toBe(201)
+    const before = named(bGid, 'Trà đá')
+    expect((await push(event('items', bGid, before, { groupId: null }))).status).toBe(201)
+
+    const after = { ...before, name: 'trà đá', unitPrice: 12_000 }
+    const response = await push(event('items', bGid, after, { groupId: null }, 'put', before), 1, ['item-name-taken'])
+    expect(response.status).toBe(201)
+  })
+
+  it('put ngừng bán và delete không bị kiểm dù có caps', async () => {
+    const aGid = crypto.randomUUID()
+    const bGid = crypto.randomUUID()
+    expect((await push(event('items', aGid, named(aGid, 'Trà đá'), { groupId: null }))).status).toBe(201)
+    // bGid trùng tên có từ trước (đẩy không caps), vẫn phải ngừng bán / xoá được bình thường.
+    const before = named(bGid, 'Trà đá')
+    expect((await push(event('items', bGid, before, { groupId: null }))).status).toBe(201)
+
+    const stopSelling = await push(
+      event('items', bGid, { ...before, isActive: 0 }, { groupId: null }, 'put', before),
+      1,
+      ['item-name-taken'],
+    )
+    expect(stopSelling.status).toBe(201)
+
+    const deleted = await push(
+      event('items', bGid, null, { groupId: null }, 'delete', { ...before, isActive: 0 }),
+      1,
+      ['item-name-taken'],
+    )
+    expect(deleted.status).toBe(201)
+  })
+
+  it('thử lại một create đã được nhận thì không bị chặn lại', async () => {
+    const gid = crypto.randomUUID()
+    const created = event('items', gid, named(gid, 'Trà đá'), { groupId: null })
+    expect((await push(created, 1, ['item-name-taken'])).status).toBe(201)
+    const retry = await push(created, 1, ['item-name-taken'])
+    expect(retry.status).toBe(200)
+    await expect(retry.json()).resolves.toMatchObject({ duplicate: true })
+  })
+
+  it('máy không khai báo caps thì không bị luật này chặn, như hôm nay', async () => {
+    const existingGid = crypto.randomUUID()
+    expect((await push(event('items', existingGid, named(existingGid, 'Trà'), { groupId: null }))).status).toBe(201)
+
+    const newGid = crypto.randomUUID()
+    const response = await push(event('items', newGid, named(newGid, 'Trà'), { groupId: null }))
+    expect(response.status).toBe(201)
+  })
+
+  it('/seed nạp hai món đang bán cùng tên trong cùng ảnh sổ vẫn được nhận', async () => {
+    const created = await SELF.fetch('https://example.com/shop', {
+      method: 'POST',
+      headers: { ...headers, authorization: 'Bearer test-admin-secret' },
+    })
+    const shop = await created.json<{ shopId: string; code: string }>()
+    const paired = await SELF.fetch('https://example.com/pair', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        code: shop.code,
+        letter: 'B',
+        label: 'Máy B',
+        hasLocalLedger: true,
+        localLedgerRows: 2,
+      }),
+    })
+    const device = await paired.json<{ token: string; deviceId: string }>()
+    const gidA = crypto.randomUUID()
+    const gidB = crypto.randomUUID()
+    const seedEvent = (entityKey: string, name: string): SyncEvent => ({
+      eventId: crypto.randomUUID(),
+      txId: crypto.randomUUID(),
+      txOrder: 0,
+      table: 'items',
+      entityKey,
+      entityGid: entityKey,
+      operation: 'create',
+      before: null,
+      after: named(entityKey, name),
+      refs: { groupId: null },
+    })
+    const response = await SELF.fetch(`https://example.com/shop/${shop.shopId}/seed`, {
+      method: 'POST',
+      headers: { ...headers, authorization: `Bearer ${device.token}` },
+      body: JSON.stringify({ events: [seedEvent(gidA, 'Trà'), seedEvent(gidB, 'Trà')] }),
+    })
+    expect(response.status).toBe(201)
   })
 })

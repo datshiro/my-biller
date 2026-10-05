@@ -9,6 +9,7 @@ import {
 import type { Env } from './env'
 import { SyncEventSchema, type SyncEvent } from '../../shared/sync-events'
 import { safeParseLedgerPayload } from '../../shared/ledger-schemas'
+import { itemNameKey } from '../../shared/item-name'
 
 const INITIALIZED_KEY = 'initialized'
 const PAIR_TTL_MS = 5 * 60 * 1000
@@ -1011,18 +1012,49 @@ export class ShopDO extends DurableObject<Env> {
     return { ...event, after }
   }
 
+  /**
+   * Chỉ áp cho máy có khai báo khả năng `item-name-taken`: máy cũ không biết mã này sẽ nuốt lỗi
+   * hoặc cuộn ngược đuôi hàng đợi, nên luật chỉ bật khi `acceptEvent` biết chắc máy hiểu được.
+   */
+  private itemNameTaken(event: SyncEvent): { existingGid: string; existingName: string } | null {
+    if (event.table !== 'items' || event.operation === 'delete' || !event.after) return null
+    if (event.after.isActive !== 1) return null
+    const key = itemNameKey(String(event.after.name))
+    const stored = this.ledgerPayload('items', event.entityKey)?.after
+    const claims = !stored || stored.isActive !== 1 || itemNameKey(String(stored.name)) !== key
+    if (!claims) return null
+    // `ORDER BY updatedSeq` để kết quả tất định: sổ có sẵn ≥2 món trùng tên từ trước thì luôn nối
+    // vào món cũ nhất, không tuỳ ý SQLite trả hàng theo thứ tự nào.
+    for (const row of this.sql.exec<{ entityKey: string; payload: string }>(
+      "SELECT entityKey, payload FROM ledger WHERE tableName = 'items' AND entityKey != ? ORDER BY updatedSeq ASC",
+      event.entityKey,
+    )) {
+      const other = (JSON.parse(row.payload) as { after: { name: string; isActive: number } }).after
+      if (other.isActive === 1 && itemNameKey(other.name) === key) {
+        return { existingGid: row.entityKey, existingName: other.name }
+      }
+    }
+    return null
+  }
+
   private async acceptEvent(request: Request): Promise<Response> {
     const [tokenHash, body] = await Promise.all([this.requestTokenHash(request), readJson(request)])
     if (!tokenHash) return json({ error: 'unauthorized', message: 'Máy này chưa ghép hoặc đã bị thu hồi.' }, 401)
     const parsed = SyncEventSchema.safeParse(body?.event)
     const epoch = typeof body?.epoch === 'number' && Number.isInteger(body.epoch) ? body.epoch : 0
+    const caps = Array.isArray(body?.caps) ? (body.caps as unknown[]) : []
     if (!parsed.success || epoch <= 0) return json({ error: 'invalid-request' }, 400)
 
     const serverAt = Date.now()
     const proposed = this.stampServerTime(parsed.data, serverAt)
     const result = this.ctx.storage.transactionSync<
       | { ok: true; seq: number; notifySeq: number; duplicate: boolean }
-      | { ok: false; error: 'unauthorized' | 'stale-leader' | 'business-rejected' | 'seed-in-progress'; message: string }
+      | {
+          ok: false
+          error: 'unauthorized' | 'stale-leader' | 'business-rejected' | 'seed-in-progress'
+          message: string
+        }
+      | { ok: false; error: 'item-name-taken'; message: string; existingGid: string; existingName: string }
     >(() => {
       this.expireLedgerAdmission(serverAt)
       const device = this.activeDeviceByTokenHash(tokenHash)
@@ -1084,6 +1116,17 @@ export class ShopDO extends DurableObject<Env> {
       if ('problem' in canonical) {
         return { ok: false, error: 'business-rejected', message: canonical.problem }
       }
+      if (caps.includes('item-name-taken')) {
+        const taken = this.itemNameTaken(canonical.event)
+        if (taken) {
+          return {
+            ok: false,
+            error: 'item-name-taken',
+            message: `Đã có món “${taken.existingName}” đang bán trong sổ chung.`,
+            ...taken,
+          }
+        }
+      }
       const paymentProblem = this.paymentProblem(canonical.event)
       if (paymentProblem) {
         return { ok: false, error: 'business-rejected', message: paymentProblem }
@@ -1122,10 +1165,12 @@ export class ShopDO extends DurableObject<Env> {
     })
 
     if (!result.ok) {
-      return json(
-        { error: result.error, message: result.message },
-        result.error === 'unauthorized' ? 401 : 409,
-      )
+      const body: Record<string, unknown> = { error: result.error, message: result.message }
+      if (result.error === 'item-name-taken') {
+        body.existingGid = result.existingGid
+        body.existingName = result.existingName
+      }
+      return json(body, result.error === 'unauthorized' ? 401 : 409)
     }
     if (!result.duplicate) {
       for (const socket of this.ctx.getWebSockets()) {
