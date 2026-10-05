@@ -43,6 +43,7 @@ export class SyncApiError extends Error {
     message: string,
     readonly code: string,
     readonly status: number,
+    readonly detail?: Record<string, unknown>,
   ) {
     super(message)
   }
@@ -68,6 +69,7 @@ export async function jsonRequest<T>(url: string, init: RequestInit): Promise<T>
       body?.message ?? 'Không kết nối được với sổ chung. Thử lại.',
       body?.error ?? 'request-failed',
       response.status,
+      body ?? undefined,
     )
   }
   return body as T
@@ -145,7 +147,7 @@ export function pushEvent(
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/events`, {
     method: 'POST',
     headers: { ...authHeaders(connection), 'content-type': 'application/json' },
-    body: JSON.stringify({ epoch, event }),
+    body: JSON.stringify({ epoch, event, caps: ['item-name-taken'] }),
   })
 }
 

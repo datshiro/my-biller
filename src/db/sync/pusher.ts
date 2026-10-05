@@ -3,9 +3,14 @@ import { db, verbatimWrites } from '../db'
 import { getDeviceSyncState } from '../repositories/device-state'
 import { pushEvent, SyncApiError } from './client'
 import { assertLeadership, type LeaderToken } from './leader'
-import type { OutboxRow } from './outbox'
+import { resolveItemNameTaken } from './item-name-taken'
+import { OUTBOX_CHANGED_EVENT, type OutboxRow } from './outbox'
 import { DeviceNoticeSchema, type DeviceConnection } from '@/domain/schema'
 import { LEDGER_TABLE_NAMES, SyncEventSchema } from '@shared/sync-events'
+
+// Không lặp nóng khi món có sẵn mãi chưa về máy: chỉ bắn sự kiện một lần cho mỗi dòng, chờ nhịp kéo kế
+// tiếp (`runner.ts`) tự chạy lại. Không `import` từ `runner.ts` — runner đã `import` pusher, tránh vòng.
+const deferredOnce = new Set<string>()
 
 const normalized = (row: Record<string, unknown> | null | undefined) => {
   if (!row) return null
@@ -26,7 +31,7 @@ async function currentRow(transaction: Transaction, row: OutboxRow) {
     : table.where('gid').equals(row.entityKey).first()
 }
 
-async function restoreRow(transaction: Transaction, row: OutboxRow): Promise<boolean> {
+export async function restoreRow(transaction: Transaction, row: OutboxRow): Promise<boolean> {
   const table = transaction.table(row.table)
   const current = (await currentRow(transaction, row)) as Record<string, unknown> | undefined
   if (!same(current, row.after)) return false
@@ -63,13 +68,25 @@ export async function rollbackRejectedTail(
 
     const sync = await getDeviceSyncState()
     await db.deviceState.put({ ...sync, resyncRequired: sync.resyncRequired || conflict })
+
+    // Thứ tự `id` outbox không chắc trùng `txOrder` của một lần ghi (món không nhóm vào outbox ngay,
+    // món có nhóm phải chờ một lượt `get` gid nhóm), nên câu báo không nêu số thay đổi ĐÃ lên — chỉ đếm
+    // đúng trên đuôi bị hoàn lại (`sameTx`, `later`), luôn chính xác bất kể thứ tự đẩy.
+    const sameTx = tail.filter((row) => row.txId === rejected.txId).length
+    const later = new Set(tail.filter((row) => row.txId !== rejected.txId).map((row) => row.txId)).size
+    const reasonMessage =
+      sameTx === 1 && rejected.txOrder === 0
+        ? `${reason} Thay đổi này và ${later} thao tác làm sau đã được hoàn lại.`
+        : `${reason} Lần ghi này bị từ chối ở giữa: ${sameTx} thay đổi của nó` +
+          (later > 0 ? ` và ${later} thao tác làm sau` : '') +
+          ' đã được hoàn lại trên máy này; các thay đổi khác của lần ghi đó (nếu có) đã lên sổ chung.'
     await db.deviceState.put(
       DeviceNoticeSchema.parse({
         key: 'notice',
         id: crypto.randomUUID(),
         message: conflict
           ? `${reason} Dữ liệu trên máy đã đổi tiếp nên app sẽ kéo lại sổ chung.`
-          : `${reason} Thay đổi này và ${Math.max(0, new Set(tail.map((row) => row.txId)).size - 1)} thao tác làm sau đã được hoàn lại.`,
+          : reasonMessage,
         createdAt: Date.now(),
       }),
     )
@@ -88,6 +105,25 @@ export async function pushNext(
     await pushEvent(connection, leader.epoch, SyncEventSchema.parse(row))
   } catch (caught) {
     if (caught instanceof SyncApiError && caught.code === 'stale-leader') throw caught
+    if (caught instanceof SyncApiError && caught.code === 'item-name-taken') {
+      const detail = caught.detail as { existingGid?: unknown; existingName?: unknown } | undefined
+      if (typeof detail?.existingGid !== 'string' || typeof detail.existingName !== 'string') {
+        // Hợp đồng thiếu existingGid/existingName (lệch phiên bản Worker/app) — coi như chưa xử lý được,
+        // không đoán mò nối sai món; chờ nhịp kéo rồi thử lại như trường hợp 'deferred'.
+        if (!deferredOnce.has(row.eventId)) {
+          deferredOnce.add(row.eventId)
+          if (typeof window !== 'undefined') window.dispatchEvent(new Event(OUTBOX_CHANGED_EVENT))
+        }
+        return 'empty'
+      }
+      const outcome = await resolveItemNameTaken(row, detail.existingGid, detail.existingName, leader)
+      if (outcome === 'resolved') return 'pushed'
+      if (!deferredOnce.has(row.eventId)) {
+        deferredOnce.add(row.eventId)
+        if (typeof window !== 'undefined') window.dispatchEvent(new Event(OUTBOX_CHANGED_EVENT))
+      }
+      return 'empty'
+    }
     if (caught instanceof SyncApiError && caught.code === 'business-rejected') {
       await rollbackRejectedTail(row, leader, caught.message)
       return 'pushed'
