@@ -11,8 +11,9 @@ Test Teardown       Đóng Hai Máy
 Test Tags           hai-may    regression
 
 *** Variables ***
-${NÚT_ẢNH_PHIẾU}    css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
-${NEO_ĐỒNG_BỘ}      css=[role=status][aria-label="Neo đồng bộ"]
+${NÚT_ẢNH_PHIẾU}       css=button:has-text("CHIA SẺ QUA ZALO"), button:has-text("TẢI ẢNH PHIẾU")
+${NEO_ĐỒNG_BỘ}         css=[role=status][aria-label="Neo đồng bộ"]
+${Ô_CHỌN_FILE_CSV}     css=input[aria-label="Chọn file CSV"]
 
 *** Test Cases ***
 Đơn ở máy A hiện ở máy B mà không tải lại trang
@@ -657,3 +658,175 @@ Logo Máy B Phải Hội Tụ Với
         ${ở_b}=    Đọc Logo Quán    ${MÁY_B_PAGE}
         Fail    Máy B chưa nhận logo: B=${ở_b}, outbox A=${bảng}, notice A=${notice}
     END
+
+Nhập file món ở máy A thì máy B có đủ món, nhóm và giá
+    [Documentation]    Luồng nhập CSV đi đúng đường outbox nên đồng bộ như nhập tay.
+    [Tags]    -regression
+    ${f}=    Set Variable    ${DOWNLOAD_DIR}/hai-may-nhap-mon.csv
+    Create File    ${f}    Nhóm,Tên món,Giá bán\nTráng miệng,Bánh flan,15000\nNước,Trà đá,3500
+    Chọn Máy A
+    Mở Màn    /them/nhap-file
+    Upload File By Selector    ${Ô_CHỌN_FILE_CSV}    ${f}
+    Chờ Thấy Chữ    1 món mới
+    Chờ Thấy Chữ    1 món trùng
+    Click    css=button:text-is("Cập nhật tất cả món trùng")
+    Bấm Nút    NHẬP 2 MÓN
+
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Hai Bảng Phải Hội Tụ    itemGroups
+    Hai Bảng Phải Hội Tụ    items
+
+    ${items_b}=    Đọc Bảng    items    ${MÁY_B_PAGE}
+    ${groups_b}=    Đọc Bảng    itemGroups    ${MÁY_B_PAGE}
+    ${trà_đá}=    Evaluate    next(i for i in $items_b if i['name'] == 'Trà đá')
+    Should Be Equal As Integers    ${trà_đá}[unitPrice]    3500
+    ${bánh_flan}=    Evaluate    next(i for i in $items_b if i['name'] == 'Bánh flan')
+    ${nhóm_tráng_miệng}=    Evaluate    next(g for g in $groups_b if g['name'] == 'Tráng miệng')
+    Should Be Equal As Integers    ${bánh_flan}[groupId]    ${nhóm_tráng_miệng}[id]
+    [Teardown]    Run Keywords    Đóng Hai Máy    AND    Remove File    ${f}
+
+Bán offline món trùng tên thì đơn vẫn còn trên cả hai máy và nối sang món có sẵn
+    [Tags]    -regression
+    [Documentation]    Khoá thiết kế: lỗi này chưa từng lên production. Trước đây, Worker trả
+    ...    business-rejected sẽ cuộn mất đơn bán offline của máy sau khi món trùng tên bị từ chối.
+    Chọn Máy A
+    Set Offline    ${True}
+    Chọn Máy B
+    Set Offline    ${True}
+
+    Chọn Máy A
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Bánh flan
+    Điền Ô    Giá bán *    15000
+    Bấm Nút    LƯU MẶT HÀNG
+
+    Chọn Máy B
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Bánh flan
+    Điền Ô    Giá bán *    16000
+    Bấm Nút    LƯU MẶT HÀNG
+    Bán Nhanh    Bánh flan
+    Bán Nhanh    Bánh flan
+    ${đơn_b_trước}=    Đọc Bảng    orders    ${MÁY_B_PAGE}
+    ${dòng_b_trước}=    Đọc Bảng    orderLines    ${MÁY_B_PAGE}
+    ${thu_b_trước}=    Đọc Bảng    payments    ${MÁY_B_PAGE}
+
+    Chọn Máy A
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Chọn Máy B
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+
+    Chờ Thấy Chữ    trùng tên món “Bánh flan” đang bán trong sổ chung
+    Chờ Thấy Chữ    Máy này đã nối sang món có sẵn
+    Chờ Thấy Chữ    15.000 đ
+
+    Hai Bảng Phải Hội Tụ    items
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    orderLines
+    Hai Bảng Phải Hội Tụ    payments
+
+    ${items_a}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${bánh_flan_a}=    Evaluate    [i for i in $items_a if i['name'] == 'Bánh flan']
+    Length Should Be    ${bánh_flan_a}    1    Phải còn đúng một Bánh flan sau khi nối.
+    Should Be Equal As Integers    ${bánh_flan_a}[0][unitPrice]    15000
+
+    ${đơn_a}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
+    Length Should Be    ${đơn_a}    ${{ len($đơn_b_trước) }}
+    ${dòng_a}=    Đọc Bảng    orderLines    ${MÁY_A_PAGE}
+    ${dòng_bánh_flan_a}=    Evaluate    [l for l in $dòng_a if l['name'] == 'Bánh flan']
+    Length Should Be    ${dòng_bánh_flan_a}    2
+    FOR    ${dòng}    IN    @{dòng_bánh_flan_a}
+        Should Be Equal As Integers    ${dòng}[itemId]    ${bánh_flan_a}[0][id]
+        Should Be Equal As Integers    ${dòng}[unitPrice]    16000
+    END
+    ${thu_a}=    Đọc Bảng    payments    ${MÁY_A_PAGE}
+    Length Should Be    ${thu_a}    ${{ len($thu_b_trước) }}
+
+Hai máy cùng nhập một món mới lúc mất mạng thì chỉ món trùng được nối, các dòng khác vẫn lên
+    [Tags]    -regression
+    [Documentation]    Nhập CSV cũng đi qua nhánh nối món giống hệt bán offline — không có lối
+    ...    lái riêng nào bỏ qua luật tên trùng.
+    Chọn Máy A
+    Set Offline    ${True}
+    Chọn Máy B
+    Set Offline    ${True}
+
+    ${f_a}=    Set Variable    ${DOWNLOAD_DIR}/hai-may-nhap-a.csv
+    Create File    ${f_a}    Tên món,Giá bán\nBánh flan,15000
+    Chọn Máy A
+    Mở Màn    /them/nhap-file
+    Upload File By Selector    ${Ô_CHỌN_FILE_CSV}    ${f_a}
+    Chờ Thấy Chữ    1 món mới
+    Bấm Nút    NHẬP 1 MÓN
+
+    ${f_b}=    Set Variable    ${DOWNLOAD_DIR}/hai-may-nhap-b.csv
+    Create File    ${f_b}    Tên món,Giá bán\nXôi gấc,20000\nBánh flan,16000\nChè bưởi,18000
+    Chọn Máy B
+    Mở Màn    /them/nhap-file
+    Upload File By Selector    ${Ô_CHỌN_FILE_CSV}    ${f_b}
+    Chờ Thấy Chữ    3 món mới
+    Bấm Nút    NHẬP 3 MÓN
+
+    Chọn Máy A
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Chọn Máy B
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Chờ Thấy Chữ    trùng tên món “Bánh flan” đang bán trong sổ chung
+    Chờ Thấy Chữ    15.000 đ
+
+    Hai Bảng Phải Hội Tụ    items
+    ${items_a}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${bánh_flan}=    Evaluate    [i for i in $items_a if i['name'] == 'Bánh flan']
+    Length Should Be    ${bánh_flan}    1
+    Should Be Equal As Integers    ${bánh_flan}[0][unitPrice]    15000
+    ${tên_còn_lại}=    Evaluate    sorted(i['name'] for i in $items_a if i['name'] in ('Xôi gấc', 'Chè bưởi'))
+    Should Be Equal    ${tên_còn_lại}    ${{ ['Chè bưởi', 'Xôi gấc'] }}
+    [Teardown]    Run Keywords    Đóng Hai Máy    AND    Remove File    ${f_a}    AND    Remove File    ${f_b}
+
+Máy chưa thấy món trùng mà bán lại thì sổ chung chặn, chỉ món đó trở về như cũ, đơn sau đó vẫn còn
+    [Tags]    -regression
+    [Documentation]    Chốt cuối của Worker cho trường hợp máy CHƯA thấy món kia (vd đang mất mạng); trường
+    ...    hợp máy đã thấy đủ dữ liệu thì form tự chặn sớm hơn ngay trên máy (ca ở mat-hang.robot).
+    Chọn Máy A
+    Set Offline    ${True}
+
+    Chọn Máy B
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Bánh
+    Điền Ô    Giá bán *    10000
+    Bấm Nút    LƯU MẶT HÀNG
+    Click    css=button:has-text("Bánh")
+    Bấm Nút    Ngừng bán mặt hàng này
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Set Offline    ${True}
+
+    Chọn Máy A
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Bánh
+    Điền Ô    Giá bán *    12000
+    Bấm Nút    LƯU MẶT HÀNG
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+
+    Chọn Máy B
+    Click    css=button:has-text("Bánh")
+    Bấm Nút    Bán lại mặt hàng này
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Bán Nhanh    Trà đá
+
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Chờ Thấy Chữ    Không bán lại được món “Bánh”
+
+    ${items_b}=    Đọc Bảng    items    ${MÁY_B_PAGE}
+    ${bánh_b}=    Evaluate    [i for i in $items_b if i['name'] == 'Bánh' and i.get('unitPrice') == 10000]
+    Length Should Be    ${bánh_b}    1
+    Should Be Equal As Integers    ${bánh_b}[0][isActive]    0
+    ${bánh_a}=    Evaluate    [i for i in $items_b if i['name'] == 'Bánh' and i.get('unitPrice') == 12000]
+    Length Should Be    ${bánh_a}    1
+    Should Be Equal As Integers    ${bánh_a}[0][isActive]    1
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    orders    5    ${MÁY_B_PAGE}
