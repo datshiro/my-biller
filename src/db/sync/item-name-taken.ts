@@ -44,7 +44,7 @@ async function resolveCreate(
   const dLocalId = await resolveDLocalId(dGid)
   const tenLucTao = String(rejected.after?.name ?? '')
 
-  // Nếu `put` sau đó đã đổi tên D trước khi bị gộp (L-8), ghi lại tên cuối cho câu báo.
+  // Nếu `put` sau đó đã đổi tên D trước khi bị gộp, ghi lại tên cuối cho câu báo.
   const laterItemPuts = ((await db.outbox.toArray()) as OutboxRow[]).filter(
     (row) => row.table === 'items' && row.entityKey === dGid && row.operation === 'put',
   )

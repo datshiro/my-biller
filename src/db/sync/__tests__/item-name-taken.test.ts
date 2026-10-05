@@ -125,7 +125,7 @@ describe('resolveItemNameTaken — nối món (operation: create)', () => {
     expect(afterIds).toEqual(remainingIds)
   })
 
-  it('D đã bị xoá trước khi bị từ chối (M-50a): đơn không liên quan vẫn còn, đẩy tiếp được', async () => {
+  it('D đã bị xoá trước khi bị từ chối: đơn không liên quan vẫn còn, đẩy tiếp được', async () => {
     const existing = await seedExistingItem('Bánh flan', 15_000)
     const customerId = await createCustomer({ name: 'Khách', phone: '', address: '', note: '' })
     const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
@@ -160,7 +160,7 @@ describe('resolveItemNameTaken — nối món (operation: create)', () => {
     expect(unrelatedOutbox.length).toBeGreaterThan(0)
   })
 
-  it('D đổi tên offline sau khi tạo (L-8): câu báo nói rõ tên cuối vẫn bị gộp', async () => {
+  it('D đổi tên offline sau khi tạo: câu báo nói rõ tên cuối vẫn bị gộp', async () => {
     const existing = await seedExistingItem('Bánh flan', 15_000)
     const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
     const dRow = (await db.items.get(dId))!
@@ -302,7 +302,7 @@ describe('resolveItemNameTaken — đổi tên / bán lại bị chặn (operati
     expect(sync?.resyncRequired ?? false).toBe(false)
   })
 
-  it('đổi tên bị chặn sau khi applier áp thay đổi từ xa (M-50b): không ghi đè mù, resyncRequired=true', async () => {
+  it('đổi tên bị chặn sau khi applier áp thay đổi từ xa: không ghi đè mù, resyncRequired=true', async () => {
     const existing = await seedExistingItem('Bánh flan', 15_000)
     const mId = await createItem({ name: 'Bánh bông lan', groupId: null, unit: 'Ly', unitPrice: 20_000, costPrice: null, isActive: 1 })
     const mGid = (await db.items.get(mId))!.gid

@@ -112,7 +112,7 @@ describe('danh sách mặt hàng', () => {
   })
 })
 
-describe('bán lại mặt hàng chặn trùng tên (#51 phase 8)', () => {
+describe('bán lại mặt hàng chặn trùng tên', () => {
   const now = Date.now()
   const rawItem = (overrides: Partial<Item>): Item => ({
     gid: crypto.randomUUID(),

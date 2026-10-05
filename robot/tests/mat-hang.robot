@@ -270,7 +270,7 @@ Món đã trùng tên từ trước khi có luật chặn vẫn sửa được g
     Should Be Equal As Integers    ${món}[unitPrice]    5000    Món trùng tên từ trước không sửa được giá.
 
 Bán lại món trùng tên với một món đang bán thì bị chặn và không ghi gì
-    [Documentation]    #51 phase 8: bấm "Bán lại mặt hàng này" mà tên trùng một món khác đang bán thì máy
+    [Documentation]    Bấm "Bán lại mặt hàng này" mà tên trùng một món khác đang bán thì máy
     ...    chặn ngay trước khi ghi, không đợi một lượt đồng bộ Worker. Ca ghi thẳng một món "trà đá" ngừng
     ...    bán vào IndexedDB để giả dữ liệu có từ trước luật 2.9.0 — qua giao diện không tạo được món trùng.
     ${id}=    Chèn Món Cũ Trùng Tên    trà đá

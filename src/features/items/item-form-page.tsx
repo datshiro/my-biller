@@ -101,7 +101,7 @@ function ItemForm({ item }: { item: Item | null }) {
     const id = item.id
     const selling = item.isActive === 1
     if (!selling) {
-      // Worker (phase 3 nhập CSV) vẫn là chốt cuối khi máy chưa thấy món kia (vd đang mất mạng); chặn
+      // Worker (sổ chung) vẫn là chốt cuối khi máy chưa thấy món kia (vd đang mất mạng); chặn
       // sớm ở đây chỉ để không đợi một lượt đồng bộ cho trường hợp máy đã thấy đủ dữ liệu.
       const key = itemNameKey(item.name)
       const clash = allItems.find((other) => other.id !== id && other.isActive === 1 && itemNameKey(other.name) === key)
