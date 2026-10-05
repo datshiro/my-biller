@@ -22,7 +22,7 @@ export type CustomerRow = { line: number; name: string; phone: string; address: 
 export type ItemChanges = Partial<Pick<Item, 'unitPrice' | 'costPrice' | 'unit' | 'note'>>
 export type CustomerChanges = Partial<Pick<Customer, 'name' | 'phone' | 'address' | 'note'>>
 
-type GroupTarget = { existingId: number } | { newName: string } | null
+export type GroupTarget = { existingId: number } | { newName: string } | null
 
 export type ItemPlan = {
   creates: { row: ItemRow; group: GroupTarget }[]
