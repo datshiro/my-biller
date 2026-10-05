@@ -8,6 +8,7 @@ import { ItemFormPage } from '../item-form-page'
 import { ItemListPage } from '../item-list-page'
 import { db } from '@/db/db'
 import { createItem, listItems } from '@/db/repositories/items'
+import type { Item } from '@/domain/schema'
 
 afterEach(cleanup)
 
@@ -108,5 +109,52 @@ describe('danh sách mặt hàng', () => {
   it('chưa có mặt hàng nào thì hiện hướng dẫn việc cần làm, không phải chữ "trống"', async () => {
     renderAt('/them/mat-hang')
     expect(await screen.findByText(/Thêm mặt hàng để bán nhanh hơn/)).toBeDefined()
+  })
+})
+
+describe('bán lại mặt hàng chặn trùng tên (#51 phase 8)', () => {
+  const now = Date.now()
+  const rawItem = (overrides: Partial<Item>): Item => ({
+    gid: crypto.randomUUID(),
+    name: 'Trà đá',
+    groupId: null,
+    unit: 'ly',
+    unitPrice: 3_000,
+    costPrice: null,
+    isActive: 1,
+    note: '',
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  })
+
+  it('món ngừng bán trùng tên (không phân biệt hoa thường/khoảng trắng) một món đang bán thì bị chặn, không ghi gì', async () => {
+    await db.items.add(rawItem({ name: 'Trà đá', isActive: 1 }))
+    const inactiveId = await db.items.add(rawItem({ name: 'trà đá ', isActive: 0 }))
+
+    renderAt(`/them/mat-hang/${inactiveId}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Bán lại mặt hàng này' }))
+
+    expect(await screen.findByText(/Đã có món “Trà đá” đang bán/)).toBeDefined()
+    expect(await db.items.get(inactiveId)).toMatchObject({ isActive: 0 })
+  })
+
+  it('món ngừng bán chỉ trùng tên một món cũng ngừng bán thì bán lại được', async () => {
+    await db.items.add(rawItem({ name: 'Bánh flan', isActive: 0 }))
+    const inactiveId = await db.items.add(rawItem({ name: 'Bánh flan', isActive: 0 }))
+
+    renderAt(`/them/mat-hang/${inactiveId}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Bán lại mặt hàng này' }))
+
+    await waitFor(async () => expect(await db.items.get(inactiveId)).toMatchObject({ isActive: 1 }))
+  })
+
+  it('món ngừng bán không trùng ai thì bán lại được như cũ', async () => {
+    const inactiveId = await db.items.add(rawItem({ name: 'Bánh bao', isActive: 0 }))
+
+    renderAt(`/them/mat-hang/${inactiveId}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Bán lại mặt hàng này' }))
+
+    await waitFor(async () => expect(await db.items.get(inactiveId)).toMatchObject({ isActive: 1 }))
   })
 })

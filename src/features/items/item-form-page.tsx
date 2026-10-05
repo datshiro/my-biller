@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 import { useItem, useItemGroups, useItems } from './use-items'
 import { createItem, deactivateItem, deleteItem, updateItem } from '@/db/repositories/items'
 import type { Item } from '@/domain/schema'
+import { itemNameKey } from '@shared/item-name'
 import { Button } from '@/ui/button'
 import { SelectChip } from '@/ui/chip'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
@@ -43,7 +44,7 @@ function ItemForm({ item }: { item: Item | null }) {
 
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
   const [confirming, setConfirming] = useState(false)
-  const { submitting: saving, error: saveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
+  const { submitting: saving, error: saveError, setError: setSaveError, run } = useSubmitOnce('Không lưu được mặt hàng. Thử lại.')
 
   // Chỉ xét khi tên đã đổi: món đã trùng tên từ trước khi có luật này vẫn phải sửa được giá.
   const comparableName = name.trim().toLocaleLowerCase('vi')
@@ -96,9 +97,21 @@ function ItemForm({ item }: { item: Item | null }) {
   }
 
   const toggleActive = () => {
-    const id = item?.id
-    if (id === undefined) return
-    const selling = item?.isActive === 1
+    if (!item || item.id === undefined) return
+    const id = item.id
+    const selling = item.isActive === 1
+    if (!selling) {
+      // Worker (phase 3 nhập CSV) vẫn là chốt cuối khi máy chưa thấy món kia (vd đang mất mạng); chặn
+      // sớm ở đây chỉ để không đợi một lượt đồng bộ cho trường hợp máy đã thấy đủ dữ liệu.
+      const key = itemNameKey(item.name)
+      const clash = allItems.find((other) => other.id !== id && other.isActive === 1 && itemNameKey(other.name) === key)
+      if (clash) {
+        setSaveError(
+          `Đã có món “${clash.name}” đang bán. Đổi tên món này trước khi bán lại để phiếu và báo cáo không lẫn hai món.`,
+        )
+        return
+      }
+    }
     void run(async () => {
       await (selling ? deactivateItem(id) : updateItem(id, { isActive: 1 }))
       void navigate('/them/mat-hang', { replace: true })
