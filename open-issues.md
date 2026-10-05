@@ -271,3 +271,74 @@
   khôi phục. (D10) Chip lọc báo cáo nằm sát mép màn (theo ghi chú review, chưa xác định màn).
 - Mitigation: chưa đụng — không sai tiền, không mất dữ liệu. Xét lại cùng lượt nghiệm thu máy thật (ISSUE-014);
   D9 cần chốt ý muốn: giữ mốc của máy khi Ghi đè hay mốc trong file.
+
+### ISSUE-017 — Worker không ép duy nhất (customerId, itemId) của bảng giá riêng
+- State: deferred
+- Severity: medium
+- Raised by / Date: review Codex vòng 3 (arbiter3 L-9, `plans/reports/orchestrate-261003-1744/arbiter3.md`) / 03/10/2026
+- Related task: #50 Nhập CSV (phase 4), phát hiện khi lên plan — lỗi có sẵn, không do #50 gây ra
+- Description: IndexedDB có chỉ mục duy nhất `&[customerId+itemId]` (`src/db/db.ts:139`), nhưng Worker không
+  kiểm cặp này khi nhận sự kiện `customerPrices` (`worker/src/shop-do.ts`, `acceptEvent` không có luật nào cho
+  cặp này). Hai máy đặt giá riêng cho cùng khách + món lúc mất mạng sẽ tạo hai dòng trên sổ chung với hai gid
+  khác nhau; máy nào kéo về sau sẽ vấp chỉ mục duy nhất khi `applyEvents` ghi dòng thứ hai. Nhánh nối món của
+  #50 (phase 4 bước A4) né được trường hợp của chính nó ("giá của món có sẵn thắng") nhưng không sửa lỗi gốc.
+- Mitigation: ngoài phạm vi #50. Hướng sửa có thể dùng cùng khuôn với `item-name-taken`: mã từ chối riêng kèm
+  gid dòng đang giữ cặp, máy nối hoặc bỏ dòng của mình.
+
+### ISSUE-018 — Xung đột khách trong file CSV phụ thuộc thứ tự dòng (không khớp SĐT ngược với tên)
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review phase 1-3, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 2, `src/domain/nhap-file.ts` `planCustomerImport`
+- Description: Nhánh "có SĐT" chỉ tìm đích mới theo `digitsOf` (đúng như plan đã chốt, không tìm theo tên);
+  nhánh "không SĐT" tìm đích mới theo tên (kể cả đích có SĐT). Vì vậy, file có dòng A "Chị Lan" (không SĐT)
+  rồi dòng B "Chị Lan" kèm SĐT → sinh **hai khách** (B không khớp ngược lại đích tên của A). Đảo thứ tự (B
+  trước A) thì lại đúng ra lỗi "cùng một khách" (A khớp tên của đích B). Kết quả phụ thuộc thứ tự dòng.
+- Mitigation: đây là hệ quả trực tiếp của luật đã chốt sau 3 vòng review (chỉ khớp theo digitsOf khi có SĐT,
+  không mở rộng sang tên) — không tự ý đổi thuật toán phân loại mà không hỏi lại người dùng, vì sẽ lật một
+  quyết định đã duyệt. Nếu muốn sửa: mở rộng nhánh "có SĐT" để cũng tìm đích mới theo tên khi không khớp SĐT,
+  thêm ca test đối xứng cho cả hai thứ tự dòng. Ngoài phạm vi #50 cho tới khi người dùng xác nhận.
+
+### ISSUE-019 — resolveItemNameTaken không tự kiểm existingGid khác entityKey của chính sự kiện bị từ chối
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` (hàm `resolveItemNameTaken`)
+- Description: Hiện tại SQL phía Worker (`worker/src/shop-do.ts`, `itemNameTaken`) luôn loại trừ chính entityKey
+  đang xét (`entityKey != ?`), nên `existingGid` trả về không bao giờ trùng `rejected.entityKey`. Nhưng phía
+  client không tự kiểm lại điều này — nếu một thay đổi SQL sau này ở Worker vô tình làm `existingGid` trùng
+  `rejected.entityKey`, `resolveCreate` sẽ xoá D cục bộ rồi trỏ `orderLines`/`customerPrices` sang `existing.id`
+  = id vừa xoá, tạo dòng đơn mồ côi.
+- Mitigation: ngoài phạm vi #50 vì điều kiện hiện không xảy ra được. Nếu muốn phòng thủ: thêm guard
+  `if (existingGid === rejected.entityKey) return 'deferred'` đầu `resolveItemNameTaken`, kèm ca test.
+
+### ISSUE-020 — Một dòng item-name-taken bị 'deferred' vĩnh viễn thì máy kẹt ghi mãi, không có lối thoát UI
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` + `src/db/sync/pusher.ts` (`pushNext`)
+- Description: Nếu phản hồi `item-name-taken` của Worker thiếu `existingGid`/`existingName` (lệch phiên bản
+  Worker/app) hoặc `existing` không bao giờ về máy, `pushNext` trả `'deferred'` vĩnh viễn cho dòng đó — không
+  sai dữ liệu, chỉ là máy không bao giờ đẩy tiếp được dòng này hay các dòng outbox phía sau (head-of-line,
+  ISSUE đã ghi ở red-team phase 4). Thứ tự deploy Worker-trước-Pages ở plan loại trừ chiều lệch phiên bản này,
+  nên hiện không xảy ra được qua đường deploy bình thường; nhưng không có nút nào trên UI để người bán tự thoát
+  khỏi trạng thái "1 thao tác chờ" treo mãi nếu nó vẫn xảy ra do lý do khác (ví dụ Worker có bug khác).
+- Mitigation: ngoài phạm vi #50. Nếu cần: thêm giới hạn số lần thử `'deferred'` trước khi đổi sang báo lỗi rõ
+  ràng + cho người bán chọn "bỏ qua dòng này" (mất đồng bộ của riêng dòng đó, không mất đơn hàng).
+
+### ISSUE-021 — syncTransaction để lại promise outbox mồ côi khi callback ném sau vài write thành công
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (checkpoint sau phase 5, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 5, `src/db/sync/outbox.ts` (`syncTransaction`/`capture`)
+- Description: `capture()` đẩy promise `refsFor(...).then(outbox.add)` vào `context.pending` (`outbox.ts:126-144`).
+  Nếu callback của `syncTransaction` ném SAU khi vài write đã thành công (vd `ItemSchema.parse` hỏng ở dòng
+  giữa một vòng lặp ghi nhiều món), `syncTransaction` không bao giờ chạy tới `await Promise.all(context.pending)`
+  (`outbox.ts:197-199`) — các promise capture đang dở trở thành mồ côi, reject không ai bắt khi transaction
+  abort. Dữ liệu vẫn abort trọn vẹn (IndexedDB tự rollback), không sai tiền hay mất dữ liệu; hậu quả chỉ là
+  `unhandledrejection` (Node/test: có thể đổi exit code; trình duyệt thật: chỉ là console noise). #50 né được
+  bằng cách validate-trước (soát ItemSchema.parse cho mọi dòng trước khi ghi byte đầu), nhưng đây là lỗ hổng
+  chung của `syncTransaction`, không riêng #50 — bất kỳ chỗ gọi nào ghi nhiều dòng trong một transaction rồi
+  ném giữa chừng (vd nhập 500 dòng vấp quota đầy) đều có thể lộ lại.
+- Mitigation: ngoài phạm vi #50 (sửa `outbox.ts` kéo theo delta re-review phase 3+4 đã duyệt). Hướng sửa gợi ý:
+  trong nhánh `catch` của `syncTransaction`, `await Promise.allSettled(context.pending)` trước khi `throw` lại.
