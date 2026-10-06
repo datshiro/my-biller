@@ -275,7 +275,8 @@
 ### ISSUE-017 — Worker không ép duy nhất (customerId, itemId) của bảng giá riêng
 - State: deferred
 - Severity: medium
-- Raised by / Date: review Codex vòng 3 (arbiter3 L-9, `plans/reports/orchestrate-261003-1744/arbiter3.md`) / 03/10/2026
+- Raised by / Date: review Codex vòng 3 (arbiter3 L-9 — báo cáo cục bộ dưới `plans/`, không commit nên không
+  có link cố định) / 03/10/2026
 - Related task: #50 Nhập CSV (phase 4), phát hiện khi lên plan — lỗi có sẵn, không do #50 gây ra
 - Description: IndexedDB có chỉ mục duy nhất `&[customerId+itemId]` (`src/db/db.ts:139`), nhưng Worker không
   kiểm cặp này khi nhận sự kiện `customerPrices` (`worker/src/shop-do.ts`, `acceptEvent` không có luật nào cho
@@ -342,3 +343,88 @@
   ném giữa chừng (vd nhập 500 dòng vấp quota đầy) đều có thể lộ lại.
 - Mitigation: ngoài phạm vi #50 (sửa `outbox.ts` kéo theo delta re-review phase 3+4 đã duyệt). Hướng sửa gợi ý:
   trong nhánh `catch` của `syncTransaction`, `await Promise.allSettled(context.pending)` trước khi `throw` lại.
+
+### ISSUE-022 — Kế hoạch ghi lúc bấm NHẬP tính lại theo sổ mới nhất, có thể khác bản xem trước đã duyệt
+- State: deferred (người dùng chốt 06/10/2026: giữ hành vi hiện tại, chỉ ghi chú)
+- Severity: medium
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 5/6/8) / 06/10/2026
+- Related task: #50 phase 5, `src/db/repositories/nhap-file.ts` (`applyItemImport`/`applyCustomerImport`)
+- Description: `apply*` tính lại `planItemImport`/`planCustomerImport` bên trong `syncTransaction` dựa trên
+  dữ liệu đọc **lúc đó**, không phải bản xem trước người dùng đã thấy trên màn hình. Chỉ ném
+  `ImportChangedError` khi kế hoạch mới có lỗi (vd thành mơ hồ vì 2 bản trùng) — mọi chênh lệch khác (một
+  dòng từ "tạo mới" chuyển thành "trùng, cập nhật" vì giữa lúc xem trước và lúc bấm NHẬP có máy khác vừa
+  thêm/đồng bộ kéo về một món cùng tên) đều lặng lẽ áp theo chính sách đã chọn (`'skip'`/`'update'`) mà
+  không báo. Ca `src/db/__tests__/nhap-file.test.ts` ("thêm 'Trà đá' vào DB sau lúc dựng rows: update thì
+  cập nhật, không tạo bản thứ hai") đã khoá chính hành vi này có chủ đích, để giữ đúng luật "không bao giờ
+  tạo món trùng tên". Cửa sổ đua chỉ hẹp (giữa lúc mở xem trước và lúc bấm NHẬP trên một máy) và không làm
+  mất dữ liệu — chỉ có thể ghi đè giá/thông tin của một món mà người bán chưa từng thấy là trùng.
+- Mitigation: người dùng đã xác nhận giữ nguyên, ưu tiên đúng luật "không tạo món trùng tên" hơn là chặn
+  chặt thêm. Nếu sau này muốn chặn chặt hơn: truyền phân loại lúc xem trước (`line → create | existing.id`)
+  vào `apply*`, ném `ImportChangedError` khi một dòng đổi phân loại dù không phải lỗi — cần sửa lớp ghi đã
+  qua review độc lập, nên sẽ cần review lại phần sửa.
+
+### ISSUE-023 — Xem trước khách trùng không liệt kê dòng và thay đổi, "Cập nhật tất cả" có thể đổi tên khách không ai thấy trước
+- State: deferred
+- Severity: medium
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx` (`CustomerPreview`)
+- Description: `ItemPreview` liệt kê từng dòng trùng kèm thay đổi cụ thể, nhưng `CustomerPreview` chỉ hiện ba
+  con số đếm (tạo/cập nhật/bỏ qua), không có danh sách "tên cũ → tên mới". Khớp theo SĐT thì `changes.name`
+  ghi đè tên khách trong sổ (`src/domain/nhap-file.ts:267`) — người bán bấm "Cập nhật tất cả khách trùng"
+  là đổi tên hàng loạt khách mà không xem được trước dòng nào đổi thành gì.
+- Mitigation: ngoài phạm vi phase 6 đã review GO. Nếu muốn sửa: thêm danh sách dòng trùng kèm tên cũ → tên
+  mới vào `CustomerPreview`, theo đúng khuôn `ItemPreview` đã có.
+
+### ISSUE-024 — Nhập món trùng tên khi sổ có đúng 1 bản đang bán + 1 bản ngừng bán vẫn báo lỗi oan "Sổ đang có 2 món"
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 5) / 06/10/2026
+- Related task: #50 phase 5, `src/domain/nhap-file.ts:208-212` (`planItemImport`)
+- Description: Luật mới (phase 3/8) cho phép sổ có một món đang bán và một món ngừng bán cùng tên. Nhưng
+  `planItemImport` khi thấy 2 bản khớp tên luôn báo lỗi "Sổ đang có 2 món tên X, sửa trong app trước" và
+  khoá cả file (Q4 đã chốt: còn lỗi thì chặn cả lần nhập), kể cả khi chỉ có đúng một bản đang `isActive`.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: khi `matches.length > 1` nhưng chỉ đúng một bản `isActive`,
+  ưu tiên khớp dòng CSV vào bản đang bán đó thay vì báo lỗi.
+
+### ISSUE-025 — Chặn "Bán lại" trùng tên dựa trên snapshot, có khe hở đua nhau trên máy chưa ghép mở nhiều tab
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 8) / 06/10/2026
+- Related task: #50 phase 8, `src/features/items/item-form-page.tsx` (`toggleActive`)
+- Description: Guard đọc `useLiveQuery`/`useItems() ?? []` rồi mới `updateItem`, không kiểm lại trong cùng
+  transaction Dexie lúc ghi. Chú thích nói "Worker là chốt cuối" — đúng với máy **đã ghép**, nhưng máy
+  **chưa ghép** (chỉ có sổ cục bộ, không có Worker) mở hai tab cùng bấm "Bán lại" gần nhau có thể tạo hai
+  món cùng tên đang bán mà không ai chặn.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: thêm `reactivateItem(id)` ở repository, kiểm lại điều kiện
+  trùng tên bên trong `syncTransaction` (các transaction rw của Dexie chạy nối tiếp, không chạy chồng).
+
+### ISSUE-026 — Lỗi Zod hiện nguyên văn kỹ thuật ra giao diện khi bản ghi cũ không còn hợp schema
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 8) / 06/10/2026
+- Related task: #50 phase 8, `src/features/items/item-form-page.tsx` (`toggleActive` qua `useSubmitOnce`)
+- Description: Nếu `ItemSchema.parse`/`CustomerSchema.parse` ném (vd bản ghi cũ không còn hợp schema mới),
+  `useSubmitOnce` hiện thẳng `caught.message` của `ZodError` — là JSON kỹ thuật, không lộ PII hay bí mật
+  nhưng khó đọc với người bán.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: bọc lỗi Zod thành câu tiếng Việt chung ở lớp gọi.
+
+### ISSUE-027 — Danh sách thay đổi món trong xem trước không ghi tên trường, không phân biệt giá bán/giá vốn
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx:70-74` (`ItemPreview`)
+- Description: Dòng thay đổi in giá trị liền nhau (vd "4.000 đ, 3.000 đ") không ghi tên trường, nên không
+  phân biệt được đâu là giá bán, đâu là giá vốn khi cả hai cùng đổi.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: thêm nhãn trường trước mỗi giá trị trong danh sách thay đổi.
+
+### ISSUE-028 — Đổi chip Món/Khách hoặc chọn file thứ hai trước khi file trước đọc xong có thể hiện nhầm xem trước cũ
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx:228-252` (`pickFile`)
+- Description: `pickFile` giữ `kind` trong closure và không huỷ lượt đọc cũ. Đổi chip Món/Khách, hoặc chọn
+  file thứ hai, trong lúc file đầu chưa đọc xong, có thể khiến xem trước của lượt cũ hiện đè lên sau khi nó
+  đọc xong trễ. Lúc ghi vẫn đúng loại theo file vì `applyItemImport`/`applyCustomerImport` được chọn theo
+  `itemPlan`/`customerPlan` đang có, không theo `kind` — chỉ giao diện xem trước bị lệch, không ghi sai.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: huỷ lượt đọc cũ (token/`AbortController`) khi `kind` đổi
+  hoặc chọn file mới trước khi lượt cũ xong.
