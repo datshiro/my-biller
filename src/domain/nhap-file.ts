@@ -64,7 +64,7 @@ function headerIndex(records: CsvRecord[]): Map<string, number> {
 
 function cellAt(row: CsvRecord, index: number | undefined): string {
   if (index === undefined) return ''
-  return (row.cells[index] ?? '').trim()
+  return (row.cells[index] ?? '').trim().normalize('NFC')
 }
 
 function requireColumn(index: Map<string, number>, name: string, fileHint: string): number {
@@ -147,6 +147,9 @@ export function readItemRows(records: CsvRecord[]): { rows: ItemRow[]; errors: R
 }
 
 const INVALID_PHONE_CHARS = /[^0-9\s.\-+()]/
+// SĐT Việt Nam sau 2014 luôn đủ 10 số và bắt đầu bằng 0. Excel ở cột General đổi "0912345678" thành
+// số 912345678, mất chữ số 0 đầu mà không lộ ký tự lạ nào — INVALID_PHONE_CHARS không bắt được.
+const LOOKS_LIKE_MISSING_LEADING_ZERO = /^[1-9][0-9]{8}$/
 
 export function readCustomerRows(records: CsvRecord[]): { rows: CustomerRow[]; errors: RowError[] } {
   const index = headerIndex(records)
@@ -167,7 +170,7 @@ export function readCustomerRows(records: CsvRecord[]): { rows: CustomerRow[]; e
       continue
     }
     const phone = cellAt(record, phoneCol)
-    if (phone && INVALID_PHONE_CHARS.test(phone)) {
+    if (phone && (INVALID_PHONE_CHARS.test(phone) || LOOKS_LIKE_MISSING_LEADING_ZERO.test(phone))) {
       errors.push({
         line,
         message: `Dòng ${line}: SĐT bị Excel đổi thành số, hãy định dạng cột là Văn bản.`,

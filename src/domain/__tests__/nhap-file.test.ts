@@ -125,6 +125,12 @@ describe('readItemRows', () => {
     expect(errors).toEqual([])
     expect(out).toHaveLength(2)
   })
+
+  it('tên dạng tổ hợp NFD (dấu rời) được chuẩn hoá về NFC', () => {
+    const nfd = 'Trà đá'.normalize('NFD')
+    const { rows: out } = readItemRows(rows(`Tên món,Giá bán\n${nfd},3000`))
+    expect(out[0]?.name).toBe('Trà đá'.normalize('NFC'))
+  })
 })
 
 describe('readCustomerRows', () => {
@@ -142,6 +148,17 @@ describe('readCustomerRows', () => {
     expect(scientific.errors[0]?.message).toMatch(/Excel đổi thành số/)
     const letters = readCustomerRows(rows('Tên,Số điện thoại\nA,abc123'))
     expect(letters.errors[0]?.message).toMatch(/Excel đổi thành số/)
+  })
+
+  it('SĐT 9 số không bắt đầu bằng 0 (Excel làm mất số 0 đầu) thì báo định dạng lại cột', () => {
+    const { errors } = readCustomerRows(rows('Tên,Số điện thoại\nA,912345678'))
+    expect(errors[0]?.message).toMatch(/Excel đổi thành số/)
+  })
+
+  it('SĐT 10 số đủ, đúng bắt đầu bằng 0 thì không báo lỗi', () => {
+    const { rows: out, errors } = readCustomerRows(rows('Tên,Số điện thoại\nA,0912345678'))
+    expect(errors).toEqual([])
+    expect(out[0]?.phone).toBe('0912345678')
   })
 
   it('SĐT hợp lệ với khoảng trắng và dấu () - + vẫn đọc được', () => {

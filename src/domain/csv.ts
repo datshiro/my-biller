@@ -7,6 +7,7 @@ export class CsvFileError extends Error {
 }
 
 export const MAX_CSV_BYTES = 1_000_000
+export const MAX_CSV_ROWS = 2_000
 
 export function decodeCsvBytes(bytes: Uint8Array): string {
   if (bytes.byteLength > MAX_CSV_BYTES) {
@@ -70,6 +71,9 @@ export function parseCsv(text: string): CsvRecord[] {
 
   function endRow(): void {
     endCell()
+    if (records.length >= MAX_CSV_ROWS) {
+      throw new CsvFileError(`File có hơn ${MAX_CSV_ROWS} dòng. Chia nhỏ file rồi nhập từng phần.`)
+    }
     records.push({ line, cells })
     cells = []
     rowHasContent = false

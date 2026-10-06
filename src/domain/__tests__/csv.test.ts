@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CsvFileError, decodeCsvBytes, MAX_CSV_BYTES, parseCsv } from '../csv'
+import { CsvFileError, decodeCsvBytes, MAX_CSV_BYTES, MAX_CSV_ROWS, parseCsv } from '../csv'
 
 function utf8(text: string, withBom = false): Uint8Array {
   const bytes = new TextEncoder().encode(text)
@@ -41,6 +41,16 @@ describe('parseCsv', () => {
   it('chọn `,` khi tiêu đề có nhiều `,` hơn `;` (hoặc bằng nhau)', () => {
     const rows = parseCsv('Nhóm,Tên món,Đơn vị\nĐồ uống,Trà đá,Ly')
     expect(rows[0]!.cells).toEqual(['Nhóm', 'Tên món', 'Đơn vị'])
+  })
+
+  it('quá MAX_CSV_ROWS dòng (kể cả tiêu đề) thì ném CsvFileError', () => {
+    const text = 'Tên\n' + Array.from({ length: MAX_CSV_ROWS }, (_, i) => `Món ${i}`).join('\n')
+    expect(() => parseCsv(text)).toThrow(CsvFileError)
+  })
+
+  it('đúng MAX_CSV_ROWS dòng (kể cả tiêu đề) thì không ném', () => {
+    const text = 'Tên\n' + Array.from({ length: MAX_CSV_ROWS - 1 }, (_, i) => `Món ${i}`).join('\n')
+    expect(parseCsv(text)).toHaveLength(MAX_CSV_ROWS)
   })
 
   it('đếm dấu phân cách ngoài ngoặc kép, không tính dấu bên trong ô', () => {
