@@ -125,6 +125,29 @@ describe('resolveItemNameTaken — nối món (operation: create)', () => {
     expect(afterIds).toEqual(remainingIds)
   })
 
+  it('nối món giữ nguyên phiếu thu của đơn bán offline', async () => {
+    const existing = await seedExistingItem('Bánh flan', 15_000)
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
+    const dRow = (await db.items.get(dId))!
+    await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: dId, name: dRow.name, unit: dRow.unit, unitPrice: dRow.unitPrice, costPrice: dRow.costPrice, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { amount: 16_000, method: 'cash', note: '' },
+    })
+    const [dCreate] = await outboxRowsOf('items', dRow.gid)
+    const paymentsBefore = await db.payments.toArray()
+    expect(paymentsBefore).toHaveLength(1)
+
+    expect(await resolveItemNameTaken(dCreate!, existing.gid, 'Bánh flan', leader)).toBe('resolved')
+
+    expect(await db.payments.toArray()).toEqual(paymentsBefore)
+  })
+
   it('D đã bị xoá trước khi bị từ chối: đơn không liên quan vẫn còn, đẩy tiếp được', async () => {
     const existing = await seedExistingItem('Bánh flan', 15_000)
     const customerId = await createCustomer({ name: 'Khách', phone: '', address: '', note: '' })
@@ -262,6 +285,99 @@ describe('resolveItemNameTaken — nối món (operation: create)', () => {
     // — nghĩa là KHÔNG rơi vào nhánh xung đột (resyncRequired không bật lên vì dòng này).
     const sync = (await db.deviceState.get('sync')) as { resyncRequired?: boolean } | undefined
     expect(sync?.resyncRequired ?? false).toBe(false)
+  })
+})
+
+describe('resolveItemNameTaken — món có sẵn đã bị xoá trên máy này', () => {
+  /** E về máy, D trùng tên bán offline, người bán xoá E trước khi D kịp đẩy: lần xoá E nằm sau `create D`. */
+  async function sellDThenDeleteE() {
+    const existing = await seedExistingItem('Bánh flan', 15_000)
+    const customerId = await createCustomer({ name: 'Khách', phone: '', address: '', note: '' })
+    await savePriceBook(customerId, [{ itemId: existing.id, unitPrice: 13_000 }])
+    const ePrice = (await db.customerPrices.where('itemId').equals(existing.id).first())!
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
+    const dRow = (await db.items.get(dId))!
+    const order = await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: dId, name: dRow.name, unit: dRow.unit, unitPrice: dRow.unitPrice, costPrice: dRow.costPrice, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { amount: 16_000, method: 'cash', note: '' },
+    })
+    await deleteItem(existing.id)
+    const deleteTxId = (await outboxRowsOf('items', existing.gid)).find((row) => row.operation === 'delete')!.txId
+    const [dCreate] = await outboxRowsOf('items', dRow.gid)
+    return { existing, ePrice, dRow, order, deleteTxId, dCreate: dCreate! }
+  }
+
+  it('khôi phục E cùng giá riêng của nó rồi nối D vào, không hoãn mãi', async () => {
+    const { existing, ePrice, order, deleteTxId, dCreate } = await sellDThenDeleteE()
+    const paymentEventsBefore = (await db.outbox.toArray()).filter((row) => row.table === 'payments')
+
+    const outcome = await resolveItemNameTaken(dCreate, existing.gid, 'Bánh flan', leader)
+    expect(outcome).toBe('resolved')
+
+    expect((await db.items.get(existing.id))?.gid).toBe(existing.gid)
+    expect(await db.items.where('name').equals('Bánh flan').count()).toBe(1)
+    expect(await db.customerPrices.get(ePrice.id!)).toEqual(ePrice)
+    const line = (await db.orderLines.where('orderId').equals(order.id).first())!
+    expect(line.itemId).toBe(existing.id)
+    expect(line.unitPrice).toBe(16_000)
+    expect((await db.outbox.toArray()).filter((row) => row.txId === deleteTxId)).toHaveLength(0)
+    expect((await db.outbox.toArray()).filter((row) => row.table === 'payments')).toEqual(paymentEventsBefore)
+
+    const notice = (await db.deviceState.get('notice')) as { message: string } | undefined
+    expect(notice?.message).toContain('được khôi phục')
+    const sync = (await db.deviceState.get('sync')) as { resyncRequired?: boolean } | undefined
+    expect(sync?.resyncRequired ?? false).toBe(false)
+  })
+
+  it('khôi phục vấp xung đột giữa chừng: huỷ cả giao dịch, trả deferred, DB và outbox không đổi một byte', async () => {
+    const { existing, ePrice, dCreate } = await sellDThenDeleteE()
+    // Một giá riêng mang đúng gid của giá đã xoá xuất hiện lại (không qua outbox) → restoreRow của nó trả false
+    // SAU khi dòng món E (mới hơn) đã được khôi phục trong cùng giao dịch.
+    await db.customerPrices.add({ ...ePrice, id: undefined, itemId: 999_999 })
+    const outboxBefore = await db.outbox.toArray()
+    const itemsBefore = await db.items.toArray()
+    const pricesBefore = await db.customerPrices.toArray()
+    const linesBefore = await db.orderLines.toArray()
+
+    const outcome = await resolveItemNameTaken(dCreate, existing.gid, 'Bánh flan', leader)
+    expect(outcome).toBe('deferred')
+    expect(await db.outbox.toArray()).toEqual(outboxBefore)
+    expect(await db.items.toArray()).toEqual(itemsBefore)
+    expect(await db.customerPrices.toArray()).toEqual(pricesBefore)
+    expect(await db.orderLines.toArray()).toEqual(linesBefore)
+  })
+
+  it('đổi tên bị chặn khi E đã bị xoá trên máy: vẫn hoàn lại món đó, không hoãn, lần xoá E giữ nguyên để đẩy', async () => {
+    const existing = await seedExistingItem('Bánh flan', 15_000)
+    const mId = await createItem({ name: 'Bánh bông lan', groupId: null, unit: 'Ly', unitPrice: 20_000, costPrice: null, isActive: 1 })
+    await updateItem(mId, { name: 'Bánh flan' })
+    const renamePut = (await outboxRowsOf('items', (await db.items.get(mId))!.gid)).find((row) => row.operation === 'put')!
+    await deleteItem(existing.id)
+
+    const outcome = await resolveItemNameTaken(renamePut, existing.gid, 'Bánh flan', leader)
+    expect(outcome).toBe('resolved')
+    expect((await db.items.get(mId))!.name).toBe('Bánh bông lan')
+    expect(await db.items.get(existing.id)).toBeUndefined()
+    expect((await outboxRowsOf('items', existing.gid)).map((row) => row.operation)).toEqual(['delete'])
+  })
+
+  it('sự kiện bị từ chối không phải món, hoặc existingGid trùng chính nó: trả deferred, không đụng gì', async () => {
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
+    const dRow = (await db.items.get(dId))!
+    const [dCreate] = await outboxRowsOf('items', dRow.gid)
+    const outboxBefore = await db.outbox.toArray()
+    const itemsBefore = await db.items.toArray()
+
+    expect(await resolveItemNameTaken(dCreate!, dRow.gid, 'Bánh flan', leader)).toBe('deferred')
+    expect(await resolveItemNameTaken({ ...dCreate!, table: 'customers' }, crypto.randomUUID(), 'Bánh flan', leader)).toBe('deferred')
+    expect(await db.outbox.toArray()).toEqual(outboxBefore)
+    expect(await db.items.toArray()).toEqual(itemsBefore)
   })
 })
 

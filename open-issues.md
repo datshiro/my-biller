@@ -301,7 +301,7 @@
   thêm ca test đối xứng cho cả hai thứ tự dòng. Ngoài phạm vi #50 cho tới khi người dùng xác nhận.
 
 ### ISSUE-019 — resolveItemNameTaken không tự kiểm existingGid khác entityKey của chính sự kiện bị từ chối
-- State: deferred
+- State: resolved
 - Severity: low
 - Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
 - Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` (hàm `resolveItemNameTaken`)
@@ -312,10 +312,12 @@
   = id vừa xoá, tạo dòng đơn mồ côi.
 - Mitigation: ngoài phạm vi #50 vì điều kiện hiện không xảy ra được. Nếu muốn phòng thủ: thêm guard
   `if (existingGid === rejected.entityKey) return 'deferred'` đầu `resolveItemNameTaken`, kèm ca test.
+- Resolution (08/10/2026): `resolveItemNameTaken` trả `'deferred'` ngay khi `existingGid === rejected.entityKey`
+  hoặc bảng bị từ chối không phải `items`, trước khi mở giao dịch.
 
 ### ISSUE-020 — Một dòng item-name-taken bị 'deferred' vĩnh viễn thì máy kẹt ghi mãi, không có lối thoát UI
-- State: deferred
-- Severity: low
+- State: resolved
+- Severity: medium
 - Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
 - Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` + `src/db/sync/pusher.ts` (`pushNext`)
 - Description: Nếu phản hồi `item-name-taken` của Worker thiếu `existingGid`/`existingName` (lệch phiên bản
@@ -326,6 +328,15 @@
   khỏi trạng thái "1 thao tác chờ" treo mãi nếu nó vẫn xảy ra do lý do khác (ví dụ Worker có bug khác).
 - Mitigation: ngoài phạm vi #50. Nếu cần: thêm giới hạn số lần thử `'deferred'` trước khi đổi sang báo lỗi rõ
   ràng + cho người bán chọn "bỏ qua dòng này" (mất đồng bộ của riêng dòng đó, không mất đơn hàng).
+- Cập nhật (08/10/2026, review độc lập trước merge PR #68): mô tả "không xảy ra qua đường bình thường" là sai. Người
+  bán tự gây ra được: máy kéo về món E của máy khác trước khi kịp đẩy `create D` trùng tên, rồi xoá E (E chưa bán
+  trên máy này nên được xoá). Sổ chung vẫn từ chối D vì E còn đang bán ở đó, E không còn trên máy, lượt kéo không gửi
+  lại E → hoãn mãi. Ngoài ra nhánh `put` (đổi tên / bán lại bị chặn) từng đòi E có trên máy dù không dùng tới.
+- Resolution (08/10/2026): nhánh `create` thấy E vắng mà outbox còn lần xoá E chưa đẩy thì hoàn lại trọn giao dịch
+  xoá đó (chỉ khi nó chỉ gồm xoá E và giá riêng của E) bằng `restoreRow`, rồi nối D vào E như thường; câu báo nói E
+  được khôi phục. `restoreRow` gặp xung đột thì huỷ cả giao dịch và hoãn như cũ. Nhánh `put` không còn đòi E. Ca
+  Vitest trong `src/db/sync/__tests__/item-name-taken.test.ts`. Phần "không có nút thoát trên UI" cho các nguyên nhân
+  hoãn khác (Worker lệch phiên bản, bug) vẫn chưa có.
 
 ### ISSUE-021 — syncTransaction để lại promise outbox mồ côi khi callback ném sau vài write thành công
 - State: deferred
@@ -428,3 +439,14 @@
   `itemPlan`/`customerPlan` đang có, không theo `kind` — chỉ giao diện xem trước bị lệch, không ghi sai.
 - Mitigation: ngoài phạm vi #50. Nếu muốn sửa: huỷ lượt đọc cũ (token/`AbortController`) khi `kind` đổi
   hoặc chọn file mới trước khi lượt cũ xong.
+
+### ISSUE-029 — Máy ngừng bán món E (chưa đẩy) rồi bị nối món trùng tên vào E: sổ chung mất món đang bán
+- State: deferred
+- Severity: medium
+- Raised by / Date: kongming (tư vấn sửa ISSUE-020, ak:vibe #50) / 08/10/2026
+- Related task: #50, `src/db/sync/item-name-taken.ts` (`resolveCreate`)
+- Description: Cùng kịch bản ISSUE-020 nhưng người bán bấm "Ngừng bán" E thay vì xoá. E còn trên máy (`isActive: 0`)
+  nên `resolveCreate` nối D vào E, rồi sự kiện `put E isActive 0` đang chờ được đẩy lên: mọi máy mất món "Trà" đang
+  bán, đơn của D treo vào món ngừng bán. Không mất đơn, không kẹt hàng đợi, nhưng sổ chung ra kết quả trái ý người bán.
+- Mitigation: ngoài phạm vi #50. Hướng sửa cùng khuôn ISSUE-020: trước khi nối, hoàn lại giao dịch `put` đang chờ
+  của E có `before.isActive === 1 && after.isActive === 0`, kèm câu báo.

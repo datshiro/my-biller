@@ -39,6 +39,7 @@ async function resolveCreate(
   rejected: OutboxRow,
   existing: ItemRow,
   existingName: string,
+  restoredDeleted: boolean,
 ): Promise<void> {
   const dGid = rejected.entityKey
   const dLocalId = await resolveDLocalId(dGid)
@@ -150,7 +151,37 @@ async function resolveCreate(
       `Món này đã được đổi tên thành “${tenCuoi}” trên máy nhưng vẫn được gộp vào “${existingName}” vì lúc tạo nó trùng tên.`,
     )
   }
+  if (restoredDeleted) {
+    parts.push(`Món “${existingName}” đã bị xoá trên máy này nên được khôi phục lại để giữ các đơn đã bán.`)
+  }
   await notice(parts.join(' '))
+}
+
+class RestoreConflict extends Error {}
+
+/** E đã về máy rồi bị người bán xoá (lần xoá còn nằm trong outbox, sau `create D`). Hoàn lại cả lần xoá đó
+ * để có chỗ nối D vào; nếu không thì `create D` hoãn mãi vì lượt kéo không bao giờ gửi lại E. */
+async function restoreLocallyDeleted(transaction: Transaction, existingGid: string): Promise<ItemRow | undefined> {
+  const outboxNow = (await db.outbox.toArray()) as OutboxRow[]
+  const deletion = outboxNow.find(
+    (row) => row.table === 'items' && row.operation === 'delete' && row.entityKey === existingGid,
+  )
+  if (!deletion) return undefined
+  const txRows = outboxNow.filter((row) => row.txId === deletion.txId)
+  const onlyDeletesOfE = txRows.every(
+    (row) =>
+      row.operation === 'delete' &&
+      (row === deletion || (row.table === 'customerPrices' && row.refs.itemId === existingGid)),
+  )
+  if (!onlyDeletesOfE) return undefined
+
+  for (const row of [...txRows].sort((a, b) => (b.id ?? 0) - (a.id ?? 0))) {
+    if (!(await restoreRow(transaction, row))) throw new RestoreConflict()
+  }
+  await db.outbox.bulkDelete(txRows.map((row) => row.id).filter((id): id is number => id !== undefined))
+  const restored = (await db.items.where('gid').equals(existingGid).first()) as ItemRow | undefined
+  if (!restored) throw new Error(`Khôi phục món ${existingGid} không thành công`)
+  return restored
 }
 
 async function resolvePut(transaction: Transaction, rejected: OutboxRow, existingName: string): Promise<void> {
@@ -192,21 +223,28 @@ export async function resolveItemNameTaken(
   existingName: string,
   leader: LeaderToken,
 ): Promise<'resolved' | 'deferred'> {
+  if (rejected.table !== 'items' || existingGid === rejected.entityKey) return 'deferred'
   const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
-  return db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
-    await assertLeadership(db, leader)
-    verbatimWrites.add(transaction)
+  try {
+    return await db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
+      await assertLeadership(db, leader)
+      verbatimWrites.add(transaction)
 
-    const existing = (await db.items.where('gid').equals(existingGid).first()) as ItemRow | undefined
-    if (!existing) return 'deferred'
+      if (rejected.operation === 'create') {
+        let existing = (await db.items.where('gid').equals(existingGid).first()) as ItemRow | undefined
+        const restoredDeleted = !existing
+        existing ??= await restoreLocallyDeleted(transaction, existingGid)
+        if (!existing) return 'deferred'
+        await resolveCreate(rejected, existing, existingName, restoredDeleted)
+      } else {
+        await resolvePut(transaction, rejected, existingName)
+      }
 
-    if (rejected.operation === 'create') {
-      await resolveCreate(rejected, existing, existingName)
-    } else {
-      await resolvePut(transaction, rejected, existingName)
-    }
-
-    await assertLeadership(db, leader)
-    return 'resolved'
-  })
+      await assertLeadership(db, leader)
+      return 'resolved'
+    })
+  } catch (error) {
+    if (error instanceof RestoreConflict) return 'deferred'
+    throw error
+  }
 }

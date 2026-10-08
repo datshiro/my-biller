@@ -1024,7 +1024,7 @@ export class ShopDO extends DurableObject<Env> {
     const claims = !stored || stored.isActive !== 1 || itemNameKey(String(stored.name)) !== key
     if (!claims) return null
     // `ORDER BY updatedSeq` để kết quả tất định: sổ có sẵn ≥2 món trùng tên từ trước thì luôn nối
-    // vào món cũ nhất, không tuỳ ý SQLite trả hàng theo thứ tự nào.
+    // vào món có lần ghi gần nhất cũ nhất, không tuỳ ý SQLite trả hàng theo thứ tự nào.
     for (const row of this.sql.exec<{ entityKey: string; payload: string }>(
       "SELECT entityKey, payload FROM ledger WHERE tableName = 'items' AND entityKey != ? ORDER BY updatedSeq ASC",
       event.entityKey,
