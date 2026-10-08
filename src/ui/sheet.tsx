@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useBackDismiss } from './back-dismiss'
 
 /**
  * Tấm trượt từ đáy. Dùng `dvh` chứ không `vh`: bàn phím số Android đẩy viewport, `vh` sẽ để nút
@@ -16,6 +17,7 @@ export function Sheet({
   footer?: ReactNode
 }) {
   const panel = useRef<HTMLDivElement>(null)
+  useBackDismiss(onClose)
 
   // Chỉ lấy focus đúng lúc mở. Gộp chung với listener Escape thì mỗi lần màn ngoài vẽ lại,
   // `onClose` là hàm mới nên effect chạy lại và giật focus ra khỏi ô người dùng đang gõ dở.

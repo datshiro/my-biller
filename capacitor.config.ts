@@ -6,6 +6,9 @@ const config: CapacitorConfig = {
   appId: 'dev.datshiro.mybiller',
   appName: 'Biller',
   webDir: 'dist',
+  // Plugin App nuốt Back khi chưa có listener; tắt mặc định để màn ngoài router (chặn dữ liệu, màn lỗi)
+  // giữ Back của Android. `AndroidBackButton` bật lại trong lúc nó mount.
+  plugins: { App: { disableBackButtonHandler: true } },
 }
 
 export default config

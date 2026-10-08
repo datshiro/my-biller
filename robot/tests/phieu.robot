@@ -821,6 +821,23 @@ In tem: trên web không có nút IN TEM, khổ tem lưu được và còn sau k
     ${rộng}=    Đọc Ô    Rộng tem (mm)
     Should Be Equal    ${rộng}    50
 
+APK: Back từ phiếu về chi tiết đơn rồi về danh sách
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /don
+    Chờ Thấy Chữ    Đơn hàng
+    Mở Dòng Đơn Đầu
+    ${id}=    Id Đơn Đang Mở
+    Bấm Nút    XEM PHIẾU
+    Wait For Condition    Url    contains    /phieu
+    Chờ Thấy Chữ    PHIẾU BÁN HÀNG
+
+    Bấm Back Android
+    Get Url    ==    ${BASE_URL}/don/${id}
+    Bấm Back Android
+    Get Url    ==    ${BASE_URL}/don
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back từ phiếu thu app thay vì lùi về chi tiết đơn.
+
 *** Keywords ***
 Chờ Tem Xem Trước Dựng Xong
     [Documentation]    Canvas tem xem trước dựng lại sau mỗi lần đổi cấu hình (có trễ ngắn để khỏi dựng theo từng phím

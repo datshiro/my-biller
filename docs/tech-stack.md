@@ -89,7 +89,9 @@ worker/        Worker routes + ShopDO SQLite
 `src/domain/escpos` dựng bitmap/lệnh ESC-POS thuần (không phụ thuộc React/DOM); `src/features/printer`
 lắp ráp job in và chọn đường gửi theo nền tảng. Web/PWA Android gửi qua app **RawBT** (`rawbt:` URL chứa
 PNG 1-bit); vỏ **Capacitor Android** (thư mục `android/`, ngoài phạm vi build web) nối thẳng TCP cổng 9100
-tới máy in qua plugin cục bộ `PrinterSocket`. Chi tiết dựng/ký APK ở
+tới máy in qua plugin cục bộ `PrinterSocket`, và nhận phím Back qua `@capacitor/app` (quy tắc ở
+`src/app/back-button.ts`). Handler Back của plugin tắt mặc định (`disableBackButtonHandler`) và chỉ bật
+khi router đang mount, nên màn chặn dữ liệu và màn lỗi vẫn giữ Back của Android. Chi tiết dựng/ký APK ở
 [`deploy.md`](./deploy.md#dựng-apk-android-capacitor).
 
 **7. Giá riêng của khách — bảng mềm, hai tầng, không có "giá sỉ chung".**
