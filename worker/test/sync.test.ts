@@ -1027,6 +1027,17 @@ describe('tên món trùng', () => {
     expect(response.status).toBe(201)
   })
 
+  it('máy không khai báo caps đổi tên sang tên món đang bán khác vẫn được nhận', async () => {
+    const aGid = crypto.randomUUID()
+    const bGid = crypto.randomUUID()
+    expect((await push(event('items', aGid, named(aGid, 'Trà đá'), { groupId: null }))).status).toBe(201)
+    const before = named(bGid, 'Cà phê')
+    expect((await push(event('items', bGid, before, { groupId: null }))).status).toBe(201)
+
+    const response = await push(event('items', bGid, { ...before, name: 'Trà đá' }, { groupId: null }, 'put', before))
+    expect(response.status).toBe(201)
+  })
+
   it('/seed nạp hai món đang bán cùng tên trong cùng ảnh sổ vẫn được nhận', async () => {
     const created = await SELF.fetch('https://example.com/shop', {
       method: 'POST',

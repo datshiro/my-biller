@@ -287,6 +287,23 @@ Bán lại món trùng tên với một món đang bán thì bị chặn và kh�
     ${trà_đá}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Trà đá')
     Should Be Equal As Integers    ${trà_đá}[isActive]    1
 
+Bán lại món ngừng bán chỉ trùng tên với món ngừng bán khác thì được
+    [Documentation]    Luật chặn chỉ xét món đang bán. Hai món cũ cùng tên đều đang ngừng bán thì bán lại
+    ...    một món được, và món kia vẫn ngừng bán.
+    ${id_cũ}=    Chèn Món Cũ Trùng Tên    Bánh bao
+    ${id}=    Chèn Món Cũ Trùng Tên    Bánh bao
+    Mở Màn    /them/mat-hang/${id}
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Bấm Nút    Bán lại mặt hàng này
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    6
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id})
+    Should Be Equal As Integers    ${món}[isActive]    1
+    ${món_cũ}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id_cũ})
+    Should Be Equal As Integers    ${món_cũ}[isActive]    0    Món cũ cùng tên không được bật theo.
+
 
 *** Keywords ***
 Chèn Món Cũ Trùng Tên

@@ -269,3 +269,41 @@ describe('applyCustomerImport', () => {
     expect(row.note).toBe('VIP')
   })
 })
+
+describe('applyCustomerImport — máy đã ghép và chính sách', () => {
+  it('khách mới và khách cập nhật cùng một txId, outbox chỉ có sự kiện của bảng khách', async () => {
+    await pairDevice()
+    await (await import('../repositories/customers')).createCustomer({ name: 'Anh Hùng', phone: '0912 345 678', address: '', note: '' })
+    await db.outbox.clear()
+
+    const result = await applyCustomerImport(
+      [
+        customerRow({ line: 2, name: 'Chị Lan', phone: '0977111222', address: '8 Nguyễn Huệ' }),
+        customerRow({ line: 3, name: 'Anh Hùng', phone: '0912345678', address: '5 Hai Bà Trưng' }),
+      ],
+      'update',
+    )
+    expect(result).toMatchObject({ created: 1, updated: 1, queued: true })
+
+    const events = (await db.outbox.orderBy('id').toArray()) as OutboxRow[]
+    expect(events).toHaveLength(2)
+    expect(events.every((event) => event.table === 'customers')).toBe(true)
+    expect(new Set(events.map((event) => event.txId)).size).toBe(1)
+  })
+
+  it("'skip' với khách trùng SĐT: không đổi bản ghi nào, outbox rỗng", async () => {
+    await pairDevice()
+    await (await import('../repositories/customers')).createCustomer({ name: 'Anh Hùng', phone: '0912 345 678', address: '', note: 'Khách quen' })
+    await db.outbox.clear()
+    const before = await db.customers.toArray()
+
+    const result = await applyCustomerImport(
+      [customerRow({ name: 'Anh Hùng Mới', phone: '0912345678', address: '5 Lê Lợi' })],
+      'skip',
+    )
+
+    expect(result).toMatchObject({ created: 0, updated: 0, skipped: 1 })
+    expect(await db.customers.toArray()).toEqual(before)
+    expect(await db.outbox.count()).toBe(0)
+  })
+})
