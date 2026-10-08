@@ -472,3 +472,23 @@
   của D đã trỏ sang E thì bị từ chối vì còn được dùng, và `rollbackRejectedTail` cuộn các thay đổi phía sau.
 - Mitigation: ngoài phạm vi #50, rất khó xảy ra. Sửa: hoãn khi outbox có hơn một lần xoá E, kèm ca Vitest.
 
+### ISSUE-032 — Phím Back trên APK đóng sheet thu tiền/thu nợ đang lưu
+- State: deferred
+- Severity: low
+- Raised by / Date: code-reviewer (review trước PR #70, #65) / 09/10/2026
+- Related task: #65, `src/ui/sheet.tsx` (`useBackDismiss(onClose)`)
+- Description: `Sheet` đăng ký Back như nút ✕, kể cả khi `collect-debt-sheet` / `payment-sheet` đang ghi. Lệnh ghi vẫn
+  chạy xong nên không mất dữ liệu, nhưng người bán không thấy kết quả. Trên điện thoại Back dễ bấm nhầm hơn ✕.
+- Mitigation: hành vi giống nút ✕ hiện nay; chắn Back ở form đã chốt là ngoài phạm vi #65. Nếu làm: cho `Sheet` nhận cờ
+  đang lưu và nuốt Back như `ConfirmDialog` khi `pending`, kèm ca Vitest và Robot APK giả.
+
+### ISSUE-033 — Hộp thoại mount cùng commit với Sheet cha thì Back đóng nhầm Sheet
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming / code-reviewer (PR #70, #65) / 09/10/2026
+- Related task: #65, `src/ui/back-dismiss.ts`
+- Description: React chạy effect của con trước cha, nên lớp của Sheet được đẩy sau và nằm trên hộp thoại con. Hiện
+  không có chỗ nào mount hai lớp trong cùng một commit (mọi hộp mở bằng một cú chạm sau); ca "giới hạn" trong
+  `src/ui/__tests__/back-dismiss.test.tsx` báo khi điều này đổi.
+- Mitigation: nếu cần, xếp lớp theo thứ tự mount trong DOM thay vì thứ tự effect.
+
