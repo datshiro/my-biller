@@ -28,6 +28,14 @@ export class UnpairUncertainError extends Error {
 
 const REQUEST_TIMEOUT_MS = 15_000
 
+// WebView cũ chưa có `AbortSignal.timeout`; lý do huỷ vẫn là `TimeoutError` để `isTimeout` nhận ra.
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms)
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(new DOMException('signal timed out', 'TimeoutError')), ms)
+  return controller.signal
+}
+
 const isRevoked = (caught: unknown) => caught instanceof SyncApiError && caught.status === 401
 
 export const isTimeout = (caught: unknown) =>
@@ -68,7 +76,7 @@ export async function unpairThisDevice(): Promise<{ droppedOperations: number }>
 
   const leave = () => leaveSharedLedger({ kind: 'connected', token: connection.token })
   const listDevices = () =>
-    listShopDevices(connection, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+    listShopDevices(connection, { signal: timeoutSignal(REQUEST_TIMEOUT_MS) })
 
   let listed: Awaited<ReturnType<typeof listShopDevices>>
   try {
@@ -85,7 +93,7 @@ export async function unpairThisDevice(): Promise<{ droppedOperations: number }>
 
   try {
     await revokeShopDevice(connection, current.id, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: timeoutSignal(REQUEST_TIMEOUT_MS),
     })
   } catch (caught) {
     if (isRevoked(caught)) return leave()

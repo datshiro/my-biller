@@ -264,3 +264,33 @@ Món Phải Có Trên Máy
     ${items}=    Đọc Bảng    items    ${page}
     ${found}=    Evaluate    [row for row in $items if row['name'] == $tên_món]
     Length Should Be    ${found}    1    Món chưa có trong sổ của máy.
+
+Bản Sao Máy Phải Đuổi Kịp Sổ Chung
+    [Documentation]    Đúng điều kiện nút huỷ ghép kiểm: `sync.lastSeq` của máy ≥ `latestSeq` mà `/devices` trả về.
+    ...    Hàng đợi rỗng chưa đủ — ngay sau khi đẩy, `lastSeq` còn tụt tới lượt kéo kế tiếp. Request chạy trong
+    ...    trang bằng token trong IndexedDB và chỉ trả hai con số, nên token không vào log.
+    [Arguments]    ${page}
+    Switch Page    ${page}    context=ALL    browser=ALL
+    ${seq}=    Evaluate JavaScript    ${None}
+    ...    async () => {
+    ...        const db = await new Promise((resolve, reject) => {
+    ...            const request = indexedDB.open('my-biller')
+    ...            request.onsuccess = () => resolve(request.result)
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...        const read = (key) => new Promise((resolve, reject) => {
+    ...            const get = db.transaction('deviceState').objectStore('deviceState').get(key)
+    ...            get.onsuccess = () => resolve(get.result)
+    ...            get.onerror = () => reject(get.error)
+    ...        })
+    ...        const [connection, sync] = [await read('connection'), await read('sync')]
+    ...        db.close()
+    ...        if (!connection) throw new Error('Máy chưa ghép.')
+    ...        const response = await fetch(`${connection.syncUrl}/shop/${connection.shopId}/devices`, {
+    ...            headers: { authorization: `Bearer ${connection.token}` },
+    ...        })
+    ...        const body = await response.json()
+    ...        return { lastSeq: sync?.lastSeq ?? 0, latestSeq: body.latestSeq ?? 0 }
+    ...    }
+    Should Be True    ${seq}[lastSeq] >= ${seq}[latestSeq]
+    ...    Bản sao máy còn tụt sau sổ chung (lastSeq ${seq}[lastSeq] < latestSeq ${seq}[latestSeq]).

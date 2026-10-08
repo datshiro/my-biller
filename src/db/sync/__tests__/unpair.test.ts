@@ -493,4 +493,24 @@ describe('huỷ ghép máy này', () => {
     expect(listShopDevices).toHaveBeenCalledTimes(1)
     expect(await getDeviceConnection()).toBeDefined()
   })
+
+  it('môi trường thiếu AbortSignal.timeout vẫn huỷ ghép thành công và gắn tín hiệu huỷ cho mỗi lệnh gọi', async () => {
+    const connection = await getDeviceConnection()
+    const original = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout')
+    Reflect.deleteProperty(AbortSignal, 'timeout')
+
+    try {
+      await expect(unpairThisDevice()).resolves.toEqual({ droppedOperations: 0 })
+
+      expect(listShopDevices).toHaveBeenCalledWith(connection, {
+        signal: expect.any(AbortSignal),
+      })
+      expect(revokeShopDevice).toHaveBeenCalledWith(connection, 'srv-a', {
+        signal: expect.any(AbortSignal),
+      })
+      expect(await getDeviceConnection()).toBeUndefined()
+    } finally {
+      if (original) Object.defineProperty(AbortSignal, 'timeout', original)
+    }
+  })
 })

@@ -9,12 +9,15 @@ import { db } from '@/db/db'
 import {
   beginDevicePairing,
   completeDevicePairing,
+  getDeviceSyncState,
   leaveSharedLedger,
   markDeviceRevoked,
   saveDeviceIdentity,
   savePairedDevice,
 } from '@/db/repositories/device-state'
 import { createItem } from '@/db/repositories/items'
+import { createOrder } from '@/db/repositories/orders'
+import { SyncApiError } from '@/db/sync/client'
 import { SYNC_WAKE_EVENT } from '@/db/sync/runner'
 import { UnpairBlockedError, UnpairUncertainError } from '@/db/sync/unpair'
 import { installTestDevice, testGid } from '@/test-fixtures'
@@ -24,11 +27,18 @@ const TOKEN = 't'.repeat(43)
 
 const syncMocks = vi.hoisted(() => ({
   listShopDevices: vi.fn(),
+  pairDevice: vi.fn(),
+  revokeShopDevice: vi.fn(),
 }))
 
 vi.mock('@/db/sync/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/db/sync/client')>()
-  return { ...original, listShopDevices: syncMocks.listShopDevices }
+  return {
+    ...original,
+    listShopDevices: syncMocks.listShopDevices,
+    pairDevice: syncMocks.pairDevice,
+    revokeShopDevice: syncMocks.revokeShopDevice,
+  }
 })
 
 const unpairMocks = vi.hoisted(() => ({
@@ -55,6 +65,8 @@ const REVOKED_TITLE = 'Dùng máy này như máy chưa ghép?'
 const REVOKED_BODY =
   'Sổ trên máy được giữ nguyên làm sổ cục bộ, dừng ở lúc máy bị thu hồi, và không lên sổ chung nữa. Muốn quay lại sổ chung thì đừng bấm nút này — ghép lại ngay bằng mã mới; bấm rồi thì phải sao lưu và xoá sổ trên máy trước khi ghép lại.'
 const REVOKED_PENDING_SUFFIX = ' Còn 2 thay đổi chưa từng lên sổ chung; chúng chỉ còn trên máy này.'
+const NETWORK_TEXT = 'Chưa huỷ ghép được vì mất mạng. Kết nối Internet rồi thử lại.'
+const RESYNC_TEXT = 'Máy đang kéo lại sổ chung. Chờ xong rồi huỷ ghép.'
 
 const item = (name: string) => ({
   name,
@@ -64,6 +76,38 @@ const item = (name: string) => ({
   costPrice: null,
   isActive: 1 as const,
 })
+
+function recordSale() {
+  return createOrder({
+    customerId: null,
+    customerName: 'Khách lẻ',
+    lines: [{ itemId: null, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: null, qty: 2 }],
+    discount: 0,
+    surcharge: 0,
+    soldAt: Date.now(),
+    note: '',
+    payment: { amount: 6_000, method: 'cash', note: '' },
+  })
+}
+
+async function ledgerSnapshot() {
+  const [items, orders, orderLines, payments] = await Promise.all([
+    db.items.toArray(),
+    db.orders.toArray(),
+    db.orderLines.toArray(),
+    db.payments.toArray(),
+  ])
+  return {
+    counts: {
+      items: items.length,
+      orders: orders.length,
+      orderLines: orderLines.length,
+      payments: payments.length,
+    },
+    paymentAmountSum: payments.reduce((total, payment) => total + payment.amount, 0),
+    orderTotalSum: orders.reduce((total, order) => total + order.total, 0),
+  }
+}
 
 /** Dựng máy đã ghép đúng khuôn outbox.test.ts: identity → pairing → savePairedDevice → completeDevicePairing. */
 async function pairThisDevice() {
@@ -95,6 +139,8 @@ beforeEach(async () => {
       latestSeq: 0,
     })
   unpairMocks.unpairThisDevice.mockReset()
+  syncMocks.pairDevice.mockReset()
+  syncMocks.revokeShopDevice.mockReset().mockResolvedValue({ revoked: true, deviceId: DEVICE_ID })
 })
 
 afterEach(cleanup)
@@ -233,5 +279,104 @@ describe('huỷ ghép máy này ở màn Máy bán hàng', () => {
 
     expect(await screen.findByLabelText('Mã ghép máy')).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Dùng máy này như máy chưa ghép' })).toBeNull()
+  })
+
+  it('đang huỷ ghép thì nút tạo mã ghép giữ nguyên chữ và bị khoá', async () => {
+    await pairThisDevice()
+    let finish: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    unpairMocks.unpairThisDevice.mockImplementation(async () => {
+      await gate
+      await leaveSharedLedger({ kind: 'connected', token: TOKEN })
+      return { droppedOperations: 0 }
+    })
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
+    await waitFor(() => expect(unpairMocks.unpairThisDevice).toHaveBeenCalledTimes(1))
+
+    expect(screen.queryByRole('button', { name: 'Đang tạo…' })).toBeNull()
+    const generate = screen.getByRole('button', { name: 'TẠO MÃ GHÉP' }) as HTMLButtonElement
+    expect(generate.disabled).toBe(true)
+
+    finish()
+    expect(await screen.findByRole('button', { name: 'GHÉP MÁY NÀY' })).toBeDefined()
+  })
+
+  it('ghép thử sau khi đã rời sổ chung thì xoá thông báo đã rời sổ chung', async () => {
+    await pairThisDevice()
+    unpairMocks.unpairThisDevice.mockImplementation(async () => {
+      await leaveSharedLedger({ kind: 'connected', token: TOKEN })
+      return { droppedOperations: 0 }
+    })
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
+    expect(await screen.findByText(LEFT_BASE)).toBeDefined()
+
+    syncMocks.pairDevice.mockRejectedValueOnce(
+      new SyncApiError('Mã ghép không hợp lệ.', 'invalid-code', 400),
+    )
+    await userEvent.type(screen.getByLabelText('Mã ghép máy'), 'ABC123')
+    await userEvent.click(screen.getByRole('button', { name: 'GHÉP MÁY NÀY' }))
+
+    expect(await screen.findByText('Mã ghép không hợp lệ.')).toBeDefined()
+    expect(screen.queryByText(/Máy này đã rời sổ chung/)).toBeNull()
+  })
+
+  it('huỷ ghép lỗi SyncApiError mất mạng thì báo đúng câu mất mạng', async () => {
+    await pairThisDevice()
+    unpairMocks.unpairThisDevice.mockRejectedValueOnce(new SyncApiError('x', 'network', 0))
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe(NETWORK_TEXT)
+  })
+
+  it('bản sao đang kéo lại: hiện câu chờ, khoá nút huỷ ghép và không hiện Đồng bộ ngay', async () => {
+    await pairThisDevice()
+    await db.deviceState.put({ ...(await getDeviceSyncState()), resyncRequired: true })
+    renderPage()
+
+    expect(await screen.findByText(RESYNC_TEXT)).toBeDefined()
+    expect(huyGhepButton().disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Đồng bộ ngay' })).toBeNull()
+  })
+
+  it('huỷ ghép thật từ màn hình giữ nguyên số dòng và tổng tiền của sổ', async () => {
+    await pairThisDevice()
+    await createItem(item('Phở'))
+    await recordSale()
+    await db.outbox.clear()
+    const before = await ledgerSnapshot()
+    const { lastSeq } = await getDeviceSyncState()
+    syncMocks.listShopDevices.mockResolvedValue({
+      devices: [
+        { id: DEVICE_ID, letter: 'A', label: 'Quầy trước', createdAt: 1, revokedAt: null, current: true },
+      ],
+      latestSeq: lastSeq,
+    })
+    const actual = await vi.importActual<typeof import('@/db/sync/unpair')>('@/db/sync/unpair')
+    unpairMocks.unpairThisDevice.mockImplementation(actual.unpairThisDevice)
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true })
+
+    try {
+      renderPage()
+      const dialog = await openLeaveDialog()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
+
+      expect(await screen.findByRole('button', { name: 'GHÉP MÁY NÀY' })).toBeDefined()
+      expect((await screen.findByRole('status')).textContent).toBe(LEFT_BASE)
+      expect(await db.deviceState.get('connection')).toBeUndefined()
+      expect(await ledgerSnapshot()).toEqual(before)
+    } finally {
+      Reflect.deleteProperty(navigator, 'onLine')
+    }
   })
 })

@@ -73,9 +73,11 @@ function unpairErrorText(caught: unknown): string {
 function PairForm({
   leftNotice,
   onLeft,
+  onPairStart,
 }: {
   leftNotice: string | null
   onLeft: (droppedOperations: number) => void
+  onPairStart: () => void
 }) {
   const navigate = useNavigate()
   const identity = useDeviceIdentity()
@@ -110,6 +112,7 @@ function PairForm({
 
   const submit = async () => {
     if (!code.trim()) return
+    onPairStart()
     setBusy(true)
     setError(null)
     let pairingAttemptId: string | null = null
@@ -247,6 +250,7 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [generating, setGenerating] = useState(false)
 
   const load = async () => {
     if (!connection) return
@@ -285,6 +289,7 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
 
   const generate = async () => {
     setBusy(true)
+    setGenerating(true)
     setError(null)
     try {
       setPairCode(await createPairCode(connection))
@@ -292,6 +297,7 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
       setError(errorMessage(caught))
     } finally {
       setBusy(false)
+      setGenerating(false)
     }
   }
 
@@ -368,7 +374,7 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
         ) : (
           <div className="mt-3">
             <Button variant="secondary" disabled={busy} onClick={() => void generate()}>
-              {busy ? 'Đang tạo…' : 'TẠO MÃ GHÉP'}
+              {generating ? 'Đang tạo…' : 'TẠO MÃ GHÉP'}
             </Button>
           </div>
         )}
@@ -496,7 +502,11 @@ export function GhepMayPage() {
       ) : connection ? (
         <PairedView onLeft={onLeft} />
       ) : (
-        <PairForm leftNotice={leftNotice} onLeft={onLeft} />
+        <PairForm
+          leftNotice={leftNotice}
+          onLeft={onLeft}
+          onPairStart={() => setLeftNotice(null)}
+        />
       )}
     </div>
   )

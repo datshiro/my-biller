@@ -763,6 +763,7 @@ Huỷ ghép máy B giữ nguyên sổ tiền, máy A thấy B đã rời và B s
     [Documentation]    Huỷ ghép không được đổi sổ tiền trên máy, phải làm máy kia thấy máy này đã rời, và để máy
     ...    vừa rời sao lưu rồi khôi phục được như một máy chưa ghép.
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Bản Sao Máy Phải Đuổi Kịp Sổ Chung    ${MÁY_B_PAGE}
     ${trước}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /ghep-may
     Danh Sách Máy Đã Tải
@@ -836,6 +837,7 @@ Còn thay đổi chưa lên sổ chung thì không huỷ ghép được cho tớ
     Cho Lease Hiện Tại Hết Hạn
     Bấm Nút    Đồng bộ ngay
     Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Bản Sao Máy Phải Đuổi Kịp Sổ Chung    ${MÁY_B_PAGE}
     Wait For Elements State    css=button:text-is("Huỷ ghép máy này")    enabled
     Click    css=button:text-is("Huỷ ghép máy này")
     Chờ Hộp Xác Nhận    Huỷ ghép “Quầy B”?
