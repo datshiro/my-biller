@@ -1,6 +1,7 @@
 import { App } from '@capacitor/app'
 import { useEffect, useEffectEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
+import { setAndroidBackHandler } from './android-back-handler'
 import { decideBack } from './back-button'
 import { isNativeApp } from '@/features/printer/printer-sink'
 import { dismissTopOverlay } from '@/ui/back-dismiss'
@@ -17,7 +18,6 @@ export function AndroidBackButton() {
   const onBack = useEffectEvent(() => {
     if (dismissTopOverlay()) return
     const action = decideBack({
-      overlayOpen: false,
       pathname,
       historyIdx: (window.history.state as { idx?: number } | null)?.idx ?? 0,
     })
@@ -32,12 +32,17 @@ export function AndroidBackButton() {
     let remove: (() => Promise<void>) | undefined
     App.addListener('backButton', () => onBack())
       .then((handle) => {
-        if (unmounted) void handle.remove()
-        else remove = handle.remove
+        if (unmounted) {
+          void handle.remove()
+          return
+        }
+        remove = handle.remove
+        void setAndroidBackHandler(true)
       })
       .catch((error: unknown) => console.error('Không đăng ký được phím Back:', error))
     return () => {
       unmounted = true
+      void setAndroidBackHandler(false)
       void remove?.()
     }
   }, [])

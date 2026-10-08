@@ -130,6 +130,11 @@ giả qua init script *trước* khi app nạp, nên `isNativeApp()` bật và `
 socket mà đẩy job vào `window.__printJobs`. Ca kiểm đọc byte thật app định gửi (host, cổng, lệnh TSPL).
 Socket TCP thật vẫn chỉ đo được trên máy thật.
 
+Cầu nối giả cũng giả plugin `App` cho phím Back: `window.__bamBack()` gọi các listener `backButton` app đã
+đăng ký và trả về số listener, `window.__appMinimized` đếm số lần app tự thu nhỏ, `window.__backHandlerEnabled`
+cho biết app có đang giữ phím Back không (tắt thì Back thuộc về Android). Keyword: `Bấm Back Android`,
+`Số Lần Thu App`, `Back Android Không Có Listener`. Phím Back thật và vuốt back chỉ kiểm được trên máy.
+
 Đường **RawBT** (web/PWA) dựng một `<a data-rawbt href="rawbt:...">` — Robot **chỉ đọc** href bằng
 `Get Attribute href` để kiểm URL/giải mã ảnh, **không bao giờ `Click`** anchor đó. CI không cài RawBT nên
 một cú Click sẽ treo Chrome ở hộp "mở ứng dụng ngoài".

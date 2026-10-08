@@ -72,6 +72,29 @@ Mở Phiên APK Giả Có Dữ Liệu Mẫu
     New Page    ${BASE_URL}/
     Nạp Dữ Liệu Mẫu
 
+Bấm Back Android
+    [Documentation]    Phím Back của Android: gọi mọi listener `backButton` đang đăng ký. Phải đúng một listener —
+    ...    không có thì Back không được xử lý (vỏ thu app hoặc thoát), có hai thì mọi lần Back chạy hai lần.
+    ${số}=    Evaluate JavaScript    ${None}    () => window.__bamBack()
+    Should Be Equal As Integers    ${số}    1    App chưa đăng ký listener backButton (hoặc đăng ký hai lần).
+
+Back Android Không Có Listener
+    [Documentation]    Màn ngoài router (chặn dữ liệu, màn lỗi) không có `AndroidBackButton`: không listener nào
+    ...    nhận Back, nên hệ thống phải tự xử lý Back như chưa có plugin.
+    ${số}=    Evaluate JavaScript    ${None}    () => window.__bamBack()
+    Should Be Equal As Integers    ${số}    0    Còn listener backButton khi lẽ ra đã gỡ.
+
+Số Lần Thu App
+    [Documentation]    Số lần `minimizeApp` được gọi — Back ở tab gốc (Bán, Đơn...) thu app xuống nền.
+    ${số}=    Evaluate JavaScript    ${None}    () => window.__appMinimized
+    RETURN    ${số}
+
+Cờ Back Của Plugin Phải Là
+    [Documentation]    `toggleBackButtonHandler` của `AndroidBackButton`: bật khi đang mount, tắt khi gỡ.
+    [Arguments]    ${mong_đợi}
+    ${cờ}=    Evaluate JavaScript    ${None}    () => window.__backHandlerEnabled
+    Should Be Equal As Strings    ${cờ}    ${mong_đợi}    Cờ handler Back của plugin App không đúng.
+
 Đóng Phiên
     Close Context
 
@@ -239,6 +262,24 @@ Mở Chi Tiết Đơn Mới Nhất
     ${đơn}=    Đơn Mới Nhất
     Mở Màn    /don/${đơn}[id]
     Chờ Thấy Chữ    MẶT HÀNG
+
+Mở Dòng Đơn Đầu
+    [Documentation]    Chạm dòng đầu của danh sách đơn — đường người bán đi, nên app có lịch sử để Back quay về.
+    Wait For Elements State    css=section button >> nth=0    visible
+    Click    css=section button >> nth=0
+    Wait For Condition    Url    contains    /don/
+    Chờ Thấy Chữ    MẶT HÀNG
+
+Id Đơn Đang Mở
+    ${url}=    Get Url
+    ${id}=    Evaluate    $url.rsplit('/', 1)[1]
+    RETURN    ${id}
+
+Đơn Theo Id
+    [Arguments]    ${id}
+    ${đơn_hàng}=    Đọc Bảng    orders
+    ${đơn}=    Evaluate    next(o for o in $đơn_hàng if str(o['id']) == '${id}')
+    RETURN    ${đơn}
 
 
 # --- Đọc con số trên màn ------------------------------------------------------------------

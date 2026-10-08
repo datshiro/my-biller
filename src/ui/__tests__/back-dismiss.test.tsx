@@ -143,7 +143,9 @@ describe('ngăn xếp Back', () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 
-  it('lớp mount sau nằm trên; đừng mount hộp thoại cùng commit với Sheet cha', () => {
+  // Giới hạn đã biết, không phải hành vi mong muốn: effect của con chạy trước cha nên Sheet mount cùng commit với
+  // hộp thoại con lại nằm trên. Ca này báo khi giới hạn đổi; app hiện không mount hai lớp cùng commit.
+  it('giới hạn: hộp thoại mount cùng commit với Sheet cha thì Back đóng nhầm Sheet', () => {
     const onSheetClose = vi.fn()
     const onCancel = vi.fn()
     render(

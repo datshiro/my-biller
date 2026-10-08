@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AndroidBackButton } from '../android-back-button'
 import { pushBackDismiss } from '@/ui/back-dismiss'
+import capacitorConfig from '../../../capacitor.config'
 
 const env = vi.hoisted(() => ({ native: false }))
 
@@ -12,11 +13,16 @@ const capacitor = vi.hoisted(() => ({
   addListener: vi.fn(),
   minimizeApp: vi.fn(() => Promise.resolve()),
   remove: vi.fn(),
+  toggleBackButtonHandler: vi.fn(() => Promise.resolve()),
   listener: undefined as undefined | ((event: { canGoBack: boolean }) => void),
 }))
 
 vi.mock('@capacitor/app', () => ({
-  App: { addListener: capacitor.addListener, minimizeApp: capacitor.minimizeApp },
+  App: {
+    addListener: capacitor.addListener,
+    minimizeApp: capacitor.minimizeApp,
+    toggleBackButtonHandler: capacitor.toggleBackButtonHandler,
+  },
 }))
 
 vi.mock('@/features/printer/printer-sink', () => ({ isNativeApp: () => env.native }))
@@ -146,5 +152,47 @@ describe('AndroidBackButton', () => {
 
     expect(pathOf()).toBe('/')
     expect(capacitor.minimizeApp).not.toHaveBeenCalled()
+  })
+
+  it('native, chỉ bật handler Back của plugin khi đang mount, gỡ thì trả Back lại cho Android', async () => {
+    const { unmount } = renderAt(['/don'], 0)
+    await act(async () => {})
+    expect(capacitor.toggleBackButtonHandler).toHaveBeenCalledWith({ enabled: true })
+
+    unmount()
+    expect(capacitor.toggleBackButtonHandler).toHaveBeenLastCalledWith({ enabled: false })
+  })
+
+  it('trên web không đụng tới handler Back', () => {
+    env.native = false
+    renderAt(['/don'], 0)
+
+    expect(capacitor.toggleBackButtonHandler).not.toHaveBeenCalled()
+  })
+
+  it('StrictMode mount hai lần thì cuối cùng handler vẫn bật', async () => {
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/don']}>
+          <AndroidBackButton />
+        </MemoryRouter>
+      </StrictMode>,
+    )
+    await act(async () => {})
+
+    expect(capacitor.toggleBackButtonHandler).toHaveBeenLastCalledWith({ enabled: true })
+  })
+
+  it('cấu hình Capacitor tắt handler Back mặc định để màn ngoài router giữ Back của Android', () => {
+    expect(capacitorConfig.plugins?.App?.disableBackButtonHandler).toBe(true)
+  })
+
+  it('unmount trước khi đăng ký xong thì không bật lại handler sau khi đã tắt', async () => {
+    const { unmount } = renderAt(['/don'], 0)
+
+    unmount()
+    await act(async () => {})
+    expect(capacitor.toggleBackButtonHandler).not.toHaveBeenCalledWith({ enabled: true })
+    expect(capacitor.toggleBackButtonHandler).toHaveBeenLastCalledWith({ enabled: false })
   })
 })
