@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
+import { AndroidBackButton } from './android-back-button'
 import { AppLayout } from './app-layout'
 import { CustomerDetailPage } from '@/features/customers/customer-detail-page'
 import { CustomerFormPage } from '@/features/customers/customer-form-page'
@@ -26,6 +27,7 @@ import { SaoLuuPage } from '@/features/settings/sao-luu-page'
 export function AppRoutes() {
   return (
     <BrowserRouter>
+      <AndroidBackButton />
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<SalesPage />} />
