@@ -117,4 +117,25 @@ describe('sync runner polling', () => {
     expect(mocks.claimServerEpoch).toHaveBeenCalledTimes(2)
     expect(mocks.drainOutbox).toHaveBeenCalledTimes(2)
   })
+
+  it('resyncRequired mà outbox còn dòng thì drain trước, không gọi resetReadReplica mù (không kẹt ghi vĩnh viễn)', async () => {
+    mocks.getDeviceSyncState.mockResolvedValue({ resyncRequired: true })
+    mocks.listPendingOutbox.mockResolvedValue([{ id: 1 }])
+
+    stop = startSyncRunner()
+    await flushAsyncWork()
+
+    expect(mocks.resetReadReplica).not.toHaveBeenCalled()
+    expect(mocks.drainOutbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('resyncRequired mà outbox đã rỗng (kể cả sau khi drain xong) thì gọi resetReadReplica', async () => {
+    mocks.getDeviceSyncState.mockResolvedValue({ resyncRequired: true })
+    mocks.listPendingOutbox.mockResolvedValue([])
+
+    stop = startSyncRunner()
+    await flushAsyncWork()
+
+    expect(mocks.resetReadReplica).toHaveBeenCalledTimes(2) // trước drain và sau drain, cả hai lần outbox đều rỗng
+  })
 })

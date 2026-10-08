@@ -117,6 +117,21 @@ không đẩy từng event qua pusher.
   `writeBlock=revoked` trong `deviceState`, bỏ connection cũ và chặn mọi `syncTransaction` để không
   âm thầm tạo một nhánh sổ cục bộ. Khi ghép lại sau thu hồi, app xoá bản sao sổ và `outbox` cũ, đưa
   con trỏ về `lastSeq=0`, bỏ lease cũ rồi mới xoá marker/thông báo để kéo lại sổ theo token mới.
+- Tạo mới hoặc đổi tên/bán lại một `items` thành trùng tên (không phân biệt hoa thường/khoảng trắng)
+  với một món khác đang `isActive` bị từ chối `item-name-taken`. Luật chỉ áp cho máy gửi `caps` kèm
+  `item-name-taken` trong request; máy ở bản cũ hơn chưa gửi `caps` không bị ảnh hưởng, đơn của máy đó
+  không bao giờ bị hoàn lại vì lý do này.
+- Khi bị từ chối lúc tạo mới, máy không hoàn tác mà nối (merge) dữ liệu vừa tạo sang món có sẵn trong
+  sổ chung — đơn hàng, giá riêng theo khách và các thay đổi khác của món đó được trỏ lại sang
+  `entityKey` của món có sẵn, không cuộn đuôi tên để thử lại.
+- Khi bị từ chối lúc đổi tên hoặc bán lại một món đã ngừng bán, chỉ món đó được hoàn về trạng thái
+  trước lúc gửi; các thay đổi khác trên máy không bị động tới.
+- Món trùng tên có từ trước trong sổ chung luôn được giữ nguyên; máy gửi sau là máy bị từ chối hoặc bị
+  nối, không phải ngược lại.
+- Route `/seed` (nạp sổ lần đầu khi ghép máy) đi qua admission riêng chứ không qua `acceptEvent`, nên
+  không bị luật `item-name-taken` kiểm tra.
+- Câu thông báo khi một nhóm sự kiện bị từ chối giữa chừng luôn nói rõ việc nào đã hoàn tác và việc nào
+  vẫn còn hiệu lực, để người bán không phải đoán sổ đã về trạng thái nào.
 
 ## Sửa lớp đồng bộ an toàn
 

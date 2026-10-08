@@ -268,3 +268,66 @@ Món đã trùng tên từ trước khi có luật chặn vẫn sửa được g
     ${mặt_hàng}=    Đọc Bảng    items
     ${món}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id})
     Should Be Equal As Integers    ${món}[unitPrice]    5000    Món trùng tên từ trước không sửa được giá.
+
+Bán lại món trùng tên với một món đang bán thì bị chặn và không ghi gì
+    [Documentation]    Bấm "Bán lại mặt hàng này" mà tên trùng một món khác đang bán thì máy
+    ...    chặn ngay trước khi ghi, không đợi một lượt đồng bộ Worker. Ca ghi thẳng một món "trà đá" ngừng
+    ...    bán vào IndexedDB để giả dữ liệu có từ trước luật 2.9.0 — qua giao diện không tạo được món trùng.
+    ${id}=    Chèn Món Cũ Trùng Tên    trà đá
+    Mở Màn    /them/mat-hang/${id}
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Bấm Nút    Bán lại mặt hàng này
+    Chờ Thấy Chữ    Đã có món “Trà đá” đang bán
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang/${id}
+
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    5
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id})
+    Should Be Equal As Integers    ${món}[isActive]    0
+    ${trà_đá}=    Evaluate    next(row for row in $mặt_hàng if row['name'] == 'Trà đá')
+    Should Be Equal As Integers    ${trà_đá}[isActive]    1
+
+Bán lại món ngừng bán chỉ trùng tên với món ngừng bán khác thì được
+    [Documentation]    Luật chặn chỉ xét món đang bán. Hai món cũ cùng tên đều đang ngừng bán thì bán lại
+    ...    một món được, và món kia vẫn ngừng bán.
+    ${id_cũ}=    Chèn Món Cũ Trùng Tên    Bánh bao
+    ${id}=    Chèn Món Cũ Trùng Tên    Bánh bao
+    Mở Màn    /them/mat-hang/${id}
+    Chờ Thấy Chữ    Sửa mặt hàng
+    Bấm Nút    Bán lại mặt hàng này
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+
+    ${mặt_hàng}=    Đọc Bảng    items
+    Length Should Be    ${mặt_hàng}    6
+    ${món}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id})
+    Should Be Equal As Integers    ${món}[isActive]    1
+    ${món_cũ}=    Evaluate    next(row for row in $mặt_hàng if row['id'] == ${id_cũ})
+    Should Be Equal As Integers    ${món_cũ}[isActive]    0    Món cũ cùng tên không được bật theo.
+
+
+*** Keywords ***
+Chèn Món Cũ Trùng Tên
+    [Documentation]    Ghi thẳng một món ngừng bán vào IndexedDB, giả dữ liệu trùng tên có từ trước luật
+    ...    2.9.0 — form và nhập file đều chặn tên trùng nên không tạo lại được qua giao diện.
+    [Arguments]    ${tên}
+    ${id}=    Evaluate JavaScript    ${None}
+    ...    async (tên) => {
+    ...        const db = await new Promise((resolve, reject) => {
+    ...            const open = indexedDB.open('my-biller')
+    ...            open.onsuccess = () => resolve(open.result)
+    ...            open.onerror = () => reject(open.error)
+    ...        })
+    ...        const now = Date.now()
+    ...        const id = await new Promise((resolve, reject) => {
+    ...            const request = db.transaction('items', 'readwrite').objectStore('items').add({
+    ...                gid: crypto.randomUUID(), name: tên, groupId: null, unit: 'ly', unitPrice: 3000,
+    ...                costPrice: null, isActive: 0, note: '', createdAt: now, updatedAt: now,
+    ...            })
+    ...            request.onsuccess = () => resolve(request.result)
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...        db.close()
+    ...        return id
+    ...    }
+    ...    arg=${tên}
+    RETURN    ${id}

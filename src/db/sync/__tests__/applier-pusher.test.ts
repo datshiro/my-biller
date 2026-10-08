@@ -1,9 +1,11 @@
+// @vitest-environment jsdom
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db'
 import {
   beginDevicePairing,
   completeDevicePairing,
+  getDeviceConnection,
   getDeviceSyncState,
   saveDeviceIdentity,
   savePairedDevice,
@@ -16,9 +18,17 @@ import {
   updateItem,
 } from '../../repositories/items'
 import { applyEvents } from '../applier'
+import { createOrder } from '../../repositories/orders'
+import { SyncApiError } from '../client'
 import { claimLeadership } from '../leader'
-import { rollbackRejectedTail } from '../pusher'
+import { OUTBOX_CHANGED_EVENT, syncTransaction } from '../outbox'
+import { drainOutbox, pushNext, rollbackRejectedTail } from '../pusher'
 import type { ServerEvent } from '@shared/sync-events'
+
+vi.mock('../client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../client')>()
+  return { ...actual, pushEvent: vi.fn() }
+})
 
 let leader: NonNullable<Awaited<ReturnType<typeof claimLeadership>>>
 
@@ -428,5 +438,229 @@ describe('rollback từ chối nghiệp vụ', () => {
 
     expect(await db.items.get(id)).toMatchObject({ unitPrice: 60_000 })
     expect(await db.deviceState.get('sync')).toMatchObject({ resyncRequired: true })
+  })
+
+  it('một lần ghi 4 thay đổi, 2 đầu đã lên sổ chung rồi mới bị từ chối: câu nói đúng số đã hoàn lại, không đếm số đã lên', async () => {
+    const stamp = Date.now()
+    await syncTransaction(async () => {
+      for (let i = 0; i < 4; i++) {
+        await db.items.add({
+          gid: crypto.randomUUID(),
+          name: `Món ${i}`,
+          groupId: null,
+          unit: 'phần',
+          unitPrice: 10_000,
+          costPrice: null,
+          isActive: 1,
+          note: '',
+          createdAt: stamp,
+          updatedAt: stamp,
+        })
+      }
+    })
+    const batch = await db.outbox.orderBy('id').toArray()
+    expect(batch).toHaveLength(4)
+    // 2 thay đổi đầu (txOrder 0, 1) coi như đã đẩy lên và được Worker nhận — xoá khỏi outbox cục bộ,
+    // chỉ còn sống trên sổ chung. pushNext thử đẩy tiếp thay đổi thứ 3 (txOrder 2) thì bị từ chối.
+    await db.outbox.bulkDelete([batch[0]!.id!, batch[1]!.id!])
+    const rejected = batch[2]!
+
+    await rollbackRejectedTail(rejected, leader, 'Thiếu bản ghi cha itemGroups.')
+
+    expect(await db.outbox.count()).toBe(0)
+    expect(await db.deviceState.get('notice')).toMatchObject({
+      message:
+        'Thiếu bản ghi cha itemGroups. Lần ghi này bị từ chối ở giữa: 2 thay đổi của nó đã được hoàn lại trên máy này; các thay đổi khác của lần ghi đó (nếu có) đã lên sổ chung.',
+    })
+  })
+
+  it('cùng kịch bản nhưng có thêm một đơn làm sau: câu thêm "và 1 thao tác làm sau"', async () => {
+    const stamp = Date.now()
+    await syncTransaction(async () => {
+      for (let i = 0; i < 4; i++) {
+        await db.items.add({
+          gid: crypto.randomUUID(),
+          name: `Món ${i}`,
+          groupId: null,
+          unit: 'phần',
+          unitPrice: 10_000,
+          costPrice: null,
+          isActive: 1,
+          note: '',
+          createdAt: stamp,
+          updatedAt: stamp,
+        })
+      }
+    })
+    const batch = await db.outbox.orderBy('id').toArray()
+    await db.outbox.bulkDelete([batch[0]!.id!, batch[1]!.id!])
+    const rejected = batch[2]!
+    await createItem({ name: 'Làm sau', groupId: null, unit: 'phần', unitPrice: 5_000, costPrice: null, isActive: 1 })
+
+    await rollbackRejectedTail(rejected, leader, 'Thiếu bản ghi cha itemGroups.')
+
+    expect(await db.deviceState.get('notice')).toMatchObject({
+      message: expect.stringContaining('và 1 thao tác làm sau'),
+    })
+  })
+})
+
+describe('pushNext — nối món khi sổ chung báo trùng tên', () => {
+  it("pushEvent trả lỗi 'item-name-taken' với existingGid đã có trên máy thì nối rồi trả 'pushed'", async () => {
+    const existingGid = crypto.randomUUID()
+    await applyEvents(
+      [
+        {
+          eventId: crypto.randomUUID(),
+          txId: crypto.randomUUID(),
+          txOrder: 0,
+          seq: 1,
+          deviceId: crypto.randomUUID(),
+          serverAt: Date.now(),
+          table: 'items',
+          entityKey: existingGid,
+          entityGid: existingGid,
+          operation: 'create',
+          before: null,
+          after: {
+            gid: existingGid,
+            name: 'Trà đá',
+            groupId: null,
+            unit: 'Ly',
+            unitPrice: 3_000,
+            costPrice: null,
+            isActive: 1,
+            note: '',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          refs: { groupId: null },
+        },
+      ],
+      leader,
+    )
+    await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_500, costPrice: null, isActive: 1 })
+    const { pushEvent } = await import('../client')
+    vi.mocked(pushEvent).mockRejectedValueOnce(
+      new SyncApiError('trùng tên', 'item-name-taken', 409, { existingGid, existingName: 'Trà đá' }),
+    )
+
+    const connection = (await getDeviceConnection())!
+    const outcome = await pushNext(connection, leader)
+    expect(outcome).toBe('pushed')
+    expect(await db.outbox.count()).toBe(0)
+  })
+
+  it("món có sẵn chưa về máy: trả 'empty', bắn OUTBOX_CHANGED_EVENT đúng một lần dù gọi hai lần", async () => {
+    await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_000, costPrice: null, isActive: 1 })
+    const { pushEvent } = await import('../client')
+    const detail = { existingGid: crypto.randomUUID(), existingName: 'Trà đá' }
+    vi.mocked(pushEvent).mockRejectedValue(new SyncApiError('trùng tên', 'item-name-taken', 409, detail))
+
+    const events: Event[] = []
+    const listener = (event: Event) => events.push(event)
+    window.addEventListener(OUTBOX_CHANGED_EVENT, listener)
+    try {
+      const connection = (await getDeviceConnection())!
+      expect(await pushNext(connection, leader)).toBe('empty')
+      expect(await pushNext(connection, leader)).toBe('empty')
+      expect(events).toHaveLength(1)
+      expect(await db.outbox.count()).toBe(1) // 'deferred' không sửa gì
+    } finally {
+      window.removeEventListener(OUTBOX_CHANGED_EVENT, listener)
+    }
+  })
+
+  it('phục hồi sau khi bị hoãn: dòng không liên quan phía sau vẫn đẩy đúng, đúng thứ tự cũ', async () => {
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
+    const otherId = await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_000, costPrice: null, isActive: 1 })
+    const order = await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: otherId, name: 'Trà đá', unit: 'Ly', unitPrice: 3_000, costPrice: null, qty: 1 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { amount: 3_000, method: 'cash', note: '' },
+    })
+    expect(order.id).toBeGreaterThan(0)
+    const dGid = (await db.items.get(dId))!.gid
+    const outboxBefore = await db.outbox.orderBy('id').toArray()
+    expect(outboxBefore.length).toBeGreaterThan(1) // D đứng trước, các dòng của đơn đứng sau
+
+    const { pushEvent } = await import('../client')
+    vi.mocked(pushEvent).mockRejectedValue(
+      new SyncApiError('trùng tên', 'item-name-taken', 409, {
+        existingGid: crypto.randomUUID(),
+        existingName: 'Bánh flan',
+      }),
+    )
+    const connection = (await getDeviceConnection())!
+    await drainOutbox(connection, leader)
+    // Dừng ở D ('empty'): mọi dòng (kể cả không liên quan món) vẫn còn nguyên, đúng thứ tự.
+    expect(await db.outbox.orderBy('id').toArray()).toEqual(outboxBefore)
+
+    // Món có sẵn về máy.
+    const existingGid = crypto.randomUUID()
+    await applyEvents(
+      [
+        {
+          eventId: crypto.randomUUID(),
+          txId: crypto.randomUUID(),
+          txOrder: 0,
+          seq: 1,
+          deviceId: crypto.randomUUID(),
+          serverAt: Date.now(),
+          table: 'items',
+          entityKey: existingGid,
+          entityGid: existingGid,
+          operation: 'create',
+          before: null,
+          after: {
+            gid: existingGid,
+            name: 'Bánh flan',
+            groupId: null,
+            unit: 'Ly',
+            unitPrice: 15_000,
+            costPrice: null,
+            isActive: 1,
+            note: '',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          refs: { groupId: null },
+        },
+      ],
+      leader,
+    )
+    vi.mocked(pushEvent).mockReset()
+    vi.mocked(pushEvent).mockImplementation(async (_connection, _epoch, event) => {
+      if (event.table === 'items' && event.entityKey === dGid) {
+        throw new SyncApiError('trùng tên', 'item-name-taken', 409, { existingGid, existingName: 'Bánh flan' })
+      }
+      return { seq: 1, duplicate: false }
+    })
+
+    await drainOutbox(connection, leader)
+
+    expect(await db.outbox.count()).toBe(0)
+    // Dòng của đơn (không liên quan món) vẫn đẩy đúng, sau khi D đã được nối — không bị bỏ hay đẩy trước D.
+    const pushedTables = vi.mocked(pushEvent).mock.calls.map(([, , event]) => event.table)
+    expect(pushedTables).toContain('orders')
+    expect(pushedTables).toContain('orderLines')
+    expect(pushedTables).toContain('payments')
+  })
+
+  it('phản hồi item-name-taken thiếu existingGid/existingName thì coi như deferred, không đoán mò nối sai', async () => {
+    await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_000, costPrice: null, isActive: 1 })
+    const { pushEvent } = await import('../client')
+    vi.mocked(pushEvent).mockRejectedValueOnce(
+      new SyncApiError('trùng tên', 'item-name-taken', 409, { message: 'thiếu existingGid' }),
+    )
+
+    const connection = (await getDeviceConnection())!
+    expect(await pushNext(connection, leader)).toBe('empty')
+    expect(await db.outbox.count()).toBe(1)
   })
 })
