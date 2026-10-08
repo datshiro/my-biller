@@ -1116,9 +1116,10 @@ APK: Back khi sheet đơn đang mở chỉ đóng sheet, giỏ giữ nguyên
     Should Be Equal    ${giỏ_sau}    ${giỏ_trước}    Back đóng sheet mà làm đổi số lượng trong giỏ nháp.
 
 APK: màn chặn dữ liệu trả Back cho Android, không giữ người bán lại
-    [Documentation]    Lỗi #65: plugin App nuốt Back khi chưa có listener, nên màn ngoài router (màn chặn dữ liệu)
-    ...    không lùi được mà cũng không thoát được. Màn Bán phải bật handler và có đúng một listener; khi màn chặn
-    ...    hiện, handler phải tắt và không còn listener nào để Back trả về cho Android.
+    [Documentation]    Hồi quy suýt lọt khi sửa #65: plugin App (thêm vào để nhận Back) nuốt Back khi chưa có
+    ...    listener, nên màn ngoài router (màn chặn dữ liệu) không lùi được mà cũng không thoát được. Màn Bán
+    ...    phải bật handler và có đúng một listener; khi màn chặn hiện, handler phải tắt và không còn listener nào
+    ...    để Back trả về cho Android.
     [Tags]    regression
     [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
     Mở Màn    /

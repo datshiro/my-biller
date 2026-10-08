@@ -4,7 +4,7 @@
 // - DownloadFile: file "lưu vào Tải về" nằm lại ở `window.__savedFiles`; đặt `window.__failSave = true`
 //   để giả plugin báo lỗi (hết chỗ, từ chối quyền). Đường MediaStore thật chỉ nghiệm được trên máy Android.
 // - App (phím Back): `window.__bamBack()` bấm Back cho mọi listener `backButton` đang đăng ký và trả số
-//   listener đã gọi. `window.__backHandlerEnabled` là cờ handler mặc định của plugin, còn `window.__appMinimized`
+//   listener đã gọi (0 khi handler đang tắt, như plugin thật). `window.__backHandlerEnabled` là cờ handler mặc định của plugin, còn `window.__appMinimized`
 //   đếm lần app bị thu xuống nền — đúng việc Android làm khi Back ở tab gốc.
 async function giaLapApk(context) {
   await context.addInitScript(() => {
@@ -16,6 +16,8 @@ async function giaLapApk(context) {
     window.__backListeners = new Map()
     window.__nextBackListenerId = 1
     window.__bamBack = () => {
+      // Handler tắt thì plugin thật không giao Back cho JS — Android tự xử lý.
+      if (!window.__backHandlerEnabled) return 0
       const listeners = [...window.__backListeners.values()]
       for (const listener of listeners) listener({ canGoBack: window.history.length > 1 })
       return listeners.length
