@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, type RefObject } from 'react'
+import { useBackDismiss } from './back-dismiss'
 import { Button } from './button'
 import { buttonClassName, type ButtonVariant } from './button-class'
 
@@ -28,6 +29,9 @@ export function ConfirmDialog({
   const panelRef = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const cancelFromEscape = useEffectEvent(() => {
+    if (!pending) onCancel()
+  })
+  useBackDismiss(() => {
     if (!pending) onCancel()
   })
 

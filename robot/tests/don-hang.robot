@@ -141,6 +141,60 @@ Từ chi tiết đơn mở thẳng được phiếu
     Wait For Condition    Url    contains    /phieu
     Chờ Thấy Chữ    PHIẾU BÁN HÀNG
 
+APK: phím Back ở chi tiết đơn quay về danh sách đơn, không thu app
+    [Documentation]    Lỗi #65: vỏ APK không có plugin App nên không ai nhận phím Back, Android thoát hẳn app
+    ...    thay vì lùi về danh sách đơn. Ca khoá lại đường lùi một bước từ chi tiết đơn.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /don
+    Chờ Thấy Chữ    Đơn hàng
+    Mở Dòng Đơn Đầu
+
+    Bấm Back Android
+    Get Url    ==    ${BASE_URL}/don
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back ở chi tiết đơn thu app thay vì lùi về danh sách.
+
+APK: Back khi hộp Huỷ đơn đang mở chỉ đóng hộp, đơn còn nguyên
+    [Documentation]    Lỗi #65: Back khi hộp xác nhận đang mở làm app thoát ngay, người bán mất hộp và không biết
+    ...    đơn đã huỷ chưa. Back phải đóng đúng hộp; đơn vẫn chưa void.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /don
+    Chờ Thấy Chữ    Đơn hàng
+    Mở Dòng Đơn Đầu
+    ${id}=    Id Đơn Đang Mở
+
+    Bấm Nút    Huỷ đơn
+    Chờ Hộp Xác Nhận    Huỷ đơn này?
+    Bấm Back Android
+    Wait For Elements State    css=[role=alertdialog][aria-label="Huỷ đơn này?"]    detached
+    Get Url    ==    ${BASE_URL}/don/${id}
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back khi hộp đang mở mà app vẫn thu xuống nền.
+    ${đơn}=    Đơn Theo Id    ${id}
+    Should Not Be Equal    ${đơn}[status]    void    Back đóng hộp mà đơn vẫn bị huỷ trong sổ.
+
+APK: mở thẳng chi tiết đơn không có lịch sử thì Back về màn Bán, không thu app
+    [Documentation]    Mở thẳng bằng URL nên không có bước trước: Back phải đưa về màn Bán thay vì đứng im.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Chi Tiết Đơn Mới Nhất
+
+    Bấm Back Android
+    Get Url    ==    ${BASE_URL}/
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back không đưa về màn Bán mà thu app.
+
+APK: Back ở tab Đơn thì thu app, không đổi màn
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /don
+    Chờ Thấy Chữ    Đơn hàng
+
+    Bấm Back Android
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    1    Back ở tab Đơn phải thu app xuống nền.
+    Get Url    ==    ${BASE_URL}/don
+
 
 *** Keywords ***
 Đọc Số Đơn Hôm Nay

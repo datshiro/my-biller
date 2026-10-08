@@ -1095,3 +1095,62 @@ Khách đưa gõ thừa số 0 thì ô giữ số cũ, đơn vẫn trả đủ c
     ${đơn}=    Đơn Mới Nhất
     Should Be Equal    ${đơn}[status]    paid    Phím thừa ở ô Khách đưa biến đơn trả đủ thành đơn nợ.
     Should Be Equal As Integers    ${đơn}[paidAmount]    ${đơn}[total]    Sổ ghi sai số khách đã trả.
+
+APK: Back khi sheet đơn đang mở chỉ đóng sheet, giỏ giữ nguyên
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chọn Món    Trà đá
+    Mở Đơn
+    Wait For Elements State    ${SHEET_ĐƠN}    visible
+    ${giỏ_trước}=    Wait Until Keyword Succeeds    10x    200ms    Đọc Dòng Giỏ Nháp Phải Có    2
+
+    Bấm Back Android
+    Wait For Elements State    ${SHEET_ĐƠN}    detached
+    Get Url    ==    ${BASE_URL}/
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back khi sheet đang mở mà app thu xuống nền.
+    # Nháp ghi trễ ~300 ms: đợi qua khoảng đó, nếu Back có đổi giỏ thì nháp đã kịp đổi.
+    Sleep    600ms
+    ${giỏ_sau}=    Đọc Dòng Giỏ Nháp Phải Có    2
+    Should Be Equal    ${giỏ_sau}    ${giỏ_trước}    Back đóng sheet mà làm đổi số lượng trong giỏ nháp.
+
+APK: màn chặn dữ liệu trả Back cho Android, không giữ người bán lại
+    [Documentation]    Hồi quy suýt lọt khi sửa #65: plugin App (thêm vào để nhận Back) nuốt Back khi chưa có
+    ...    listener, nên màn ngoài router (màn chặn dữ liệu) không lùi được mà cũng không thoát được. Màn Bán
+    ...    phải bật handler và có đúng một listener; khi màn chặn hiện, handler phải tắt và không còn listener nào
+    ...    để Back trả về cho Android.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /
+    Chờ Thấy Chữ    Phở bò
+    Wait Until Keyword Succeeds    10x    200ms    Cờ Back Của Plugin Phải Là    True
+
+    Nâng Version Sổ Trên Máy
+    Chờ Thấy Chữ    Cần cập nhật app
+    Wait Until Keyword Succeeds    10x    200ms    Cờ Back Của Plugin Phải Là    False
+    Back Android Không Có Listener
+
+
+*** Keywords ***
+Nâng Version Sổ Trên Máy
+    [Documentation]    Mở IndexedDB của app ở version cao hơn — như một bản app mới hơn trên cùng máy — để app
+    ...    hiện màn chặn "Cần cập nhật app".
+    Evaluate JavaScript    ${None}
+    ...    async () => {
+    ...        const db = (await indexedDB.databases()).find((d) => d.name === 'my-biller')
+    ...        await new Promise((resolve, reject) => {
+    ...            const request = indexedDB.open(db.name, db.version + 1)
+    ...            request.onsuccess = () => { request.result.close(); resolve() }
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...    }
+
+Đọc Dòng Giỏ Nháp Phải Có
+    [Documentation]    Tên và số lượng từng dòng trong nháp giỏ ở localStorage. Nháp ghi trễ khoảng 300 ms sau mỗi
+    ...    lần đổi giỏ, nên dùng với `Wait Until Keyword Succeeds` để chờ nháp đủ số dòng.
+    [Arguments]    ${số_dòng}
+    ${dòng}=    Evaluate JavaScript    ${None}
+    ...    () => JSON.parse(localStorage.getItem('${KHOÁ_NHÁP_GIỎ}')).lines.map((line) => ({ name: line.name, qty: line.qty }))
+    Length Should Be    ${dòng}    ${số_dòng}    Nháp giỏ chưa có đủ ${số_dòng} dòng.
+    RETURN    ${dòng}

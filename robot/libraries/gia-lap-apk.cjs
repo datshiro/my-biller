@@ -3,18 +3,70 @@
 // - PrinterSocket: job in nằm lại ở `window.__printJobs` để ca kiểm đọc byte thật app định gửi.
 // - DownloadFile: file "lưu vào Tải về" nằm lại ở `window.__savedFiles`; đặt `window.__failSave = true`
 //   để giả plugin báo lỗi (hết chỗ, từ chối quyền). Đường MediaStore thật chỉ nghiệm được trên máy Android.
+// - App (phím Back): `window.__bamBack()` bấm Back cho mọi listener `backButton` đang đăng ký và trả số
+//   listener đã gọi (0 khi handler đang tắt, như plugin thật). `window.__backHandlerEnabled` là cờ handler mặc định của plugin, còn `window.__appMinimized`
+//   đếm lần app bị thu xuống nền — đúng việc Android làm khi Back ở tab gốc.
 async function giaLapApk(context) {
   await context.addInitScript(() => {
     window.__printJobs = []
     window.__savedFiles = []
     window.__failSave = false
+    window.__backHandlerEnabled = false
+    window.__appMinimized = 0
+    window.__backListeners = new Map()
+    window.__nextBackListenerId = 1
+    window.__bamBack = () => {
+      // Handler tắt thì plugin thật không giao Back cho JS — Android tự xử lý.
+      if (!window.__backHandlerEnabled) return 0
+      const listeners = [...window.__backListeners.values()]
+      for (const listener of listeners) listener({ canGoBack: window.history.length > 1 })
+      return listeners.length
+    }
     window.androidBridge = { postMessage() {} }
     window.Capacitor = {
       PluginHeaders: [
         { name: 'PrinterSocket', methods: [{ name: 'printRaw', rtype: 'promise' }] },
         { name: 'DownloadFile', methods: [{ name: 'saveToDownloads', rtype: 'promise' }] },
+        {
+          name: 'App',
+          methods: [
+            { name: 'addListener', rtype: 'none' },
+            { name: 'removeListener', rtype: 'none' },
+            { name: 'removeAllListeners', rtype: 'promise' },
+            { name: 'exitApp', rtype: 'promise' },
+            { name: 'minimizeApp', rtype: 'promise' },
+            { name: 'toggleBackButtonHandler', rtype: 'promise' },
+          ],
+        },
       ],
+      nativeCallback: (plugin, method, options, callback) => {
+        if (plugin === 'App' && method === 'addListener' && options.eventName === 'backButton') {
+          const callbackId = String(window.__nextBackListenerId++)
+          window.__backListeners.set(callbackId, callback)
+          return callbackId
+        }
+        if (plugin === 'App' && method === 'removeListener') {
+          window.__backListeners.delete(options.callbackId)
+          return undefined
+        }
+        throw new Error('gia-lap-apk: chưa giả ' + plugin + '.' + method)
+      },
       nativePromise: async (plugin, method, options) => {
+        if (plugin === 'App') {
+          if (method === 'toggleBackButtonHandler') {
+            window.__backHandlerEnabled = options.enabled
+            return undefined
+          }
+          if (method === 'minimizeApp') {
+            window.__appMinimized += 1
+            return undefined
+          }
+          if (method === 'removeAllListeners') {
+            window.__backListeners.clear()
+            return undefined
+          }
+          throw new Error('gia-lap-apk: chưa giả ' + plugin + '.' + method)
+        }
         if (plugin === 'DownloadFile') {
           if (window.__failSave) throw new Error('Chưa lưu được file vào thư mục Tải về: bộ nhớ đầy (giả lập).')
           window.__savedFiles.push({ filename: options.filename, mimeType: options.mimeType, text: options.text })

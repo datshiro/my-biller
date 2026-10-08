@@ -808,6 +808,27 @@ Máy đã có tên đổi được tên và chữ cái từ Cài đặt, mã phi
     ${đơn}=    Đơn Mới Nhất
     Should Match Regexp    ${đơn}[code]    -B\\d{3}$    Đơn mới chưa mang chữ cái mới của máy.
 
+APK: hai lớp chồng nhau thì Back chỉ đóng lớp trên, không xoá gì
+    [Documentation]    Lỗi #65: vỏ không có plugin App nên Back đi thẳng ra hệ thống, app thoát ngay giữa hai lớp
+    ...    của màn "Xoá toàn bộ dữ liệu". Back phải chỉ đóng hộp "Đã thấy file trong máy chưa?", sheet vẫn mở và sổ
+    ...    còn đủ hai đơn.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/cai-dat
+    Bấm Nút    Xoá toàn bộ dữ liệu
+    Wait For Elements State    ${SHEET_XOÁ}    visible
+    Điền Ô    Gõ XOA    XOA
+    Bấm Nút    SAO LƯU RỒI XOÁ
+    Chờ Hộp Xác Nhận    Đã thấy file trong máy chưa?
+
+    Bấm Back Android
+    Wait For Elements State    css=[role=alertdialog][aria-label="Đã thấy file trong máy chưa?"]    detached
+    Wait For Elements State    ${SHEET_XOÁ}    visible
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back giữa hai lớp mà app thu xuống nền.
+    ${đơn}=    Đọc Bảng    orders
+    Length Should Be    ${đơn}    2    Back giữa hai lớp mà sổ bị xoá.
+
 *** Keywords ***
 Theo Dõi Yêu Cầu Tải
     Evaluate JavaScript    ${None}
