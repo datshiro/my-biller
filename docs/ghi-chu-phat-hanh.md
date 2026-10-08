@@ -1,5 +1,28 @@
 # Ghi chú phát hành
 
+## 2.15.0 — phím Back trên APK đi lùi trong app thay vì thoát (#65) (9/10/2026)
+
+> **Chỉ APK đổi**: không đổi Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay định dạng
+> file sao lưu; deploy theo thứ tự thường. Web/PWA không đổi hành vi (Back của trình duyệt vẫn như cũ). **APK phải
+> dựng và cài lại** vì thêm plugin native `@capacitor/app`: chạy `npx cap sync android` trước khi build (cấu hình
+> `disableBackButtonHandler` nằm trong file sinh ra), versionCode 12 để cài đè. Cài bản release đè bản release.
+
+### Người bán thấy gì (APK)
+
+- **Phím Back và vuốt back** không còn thoát hẳn app. Thứ tự: có hộp hoặc sheet đang mở thì đóng lớp trên cùng (hộp
+  đang lưu thì Back không làm gì) → có màn trước thì lùi về màn đó (chi tiết đơn → danh sách; phiếu → chi tiết → danh
+  sách) → mở thẳng một màn sâu thì về màn Bán → ở tab gốc (Bán, Đơn, Chi phí, Báo cáo, Thêm) thì **thu app xuống
+  nền**; mở lại từ danh sách app gần đây vẫn đúng tab, không khởi động lại.
+- Màn "Cần cập nhật app", "Còn tab khác đang mở app" và màn lỗi vẫn để Back cho Android như trước (ra màn chủ).
+
+### Giới hạn đã biết
+
+- Chưa kiểm trên máy Android thật: toàn bộ ca Robot chạy trên APK giả lập cầu nối Capacitor. Cần kiểm trên S25
+  (Android 16, predictive back): các đường Back ở trên, vuốt back hai mép, Back khi bàn phím đang mở, Back sau khi khôi
+  phục sao lưu (app tự tải lại), và `adb logcat` không có lỗi luồng từ `AppPlugin`.
+- Back không chắn form đang gõ dở; Back đóng sheet thu tiền/thu nợ đang lưu giống nút ✕ (ISSUE-032). Hộp thoại mount
+  cùng lúc với Sheet cha thì Back đóng nhầm Sheet — hiện không có chỗ nào như vậy (ISSUE-033).
+
 ## 2.14.0 — nhập món, nhóm và khách từ file CSV; sổ chung chặn món trùng tên (#50) (9/10/2026)
 
 > **Worker có thay đổi**: sổ chung thêm luật chặn món trùng tên (`item-name-taken`), nhưng **chỉ áp cho máy gửi
