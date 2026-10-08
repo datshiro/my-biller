@@ -1,5 +1,39 @@
 # Ghi chú phát hành
 
+## 2.14.0 — nhập món, nhóm và khách từ file CSV; sổ chung chặn món trùng tên (#50) (9/10/2026)
+
+> **Worker có thay đổi**: sổ chung thêm luật chặn món trùng tên (`item-name-taken`), nhưng **chỉ áp cho máy gửi
+> `caps`** — máy bản cũ không gửi nên hành vi giữ y như trước. Vì vậy deploy theo thứ tự nào cũng an toàn; workflow
+> production vẫn deploy Worker trước Pages. Không đổi schema IndexedDB, schema SQL của Durable Object hay định dạng
+> file sao lưu. APK tăng versionCode (11) để cài đè được.
+
+### Người bán thấy gì
+
+- **Thêm › Cài đặt › Nhập từ file** (`/them/nhap-file`): chọn nhập *Món & nhóm* hoặc *Khách hàng*, tải file mẫu
+  (`mau-mon.csv`, `mau-khach.csv`; APK lưu vào Tải về, web chỉ nói "Đã yêu cầu tải…"), chọn file CSV.
+- **Đọc được file lưu từ Excel**: có hoặc không có BOM, phân cách `,` hay `;`, giá kiểu "15.000", "15k", "15.000đ".
+  File không phải UTF-8 (ANSI) bị từ chối kèm hướng dẫn lưu lại. Giới hạn 1 MB và 2000 dòng.
+- **Xem trước trước khi ghi**: số dòng tạo mới, trùng, lỗi; mỗi lỗi chỉ đúng "Dòng N" như Excel hiện. Còn dòng lỗi thì
+  nút NHẬP bị khoá. Gặp trùng thì chọn **bỏ qua tất cả** hoặc **cập nhật tất cả** cho cả lần nhập.
+- **Khớp trùng**: món theo tên (không phân biệt hoa thường, giữ dấu: "Bò" khác "Bơ"); khách theo SĐT trước (chỉ so
+  chữ số), không có SĐT mới so theo tên. Ô trống khi cập nhật giữ giá trị cũ; nhập không bao giờ xoá gì. SĐT mất số 0
+  đầu do Excel đổi thành số bị báo lỗi thay vì sinh khách trùng.
+- **Cả lần nhập ghi trong một giao dịch** trên máy: ghi đủ hoặc không ghi gì.
+- **Form mặt hàng chặn "Bán lại"** một món ngừng bán nếu tên trùng một món khác đang bán.
+- **Hai máy cùng thêm món trùng tên lúc mất mạng**: sổ chung chỉ giữ một món; máy sau **nối** món của mình sang món
+  có sẵn — đơn, dòng đơn (giữ giá lúc bán), phiếu thu bán offline còn nguyên; giá bán của món sau đó là giá món có
+  sẵn. Đổi tên hoặc bán lại bị sổ chung chặn thì chỉ món đó trở về như cũ. Máy hiện câu báo nói rõ chuyện gì xảy ra.
+
+### Thay đổi vận hành và giới hạn đã biết
+
+- Nếu người bán xoá món có sẵn (vừa kéo về) trước khi món trùng tên của mình kịp đẩy, máy khôi phục món đó rồi nối,
+  không để hàng đợi kẹt. Nếu nhóm hoặc khách của món đó cũng đã bị xoá thì máy hoãn (hàng đợi chờ, không mất gì).
+- Chưa kiểm trên máy Android thật: chọn file `.csv` từ Downloads/Drive trong APK, và tải mẫu vào `Download/` (plugin
+  đã cắt `;charset` khỏi MIME trước khi ghi MediaStore, chỉ còn xác nhận trên máy).
+- Để sau (xem `open-issues.md`): ISSUE-017 (Worker chưa ép một giá riêng cho mỗi cặp khách–món), ISSUE-022 đến 028
+  (các biên hẹp của xem trước và nhập, không mất dữ liệu), ISSUE-029 (ngừng bán món có sẵn thay vì xoá rồi bị nối),
+  ISSUE-030 (đọc nhóm đã xoá ném lỗi), ISSUE-031 (hai lần xoá cùng một món trong hàng đợi).
+
 ## 2.13.0 — sao lưu & khôi phục làm lại (#48) (4/10/2026)
 
 > **Worker không đổi nên không cần deploy Worker trước**; không đổi schema IndexedDB, hợp đồng đồng bộ hay định dạng

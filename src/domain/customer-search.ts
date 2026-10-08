@@ -1,7 +1,7 @@
 import { normalizeName } from './order-draft/parse-order-text'
 import type { Customer } from './schema'
 
-const digitsOf = (value: string) => value.replace(/\D/g, '')
+export const digitsOf = (value: string) => value.replace(/\D/g, '')
 
 /**
  * Khớp khách theo tên (bỏ dấu) hoặc số điện thoại (chỉ so chữ số).

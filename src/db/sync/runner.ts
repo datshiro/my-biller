@@ -70,9 +70,17 @@ export function startSyncRunner(): () => void {
       if (!forceRemoteSync && hadLeadership) return
 
       await claimServerEpoch(connection, leader.epoch)
-      if ((await getDeviceSyncState()).resyncRequired) await resetReadReplica(leader)
+      // `resetReadReplica` tự ném khi outbox còn dòng — và từ khi `item-name-taken.ts` có thể bật
+      // `resyncRequired` trong lúc outbox vẫn còn dòng khác (đơn bán của món khác, chưa tới lượt đẩy),
+      // gọi mù ở đây sẽ ném TRƯỚC `drainOutbox`, nuốt lỗi (nhánh catch chỉ xử lý stale-leader/401), và
+      // không bao giờ drain được nữa — máy kẹt ghi vĩnh viễn. Chỉ reset khi chắc outbox đã rỗng, và thử
+      // lại một lần nữa sau khi drain cho lượt vừa mới rỗng.
+      const canResetReplica = async () =>
+        (await getDeviceSyncState()).resyncRequired && (await listPendingOutbox()).length === 0
+      if (await canResetReplica()) await resetReadReplica(leader)
       await pullAll(connection, leader)
       await drainOutbox(connection, leader)
+      if (await canResetReplica()) await resetReadReplica(leader)
       await pullAll(connection, leader)
 
       if (!socket || socket.readyState >= WebSocket.CLOSING) {

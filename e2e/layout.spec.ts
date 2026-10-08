@@ -25,6 +25,7 @@ const ROUTES = [
   ['/them/cua-hang', 'Thông tin cửa hàng', 'LƯU THÔNG TIN'],
   ['/them/nhom-mat-hang', 'Nhóm mặt hàng', 'Đồ uống'],
   ['/them/loai-chi-phi', 'Loại chi phí', 'Nguyên liệu'],
+  ['/them/nhap-file', 'Nhập từ file', 'Tải file mẫu'],
 ] as const
 
 async function seed(page: Page) {

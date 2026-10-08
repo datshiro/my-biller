@@ -271,3 +271,204 @@
   khôi phục. (D10) Chip lọc báo cáo nằm sát mép màn (theo ghi chú review, chưa xác định màn).
 - Mitigation: chưa đụng — không sai tiền, không mất dữ liệu. Xét lại cùng lượt nghiệm thu máy thật (ISSUE-014);
   D9 cần chốt ý muốn: giữ mốc của máy khi Ghi đè hay mốc trong file.
+
+### ISSUE-017 — Worker không ép duy nhất (customerId, itemId) của bảng giá riêng
+- State: deferred
+- Severity: medium
+- Raised by / Date: review Codex vòng 3 (arbiter3 L-9 — báo cáo cục bộ dưới `plans/`, không commit nên không
+  có link cố định) / 03/10/2026
+- Related task: #50 Nhập CSV (phase 4), phát hiện khi lên plan — lỗi có sẵn, không do #50 gây ra
+- Description: IndexedDB có chỉ mục duy nhất `&[customerId+itemId]` (`src/db/db.ts:139`), nhưng Worker không
+  kiểm cặp này khi nhận sự kiện `customerPrices` (`worker/src/shop-do.ts`, `acceptEvent` không có luật nào cho
+  cặp này). Hai máy đặt giá riêng cho cùng khách + món lúc mất mạng sẽ tạo hai dòng trên sổ chung với hai gid
+  khác nhau; máy nào kéo về sau sẽ vấp chỉ mục duy nhất khi `applyEvents` ghi dòng thứ hai. Nhánh nối món của
+  #50 (phase 4 bước A4) né được trường hợp của chính nó ("giá của món có sẵn thắng") nhưng không sửa lỗi gốc.
+- Mitigation: ngoài phạm vi #50. Hướng sửa có thể dùng cùng khuôn với `item-name-taken`: mã từ chối riêng kèm
+  gid dòng đang giữ cặp, máy nối hoặc bỏ dòng của mình.
+
+### ISSUE-018 — Xung đột khách trong file CSV phụ thuộc thứ tự dòng (không khớp SĐT ngược với tên)
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review phase 1-3, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 2, `src/domain/nhap-file.ts` `planCustomerImport`
+- Description: Nhánh "có SĐT" chỉ tìm đích mới theo `digitsOf` (đúng như plan đã chốt, không tìm theo tên);
+  nhánh "không SĐT" tìm đích mới theo tên (kể cả đích có SĐT). Vì vậy, file có dòng A "Chị Lan" (không SĐT)
+  rồi dòng B "Chị Lan" kèm SĐT → sinh **hai khách** (B không khớp ngược lại đích tên của A). Đảo thứ tự (B
+  trước A) thì lại đúng ra lỗi "cùng một khách" (A khớp tên của đích B). Kết quả phụ thuộc thứ tự dòng.
+- Mitigation: đây là hệ quả trực tiếp của luật đã chốt sau 3 vòng review (chỉ khớp theo digitsOf khi có SĐT,
+  không mở rộng sang tên) — không tự ý đổi thuật toán phân loại mà không hỏi lại người dùng, vì sẽ lật một
+  quyết định đã duyệt. Nếu muốn sửa: mở rộng nhánh "có SĐT" để cũng tìm đích mới theo tên khi không khớp SĐT,
+  thêm ca test đối xứng cho cả hai thứ tự dòng. Ngoài phạm vi #50 cho tới khi người dùng xác nhận.
+
+### ISSUE-019 — resolveItemNameTaken không tự kiểm existingGid khác entityKey của chính sự kiện bị từ chối
+- State: resolved
+- Severity: low
+- Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` (hàm `resolveItemNameTaken`)
+- Description: Hiện tại SQL phía Worker (`worker/src/shop-do.ts`, `itemNameTaken`) luôn loại trừ chính entityKey
+  đang xét (`entityKey != ?`), nên `existingGid` trả về không bao giờ trùng `rejected.entityKey`. Nhưng phía
+  client không tự kiểm lại điều này — nếu một thay đổi SQL sau này ở Worker vô tình làm `existingGid` trùng
+  `rejected.entityKey`, `resolveCreate` sẽ xoá D cục bộ rồi trỏ `orderLines`/`customerPrices` sang `existing.id`
+  = id vừa xoá, tạo dòng đơn mồ côi.
+- Mitigation: ngoài phạm vi #50 vì điều kiện hiện không xảy ra được. Nếu muốn phòng thủ: thêm guard
+  `if (existingGid === rejected.entityKey) return 'deferred'` đầu `resolveItemNameTaken`, kèm ca test.
+- Resolution (08/10/2026): `resolveItemNameTaken` trả `'deferred'` ngay khi `existingGid === rejected.entityKey`
+  hoặc bảng bị từ chối không phải `items`, trước khi mở giao dịch.
+
+### ISSUE-020 — Một dòng item-name-taken bị 'deferred' vĩnh viễn thì máy kẹt ghi mãi, không có lối thoát UI
+- State: resolved
+- Severity: medium
+- Raised by / Date: kongming (review phase 4, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 4, `src/db/sync/item-name-taken.ts` + `src/db/sync/pusher.ts` (`pushNext`)
+- Description: Nếu phản hồi `item-name-taken` của Worker thiếu `existingGid`/`existingName` (lệch phiên bản
+  Worker/app) hoặc `existing` không bao giờ về máy, `pushNext` trả `'deferred'` vĩnh viễn cho dòng đó — không
+  sai dữ liệu, chỉ là máy không bao giờ đẩy tiếp được dòng này hay các dòng outbox phía sau (head-of-line,
+  ISSUE đã ghi ở red-team phase 4). Thứ tự deploy Worker-trước-Pages ở plan loại trừ chiều lệch phiên bản này,
+  nên hiện không xảy ra được qua đường deploy bình thường; nhưng không có nút nào trên UI để người bán tự thoát
+  khỏi trạng thái "1 thao tác chờ" treo mãi nếu nó vẫn xảy ra do lý do khác (ví dụ Worker có bug khác).
+- Mitigation: ngoài phạm vi #50. Nếu cần: thêm giới hạn số lần thử `'deferred'` trước khi đổi sang báo lỗi rõ
+  ràng + cho người bán chọn "bỏ qua dòng này" (mất đồng bộ của riêng dòng đó, không mất đơn hàng).
+- Cập nhật (08/10/2026, review độc lập trước merge PR #68): mô tả "không xảy ra qua đường bình thường" là sai. Người
+  bán tự gây ra được: máy kéo về món E của máy khác trước khi kịp đẩy `create D` trùng tên, rồi xoá E (E chưa bán
+  trên máy này nên được xoá). Sổ chung vẫn từ chối D vì E còn đang bán ở đó, E không còn trên máy, lượt kéo không gửi
+  lại E → hoãn mãi. Ngoài ra nhánh `put` (đổi tên / bán lại bị chặn) từng đòi E có trên máy dù không dùng tới.
+- Resolution (08/10/2026): nhánh `create` thấy E vắng mà outbox còn lần xoá E chưa đẩy thì hoàn lại trọn giao dịch
+  xoá đó (chỉ khi nó chỉ gồm xoá E và giá riêng của E) bằng `restoreRow`, rồi nối D vào E như thường; câu báo nói E
+  được khôi phục. `restoreRow` gặp xung đột thì huỷ cả giao dịch và hoãn như cũ. Nhánh `put` không còn đòi E. Ca
+  Vitest trong `src/db/sync/__tests__/item-name-taken.test.ts`. Phần "không có nút thoát trên UI" cho các nguyên nhân
+  hoãn khác (Worker lệch phiên bản, bug) vẫn chưa có.
+
+### ISSUE-021 — syncTransaction để lại promise outbox mồ côi khi callback ném sau vài write thành công
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (checkpoint sau phase 5, ak:vibe #50) / 06/10/2026
+- Related task: #50 phase 5, `src/db/sync/outbox.ts` (`syncTransaction`/`capture`)
+- Description: `capture()` đẩy promise `refsFor(...).then(outbox.add)` vào `context.pending` (`outbox.ts:126-144`).
+  Nếu callback của `syncTransaction` ném SAU khi vài write đã thành công (vd `ItemSchema.parse` hỏng ở dòng
+  giữa một vòng lặp ghi nhiều món), `syncTransaction` không bao giờ chạy tới `await Promise.all(context.pending)`
+  (`outbox.ts:197-199`) — các promise capture đang dở trở thành mồ côi, reject không ai bắt khi transaction
+  abort. Dữ liệu vẫn abort trọn vẹn (IndexedDB tự rollback), không sai tiền hay mất dữ liệu; hậu quả chỉ là
+  `unhandledrejection` (Node/test: có thể đổi exit code; trình duyệt thật: chỉ là console noise). #50 né được
+  bằng cách validate-trước (soát ItemSchema.parse cho mọi dòng trước khi ghi byte đầu), nhưng đây là lỗ hổng
+  chung của `syncTransaction`, không riêng #50 — bất kỳ chỗ gọi nào ghi nhiều dòng trong một transaction rồi
+  ném giữa chừng (vd nhập 500 dòng vấp quota đầy) đều có thể lộ lại.
+- Mitigation: ngoài phạm vi #50 (sửa `outbox.ts` kéo theo delta re-review phase 3+4 đã duyệt). Hướng sửa gợi ý:
+  trong nhánh `catch` của `syncTransaction`, `await Promise.allSettled(context.pending)` trước khi `throw` lại.
+
+### ISSUE-022 — Kế hoạch ghi lúc bấm NHẬP tính lại theo sổ mới nhất, có thể khác bản xem trước đã duyệt
+- State: deferred (người dùng chốt 06/10/2026: giữ hành vi hiện tại, chỉ ghi chú)
+- Severity: medium
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 5/6/8) / 06/10/2026
+- Related task: #50 phase 5, `src/db/repositories/nhap-file.ts` (`applyItemImport`/`applyCustomerImport`)
+- Description: `apply*` tính lại `planItemImport`/`planCustomerImport` bên trong `syncTransaction` dựa trên
+  dữ liệu đọc **lúc đó**, không phải bản xem trước người dùng đã thấy trên màn hình. Chỉ ném
+  `ImportChangedError` khi kế hoạch mới có lỗi (vd thành mơ hồ vì 2 bản trùng) — mọi chênh lệch khác (một
+  dòng từ "tạo mới" chuyển thành "trùng, cập nhật" vì giữa lúc xem trước và lúc bấm NHẬP có máy khác vừa
+  thêm/đồng bộ kéo về một món cùng tên) đều lặng lẽ áp theo chính sách đã chọn (`'skip'`/`'update'`) mà
+  không báo. Ca `src/db/__tests__/nhap-file.test.ts` ("thêm 'Trà đá' vào DB sau lúc dựng rows: update thì
+  cập nhật, không tạo bản thứ hai") đã khoá chính hành vi này có chủ đích, để giữ đúng luật "không bao giờ
+  tạo món trùng tên". Cửa sổ đua chỉ hẹp (giữa lúc mở xem trước và lúc bấm NHẬP trên một máy) và không làm
+  mất dữ liệu — chỉ có thể ghi đè giá/thông tin của một món mà người bán chưa từng thấy là trùng.
+- Mitigation: người dùng đã xác nhận giữ nguyên, ưu tiên đúng luật "không tạo món trùng tên" hơn là chặn
+  chặt thêm. Nếu sau này muốn chặn chặt hơn: truyền phân loại lúc xem trước (`line → create | existing.id`)
+  vào `apply*`, ném `ImportChangedError` khi một dòng đổi phân loại dù không phải lỗi — cần sửa lớp ghi đã
+  qua review độc lập, nên sẽ cần review lại phần sửa.
+
+### ISSUE-023 — Xem trước khách trùng không liệt kê dòng và thay đổi, "Cập nhật tất cả" có thể đổi tên khách không ai thấy trước
+- State: deferred
+- Severity: medium
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx` (`CustomerPreview`)
+- Description: `ItemPreview` liệt kê từng dòng trùng kèm thay đổi cụ thể, nhưng `CustomerPreview` chỉ hiện ba
+  con số đếm (tạo/cập nhật/bỏ qua), không có danh sách "tên cũ → tên mới". Khớp theo SĐT thì `changes.name`
+  ghi đè tên khách trong sổ (`src/domain/nhap-file.ts:267`) — người bán bấm "Cập nhật tất cả khách trùng"
+  là đổi tên hàng loạt khách mà không xem được trước dòng nào đổi thành gì.
+- Mitigation: ngoài phạm vi phase 6 đã review GO. Nếu muốn sửa: thêm danh sách dòng trùng kèm tên cũ → tên
+  mới vào `CustomerPreview`, theo đúng khuôn `ItemPreview` đã có.
+
+### ISSUE-024 — Nhập món trùng tên khi sổ có đúng 1 bản đang bán + 1 bản ngừng bán vẫn báo lỗi oan "Sổ đang có 2 món"
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 5) / 06/10/2026
+- Related task: #50 phase 5, `src/domain/nhap-file.ts:208-212` (`planItemImport`)
+- Description: Luật mới (phase 3/8) cho phép sổ có một món đang bán và một món ngừng bán cùng tên. Nhưng
+  `planItemImport` khi thấy 2 bản khớp tên luôn báo lỗi "Sổ đang có 2 món tên X, sửa trong app trước" và
+  khoá cả file (Q4 đã chốt: còn lỗi thì chặn cả lần nhập), kể cả khi chỉ có đúng một bản đang `isActive`.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: khi `matches.length > 1` nhưng chỉ đúng một bản `isActive`,
+  ưu tiên khớp dòng CSV vào bản đang bán đó thay vì báo lỗi.
+
+### ISSUE-025 — Chặn "Bán lại" trùng tên dựa trên snapshot, có khe hở đua nhau trên máy chưa ghép mở nhiều tab
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 8) / 06/10/2026
+- Related task: #50 phase 8, `src/features/items/item-form-page.tsx` (`toggleActive`)
+- Description: Guard đọc `useLiveQuery`/`useItems() ?? []` rồi mới `updateItem`, không kiểm lại trong cùng
+  transaction Dexie lúc ghi. Chú thích nói "Worker là chốt cuối" — đúng với máy **đã ghép**, nhưng máy
+  **chưa ghép** (chỉ có sổ cục bộ, không có Worker) mở hai tab cùng bấm "Bán lại" gần nhau có thể tạo hai
+  món cùng tên đang bán mà không ai chặn.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: thêm `reactivateItem(id)` ở repository, kiểm lại điều kiện
+  trùng tên bên trong `syncTransaction` (các transaction rw của Dexie chạy nối tiếp, không chạy chồng).
+
+### ISSUE-026 — Lỗi Zod hiện nguyên văn kỹ thuật ra giao diện khi bản ghi cũ không còn hợp schema
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 8) / 06/10/2026
+- Related task: #50 phase 8, `src/features/items/item-form-page.tsx` (`toggleActive` qua `useSubmitOnce`)
+- Description: Nếu `ItemSchema.parse`/`CustomerSchema.parse` ném (vd bản ghi cũ không còn hợp schema mới),
+  `useSubmitOnce` hiện thẳng `caught.message` của `ZodError` — là JSON kỹ thuật, không lộ PII hay bí mật
+  nhưng khó đọc với người bán.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: bọc lỗi Zod thành câu tiếng Việt chung ở lớp gọi.
+
+### ISSUE-027 — Danh sách thay đổi món trong xem trước không ghi tên trường, không phân biệt giá bán/giá vốn
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx:70-74` (`ItemPreview`)
+- Description: Dòng thay đổi in giá trị liền nhau (vd "4.000 đ, 3.000 đ") không ghi tên trường, nên không
+  phân biệt được đâu là giá bán, đâu là giá vốn khi cả hai cùng đổi.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: thêm nhãn trường trước mỗi giá trị trong danh sách thay đổi.
+
+### ISSUE-028 — Đổi chip Món/Khách hoặc chọn file thứ hai trước khi file trước đọc xong có thể hiện nhầm xem trước cũ
+- State: deferred
+- Severity: low
+- Raised by / Date: review độc lập (code-reviewer, ak:vibe #50 phase 6) / 06/10/2026
+- Related task: #50 phase 6, `src/features/settings/nhap-file-page.tsx:228-252` (`pickFile`)
+- Description: `pickFile` giữ `kind` trong closure và không huỷ lượt đọc cũ. Đổi chip Món/Khách, hoặc chọn
+  file thứ hai, trong lúc file đầu chưa đọc xong, có thể khiến xem trước của lượt cũ hiện đè lên sau khi nó
+  đọc xong trễ. Lúc ghi vẫn đúng loại theo file vì `applyItemImport`/`applyCustomerImport` được chọn theo
+  `itemPlan`/`customerPlan` đang có, không theo `kind` — chỉ giao diện xem trước bị lệch, không ghi sai.
+- Mitigation: ngoài phạm vi #50. Nếu muốn sửa: huỷ lượt đọc cũ (token/`AbortController`) khi `kind` đổi
+  hoặc chọn file mới trước khi lượt cũ xong.
+
+### ISSUE-029 — Máy ngừng bán món E (chưa đẩy) rồi bị nối món trùng tên vào E: sổ chung mất món đang bán
+- State: deferred
+- Severity: medium
+- Raised by / Date: kongming (tư vấn sửa ISSUE-020, ak:vibe #50) / 08/10/2026
+- Related task: #50, `src/db/sync/item-name-taken.ts` (`resolveCreate`)
+- Description: Cùng kịch bản ISSUE-020 nhưng người bán bấm "Ngừng bán" E thay vì xoá. E còn trên máy (`isActive: 0`)
+  nên `resolveCreate` nối D vào E, rồi sự kiện `put E isActive 0` đang chờ được đẩy lên: mọi máy mất món "Trà" đang
+  bán, đơn của D treo vào món ngừng bán. Không mất đơn, không kẹt hàng đợi, nhưng sổ chung ra kết quả trái ý người bán.
+- Mitigation: ngoài phạm vi #50. Hướng sửa cùng khuôn ISSUE-020: trước khi nối, hoàn lại giao dịch `put` đang chờ
+  của E có `before.isActive === 1 && after.isActive === 0`, kèm câu báo.
+
+### ISSUE-030 — `itemGroups.get` / `orderLines.get` với id không còn thì ném TypeError thay vì trả `undefined`
+- State: deferred
+- Severity: low
+- Raised by / Date: phát hiện khi viết ca Vitest cho nhánh khôi phục món (ak:vibe #50) / 09/10/2026
+- Related task: `src/db/db.ts` (`defaultArrayFields`), `src/db/repositories/items.ts` (`getGroup`, `updateGroup`)
+- Description: hook `reading` của `defaultArrayFields` đọc `row[field]` mà không kiểm `obj` rỗng. Dexie gọi hook này cả
+  khi `get` không tìm thấy, nên `db.itemGroups.get(idĐãXoá)` ném "Cannot read properties of undefined". Ví dụ:
+  `item-group-menu-sheet.tsx` đang mở `getGroup(groupId)` mà máy khác xoá nhóm đó.
+- Mitigation: ngoài phạm vi #50. Sửa một dòng trong hook (`if (!obj) return obj`) kèm ca Vitest; `item-name-taken.ts`
+  dùng `where('id').count()` nên không vấp lỗi này.
+
+### ISSUE-031 — Hai lần xoá cùng một món có sẵn nằm trong hàng đợi khi món trùng tên được nối
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review trước merge PR #68, ak:vibe #50) / 09/10/2026
+- Related task: #50, `src/db/sync/item-name-taken.ts` (`restoreLocallyDeleted`)
+- Description: Khi `create D` còn kẹt, người bán xoá món có sẵn E, máy khác sửa E (máy kéo về, E xuất hiện lại), rồi
+  người bán xoá E lần nữa. Nhánh khôi phục lấy lần xoá mới nhất; lần xoá cũ vẫn chờ đẩy, lên sổ chung sau khi dòng đơn
+  của D đã trỏ sang E thì bị từ chối vì còn được dùng, và `rollbackRejectedTail` cuộn các thay đổi phía sau.
+- Mitigation: ngoài phạm vi #50, rất khó xảy ra. Sửa: hoãn khi outbox có hơn một lần xoá E, kèm ca Vitest.
+

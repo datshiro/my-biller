@@ -121,6 +121,12 @@ export function SettingsPage() {
           right={<span className="text-[20px] text-muted">›</span>}
           onClick={() => void navigate('/them/loai-chi-phi')}
         />
+        <ListRow
+          title="Nhập từ file"
+          subtitle="Món, nhóm và khách từ file CSV (Excel, Google Sheets)"
+          right={<span className="text-[20px] text-muted">›</span>}
+          onClick={() => void navigate('/them/nhap-file')}
+        />
       </div>
 
       {connection ? null : <DangerZone />}
