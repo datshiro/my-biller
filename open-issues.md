@@ -462,3 +462,13 @@
 - Mitigation: ngoài phạm vi #50. Sửa một dòng trong hook (`if (!obj) return obj`) kèm ca Vitest; `item-name-taken.ts`
   dùng `where('id').count()` nên không vấp lỗi này.
 
+### ISSUE-031 — Hai lần xoá cùng một món có sẵn nằm trong hàng đợi khi món trùng tên được nối
+- State: deferred
+- Severity: low
+- Raised by / Date: kongming (review trước merge PR #68, ak:vibe #50) / 09/10/2026
+- Related task: #50, `src/db/sync/item-name-taken.ts` (`restoreLocallyDeleted`)
+- Description: Khi `create D` còn kẹt, người bán xoá món có sẵn E, máy khác sửa E (máy kéo về, E xuất hiện lại), rồi
+  người bán xoá E lần nữa. Nhánh khôi phục lấy lần xoá mới nhất; lần xoá cũ vẫn chờ đẩy, lên sổ chung sau khi dòng đơn
+  của D đã trỏ sang E thì bị từ chối vì còn được dùng, và `rollbackRejectedTail` cuộn các thay đổi phía sau.
+- Mitigation: ngoài phạm vi #50, rất khó xảy ra. Sửa: hoãn khi outbox có hơn một lần xoá E, kèm ca Vitest.
+
