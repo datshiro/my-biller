@@ -2,6 +2,7 @@
 Documentation       Hai máy bán hàng dùng chung một Durable Object thật. Mọi ca dính tiền đọc lại
 ...                 IndexedDB ở cả A và B; không đưa token hay mã ghép vào log Robot.
 Resource            ../resources/hai-may.resource
+Resource            ../resources/sao-luu.resource
 Library             OperatingSystem
 Library             String
 Suite Setup         Mở Trình Duyệt Cho Suite
@@ -283,7 +284,8 @@ Máy chủ từ chối đơn ghi thì dòng cục bộ được hoàn lại
 
 Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
     [Documentation]    Máy đã ghép chỉ được kéo lại bản sao đọc, không được lộ đường xoá/nhập có
-    ...    thể làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy.
+    ...    thể làm mất thao tác chưa đẩy hoặc chìa khóa ghép máy. Lời giải thích chỉ chỉ thêm đường huỷ ghép
+    ...    ở màn Máy bán hàng — đường đó tự chặn khi còn thao tác chưa đẩy.
     Chọn Máy A
     Mở Màn    /them/cai-dat
     Chờ Thấy Chữ    Sao lưu & khôi phục
@@ -295,7 +297,7 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
     Chờ Thấy Chữ    làm trên một máy chưa ghép
     Wait For Elements State    css=button:text-is("Kéo lại từ đầu")    visible
     Không Được Thấy Chữ    Nhập từ file sao lưu
-    Không Được Thấy Chữ    huỷ ghép
+    Chờ Thấy Chữ    huỷ ghép máy này ở Cài đặt › Máy bán hàng
     ${outbox_sau}=    Đọc Bảng    outbox    ${MÁY_A_PAGE}
     ${máy_sau}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
     Should Be Equal    ${outbox_sau}    ${outbox_trước}    Mở màn sao lưu trên máy đã ghép mà outbox đổi.
@@ -351,6 +353,7 @@ Máy bị thu hồi không ghi được vào sổ chung
     Mở Màn    /them/sao-luu
     Chờ Thấy Chữ    Máy này đã bị thu hồi khỏi sổ chung
     Chờ Thấy Chữ    Cài đặt › Máy bán hàng
+    Chờ Thấy Chữ    Dùng máy này như máy chưa ghép
     Không Được Thấy Chữ    Nhập từ file sao lưu
 
 Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
@@ -755,6 +758,150 @@ Nhập khách ở máy A thì máy B có khách mới và khách cập nhật, h
     Should Be Equal    ${anh_hùng}[address]    5 Hai Bà Trưng
     [Teardown]    Run Keywords    Đóng Hai Máy    AND    Remove File    ${f}
 
+Huỷ ghép máy B giữ nguyên sổ tiền, máy A thấy B đã rời và B sao lưu khôi phục như máy chưa ghép
+    [Tags]    -regression
+    [Documentation]    Huỷ ghép không được đổi sổ tiền trên máy, phải làm máy kia thấy máy này đã rời, và để máy
+    ...    vừa rời sao lưu rồi khôi phục được như một máy chưa ghép.
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    ${trước}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /ghep-may
+    Danh Sách Máy Đã Tải
+    Chờ Thấy Chữ    RỜI SỔ CHUNG
+    Click    css=button:text-is("Huỷ ghép máy này")
+    Chờ Hộp Xác Nhận    Huỷ ghép “Quầy B”?
+    Chờ Thấy Chữ    phải sao lưu rồi xoá sổ trên máy trước
+    # `text-is`: `has-text("Huỷ ghép")` khớp cả nút "Huỷ" của hộp.
+    Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
+    Chờ Thấy Chữ    Máy này đã rời sổ chung
+    Wait For Elements State    css=button:has-text("GHÉP MÁY NÀY")    visible
+
+    ${sau}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Should Be Equal    ${sau}    ${trước}    Huỷ ghép làm đổi sổ tiền trên máy.
+    ${device}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${khoá}=    Evaluate    [row['key'] for row in $device]
+    FOR    ${tên_khoá}    IN    connection    writeBlock    pairing    lease
+        Should Not Contain    ${khoá}    ${tên_khoá}    Máy đã huỷ ghép vẫn còn khoá ${tên_khoá}.
+    END
+    Should Contain    ${khoá}    identity
+    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
+    Danh Sách Máy Đã Tải
+    Không Được Thấy Chữ    Quầy B · chữ B
+
+    Chọn Máy B
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Món sau huỷ ghép
+    Điền Ô    Giá bán *    15000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    Món sau huỷ ghép
+    # Máy chưa ghép ghi thẳng vào sổ cục bộ, không xếp hàng chờ lên sổ chung.
+    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/mat-hang
+    Chờ Thấy Chữ    Trà đá
+    Mặt Hàng Không Được Tồn Tại    Món sau huỷ ghép    ${MÁY_A_PAGE}
+
+    Chọn Máy B
+    ${lúc_sao_lưu}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Mở Màn    /them/sao-luu
+    ${file}=    Sao Lưu Ra File
+    Bán Nhanh    Trà đá
+    Nhập File Sao Lưu    ${file}
+    ${khôi_phục}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Should Be Equal    ${khôi_phục}    ${lúc_sao_lưu}
+    ...    Khôi phục trên máy vừa huỷ ghép không đưa sổ về đúng lúc sao lưu.
+
+Còn thay đổi chưa lên sổ chung thì không huỷ ghép được cho tới khi đồng bộ xong
+    [Tags]    -regression
+    [Documentation]    Bỏ hàng đợi khi huỷ ghép có thể bỏ nhầm thao tác đã lên sổ chung, nên nút huỷ ghép khoá
+    ...    tới khi hàng đợi đẩy hết; thay đổi đó phải lên sổ chung trước khi máy rời.
+    Chọn Máy B
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Món chờ đồng bộ
+    Điền Ô    Giá bán *    16000
+    # Mất mạng lúc lưu để không tick nào đang bay kịp đẩy; có mạng lại thì lease đã thuộc tab treo.
+    Set Offline    ${True}
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    Món chờ đồng bộ
+    Giữ Lease Bằng Tab Treo
+    Set Offline    ${False}
+    ${outbox}=    Đọc Bảng    outbox    ${MÁY_B_PAGE}
+    Should Not Be Empty    ${outbox}
+
+    Mở Màn    /ghep-may
+    Danh Sách Máy Đã Tải
+    Chờ Thấy Chữ    Còn 1 thay đổi chưa lên sổ chung
+    Wait For Elements State    css=button:text-is("Huỷ ghép máy này")    disabled
+
+    Cho Lease Hiện Tại Hết Hạn
+    Bấm Nút    Đồng bộ ngay
+    Wait Until Keyword Succeeds    40x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Wait For Elements State    css=button:text-is("Huỷ ghép máy này")    enabled
+    Click    css=button:text-is("Huỷ ghép máy này")
+    Chờ Hộp Xác Nhận    Huỷ ghép “Quầy B”?
+    Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
+    Chờ Thấy Chữ    Máy này đã rời sổ chung
+    Không Được Thấy Chữ    thay đổi ghi trong lúc huỷ ghép
+
+    Wait Until Keyword Succeeds    40x    500ms    Món Phải Có Trên Máy    Món chờ đồng bộ    ${MÁY_A_PAGE}
+
+Máy bị máy khác thu hồi dùng lại được như máy chưa ghép mà không đổi sổ
+    [Tags]    -regression
+    [Documentation]    Máy đã bị thu hồi có lối về sổ cục bộ: sổ giữ nguyên, hết khoá ghi, và mở lại nhập từ file.
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    ${trước}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
+    Wait Until Keyword Succeeds    20x    500ms    Chờ Thấy Chữ    Quầy B · chữ B
+    Click    xpath=//p[normalize-space()="Quầy B · chữ B"]/ancestor::div[contains(@class,"rounded-card")]//button[contains(.,"Thu hồi")]
+    Chờ Hộp Xác Nhận    Thu hồi “Quầy B”?
+    Xác Nhận Trong Hộp    Thu hồi máy
+
+    Chọn Máy B
+    Chờ Thấy Chữ    Máy này đã bị thu hồi
+    Mở Màn    /ghep-may
+    Click    css=button:text-is("Dùng máy này như máy chưa ghép")
+    Chờ Hộp Xác Nhận    Dùng máy này như máy chưa ghép?
+    Chờ Thấy Chữ    ghép lại ngay bằng mã mới
+    Xác Nhận Trong Hộp    Dùng như máy chưa ghép
+    Chờ Thấy Chữ    Máy này đã rời sổ chung
+    ${device}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${khoá}=    Evaluate    [row['key'] for row in $device]
+    Should Not Contain    ${khoá}    writeBlock
+    Should Not Contain    ${khoá}    notice
+    ${sau}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
+    Should Be Equal    ${sau}    ${trước}    Về sổ cục bộ làm đổi sổ tiền trên máy.
+
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    Món sau khi về cục bộ
+    Điền Ô    Giá bán *    17000
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    Món sau khi về cục bộ
+    Mở Màn    /them/sao-luu
+    Wait For Elements State    css=button:has-text("Nhập từ file sao lưu")    visible
+
+Huỷ ghép khi mất mạng báo cần mạng và máy vẫn ghép
+    [Tags]    -regression
+    [Documentation]    Huỷ ghép cần mạng để máy kia biết; mất mạng thì báo rõ và máy vẫn ghép như cũ.
+    Chọn Máy B
+    # Mở màn trước khi mất mạng: Robot chạy trên Vite dev không có service worker, điều hướng lúc offline hỏng.
+    Mở Màn    /ghep-may
+    Danh Sách Máy Đã Tải
+    Chờ Thấy Chữ    RỜI SỔ CHUNG
+    Set Offline    ${True}
+    Click    css=button:text-is("Huỷ ghép máy này")
+    Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
+    Chờ Thấy Chữ    Huỷ ghép cần mạng
+    Wait For Elements State    css=button:has-text("TẠO MÃ GHÉP")    visible
+    ${device}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${connection}=    Evaluate    [row for row in $device if row['key'] == 'connection']
+    Length Should Be    ${connection}    1
+    Should Be True    ${connection}[0][hasToken]
+    ${khoá}=    Evaluate    [row['key'] for row in $device]
+    Should Not Contain    ${khoá}    writeBlock
+    Set Offline    ${False}
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
+    Danh Sách Máy Đã Tải
+    Chờ Thấy Chữ    Quầy B · chữ B
 
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung

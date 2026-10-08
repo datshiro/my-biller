@@ -48,9 +48,11 @@ export function startSyncRunner(): () => void {
       return
     }
     running = true
+    let token: string | null = null
     try {
       const connection = await getDeviceConnection()
       if (!connection) return
+      token = connection.token
       const pairing = await getDevicePairingState()
       if (pairing?.connectionSaved) {
         await activatePairedDevice(connection, await listPendingOutbox())
@@ -92,7 +94,7 @@ export function startSyncRunner(): () => void {
         socket?.close()
         socket = null
       } else if (caught instanceof SyncApiError && caught.status === 401) {
-        await markDeviceRevoked()
+        if (token) await markDeviceRevoked(token)
       }
       // Lỗi mạng được lượt kéo định kỳ thử lại. Outbox không bị đụng tới.
     } finally {

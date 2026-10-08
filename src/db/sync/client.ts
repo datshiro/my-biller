@@ -124,10 +124,11 @@ export function listShopDevices(
 export function revokeShopDevice(
   connection: DeviceConnection,
   deviceId: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<{ revoked: true; deviceId: string }> {
   return jsonRequest(
     `${connection.syncUrl}/shop/${connection.shopId}/devices/${encodeURIComponent(deviceId)}/revoke`,
-    { method: 'POST', headers: authHeaders(connection) },
+    { method: 'POST', headers: authHeaders(connection), signal: options.signal },
   )
 }
 

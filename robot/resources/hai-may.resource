@@ -216,3 +216,51 @@ Cho Lease Hiện Tại Hết Hạn
 
 Đánh Thức Runner Hiện Tại
     Evaluate JavaScript    ${None}    () => window.dispatchEvent(new Event('online'))
+
+Giữ Lease Bằng Tab Treo
+    [Documentation]    Giả lập tab dẫn đầu treo: lease thuộc một owner không tồn tại và còn hạn 10 phút, nên tab
+    ...    đang mở không giành được lease và hàng đợi đứng yên dù có mạng. Gỡ bằng `Cho Lease Hiện Tại Hết Hạn`.
+    Evaluate JavaScript    ${None}
+    ...    async () => {
+    ...        const db = await new Promise((resolve, reject) => {
+    ...            const request = indexedDB.open('my-biller')
+    ...            request.onsuccess = () => resolve(request.result)
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...        await new Promise((resolve, reject) => {
+    ...            const tx = db.transaction('deviceState', 'readwrite')
+    ...            const store = tx.objectStore('deviceState')
+    ...            const get = store.get('lease')
+    ...            get.onsuccess = () => store.put({
+    ...                key: 'lease',
+    ...                ownerId: 'tab-treo',
+    ...                epoch: (get.result?.epoch ?? 0) + 1,
+    ...                expiresAt: Date.now() + 600000,
+    ...            })
+    ...            tx.oncomplete = () => resolve()
+    ...            tx.onerror = () => reject(tx.error)
+    ...        })
+    ...        db.close()
+    ...    }
+
+Tổng Sổ Tiền Máy
+    [Documentation]    Số dòng và tổng tiền của sổ trên một máy, đọc thẳng IndexedDB: hai lần đọc phải bằng nhau
+    ...    khi thao tác ở giữa không được đổi sổ.
+    [Arguments]    ${page}
+    ${orders}=    Đọc Bảng    orders    ${page}
+    ${payments}=    Đọc Bảng    payments    ${page}
+    ${items}=    Đọc Bảng    items    ${page}
+    ${sổ}=    Evaluate
+    ...    {'orders': len($orders), 'orderTotal': sum(row['total'] for row in $orders), 'payments': len($payments), 'paid': sum(row['amount'] for row in $payments), 'items': len($items)}
+    RETURN    ${sổ}
+
+Danh Sách Máy Đã Tải
+    [Documentation]    Chip "Máy này" chỉ có trong danh sách tải từ Worker; dòng tên máy ở đầu màn hiện từ
+    ...    IndexedDB ngay nên không chứng minh danh sách đã về.
+    Wait For Elements State    css=.rounded-card >> text=Máy này >> nth=0    visible
+
+Món Phải Có Trên Máy
+    [Arguments]    ${tên_món}    ${page}
+    ${items}=    Đọc Bảng    items    ${page}
+    ${found}=    Evaluate    [row for row in $items if row['name'] == $tên_món]
+    Length Should Be    ${found}    1    Món chưa có trong sổ của máy.

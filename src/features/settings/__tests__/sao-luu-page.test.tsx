@@ -98,7 +98,7 @@ describe('máy bị chặn khôi phục thấy vì sao và đường đang có',
     expect(screen.getByText(/làm trên một máy chưa ghép/)).toBeDefined()
     expect(screen.getByRole('button', { name: 'Kéo lại từ đầu' })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Nhập từ file sao lưu' })).toBeNull()
-    expect(screen.queryByText(/huỷ ghép/i)).toBeNull()
+    expect(screen.getByText(/huỷ ghép máy này ở Cài đặt › Máy bán hàng/)).toBeDefined()
   })
 
   it('đang ghép: bảo chờ ghép xong, không có nút nhập lẫn Kéo lại', async () => {
@@ -116,6 +116,7 @@ describe('máy bị chặn khôi phục thấy vì sao và đường đang có',
 
     expect(await screen.findByText(/Máy này đã bị thu hồi khỏi sổ chung/)).toBeDefined()
     expect(screen.getByText(/Cài đặt › Máy bán hàng/)).toBeDefined()
+    expect(screen.getByText(/Dùng máy này như máy chưa ghép/)).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Nhập từ file sao lưu' })).toBeNull()
   })
 
