@@ -258,6 +258,87 @@ describe('device pairing', () => {
     expect(denied.status).toBe(401)
   })
 
+  it('lets a paired device revoke itself and shows it as revoked to the other device', async () => {
+    const { shop, device: deviceA } = await pairFirst()
+    const codeResponse = await SELF.fetch(`https://example.com/shop/${shop.shopId}/pair-code`, {
+      method: 'POST',
+      headers: authorized(deviceA.token),
+    })
+    const { code } = await codeResponse.json<{ code: string }>()
+    const deviceBResponse = await pair(code, 'B')
+    expect(deviceBResponse.status).toBe(201)
+    const deviceB = await deviceBResponse.json<Paired>()
+    expect((await activate(shop.shopId, deviceB)).status).toBe(201)
+
+    const selfRevoke = `https://example.com/shop/${shop.shopId}/devices/${deviceB.deviceId}/revoke`
+    const revokeByB = await SELF.fetch(selfRevoke, { method: 'POST', headers: authorized(deviceB.token) })
+    expect(revokeByB.status).toBe(200)
+    await expect(revokeByB.json()).resolves.toEqual({ revoked: true, deviceId: deviceB.deviceId })
+
+    const listByRevokedB = await SELF.fetch(`https://example.com/shop/${shop.shopId}/devices`, {
+      headers: authorized(deviceB.token),
+    })
+    expect(listByRevokedB.status).toBe(401)
+    const revokeAgainByB = await SELF.fetch(selfRevoke, {
+      method: 'POST',
+      headers: authorized(deviceB.token),
+    })
+    expect(revokeAgainByB.status).toBe(401)
+    const oplogByB = await SELF.fetch(`https://example.com/shop/${shop.shopId}/oplog?since=0`, {
+      headers: authorized(deviceB.token),
+    })
+    expect(oplogByB.status).toBe(401)
+    const epochByB = await SELF.fetch(`https://example.com/shop/${shop.shopId}/epoch`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, ...authorized(deviceB.token) },
+      body: JSON.stringify({ epoch: 1 }),
+    })
+    expect(epochByB.status).toBe(401)
+
+    const listByA = await SELF.fetch(`https://example.com/shop/${shop.shopId}/devices`, {
+      headers: authorized(deviceA.token),
+    })
+    expect(listByA.status).toBe(200)
+    const { devices } = await listByA.json<{
+      devices: { id: string; revokedAt: number | null; current: boolean }[]
+    }>()
+    const rowB = devices.find((device) => device.id === deviceB.deviceId)
+    expect(typeof rowB?.revokedAt).toBe('number')
+    expect(devices.find((device) => device.id === deviceA.deviceId)?.current).toBe(true)
+  })
+
+  it('closes the open socket of a device that revokes itself', async () => {
+    const { shop, device: deviceA } = await pairFirst()
+    const codeResponse = await SELF.fetch(`https://example.com/shop/${shop.shopId}/pair-code`, {
+      method: 'POST',
+      headers: authorized(deviceA.token),
+    })
+    const { code } = await codeResponse.json<{ code: string }>()
+    const deviceB = await (await pair(code, 'B')).json<Paired>()
+    expect((await activate(shop.shopId, deviceB)).status).toBe(201)
+
+    const upgraded = await SELF.fetch(`https://example.com/shop/${shop.shopId}/ws`, {
+      headers: {
+        upgrade: 'websocket',
+        'sec-websocket-protocol': `my-biller, ${deviceB.token}`,
+      },
+    })
+    expect(upgraded.status).toBe(101)
+    const socket = (upgraded as Response & { webSocket: WebSocket | null }).webSocket
+    expect(socket).toBeInstanceOf(WebSocket)
+    socket?.accept()
+    const closed = new Promise<CloseEvent>((resolve) => {
+      socket?.addEventListener('close', (event) => resolve(event as CloseEvent))
+    })
+
+    const revoked = await SELF.fetch(
+      `https://example.com/shop/${shop.shopId}/devices/${deviceB.deviceId}/revoke`,
+      { method: 'POST', headers: authorized(deviceB.token) },
+    )
+    expect(revoked.status).toBe(200)
+    expect((await closed).code).toBe(4003)
+  })
+
   it('does not mint a pair code when the requesting device is revoked during hashing', async () => {
     const { shop, device: deviceA } = await pairFirst()
     const firstCode = await SELF.fetch(`https://example.com/shop/${shop.shopId}/pair-code`, {
