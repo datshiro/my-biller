@@ -450,3 +450,15 @@
   bán, đơn của D treo vào món ngừng bán. Không mất đơn, không kẹt hàng đợi, nhưng sổ chung ra kết quả trái ý người bán.
 - Mitigation: ngoài phạm vi #50. Hướng sửa cùng khuôn ISSUE-020: trước khi nối, hoàn lại giao dịch `put` đang chờ
   của E có `before.isActive === 1 && after.isActive === 0`, kèm câu báo.
+
+### ISSUE-030 — `itemGroups.get` / `orderLines.get` với id không còn thì ném TypeError thay vì trả `undefined`
+- State: deferred
+- Severity: low
+- Raised by / Date: phát hiện khi viết ca Vitest cho nhánh khôi phục món (ak:vibe #50) / 09/10/2026
+- Related task: `src/db/db.ts` (`defaultArrayFields`), `src/db/repositories/items.ts` (`getGroup`, `updateGroup`)
+- Description: hook `reading` của `defaultArrayFields` đọc `row[field]` mà không kiểm `obj` rỗng. Dexie gọi hook này cả
+  khi `get` không tìm thấy, nên `db.itemGroups.get(idĐãXoá)` ném "Cannot read properties of undefined". Ví dụ:
+  `item-group-menu-sheet.tsx` đang mở `getGroup(groupId)` mà máy khác xoá nhóm đó.
+- Mitigation: ngoài phạm vi #50. Sửa một dòng trong hook (`if (!obj) return obj`) kèm ca Vitest; `item-name-taken.ts`
+  dùng `where('id').count()` nên không vấp lỗi này.
+

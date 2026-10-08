@@ -891,8 +891,8 @@ Dòng Đơn Hai Máy Phải Cùng Món
     Should Be Equal    ${đích_a}    ${đích_b}    Dòng đơn hai máy chưa cùng trỏ tới một món.
 
 Thu Của Hai Máy Phải Cùng Đơn
-    [Documentation]    `orderId` và `allocatedOrderId` là khoá cục bộ. Quy về gid của đơn rồi so, để mọi phiếu thu
-    ...    trên cả hai máy cùng trỏ tới một đơn.
+    [Documentation]    `orderId` là khoá cục bộ. Quy về gid của đơn rồi so, để mọi phiếu thu trên cả hai máy cùng
+    ...    trỏ tới một đơn. Chỉ dùng cho ca mà mọi phiếu thu đều gắn với một đơn.
     ${đơn_a}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
     ${đơn_b}=    Đọc Bảng    orders    ${MÁY_B_PAGE}
     ${id_sang_gid_a}=    Evaluate    {o['id']: o['gid'] for o in $đơn_a}

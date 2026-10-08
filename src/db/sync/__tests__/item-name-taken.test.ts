@@ -7,8 +7,8 @@ import {
   saveDeviceIdentity,
   savePairedDevice,
 } from '../../repositories/device-state'
-import { createCustomer } from '../../repositories/customers'
-import { createItem, deleteItem, updateItem } from '../../repositories/items'
+import { createCustomer, deleteCustomer } from '../../repositories/customers'
+import { createGroup, createItem, deleteGroup, deleteItem, updateItem } from '../../repositories/items'
 import { createOrder } from '../../repositories/orders'
 import { savePriceBook } from '../../repositories/customer-prices'
 import { applyEvents } from '../applier'
@@ -351,6 +351,33 @@ describe('resolveItemNameTaken — món có sẵn đã bị xoá trên máy này
     expect(await db.items.toArray()).toEqual(itemsBefore)
     expect(await db.customerPrices.toArray()).toEqual(pricesBefore)
     expect(await db.orderLines.toArray()).toEqual(linesBefore)
+  })
+
+  it('khách của giá riêng E đã bị xoá sau E: không khôi phục E trỏ vào khách đã mất, trả deferred, không đổi gì', async () => {
+    const { existing, ePrice, dCreate } = await sellDThenDeleteE()
+    await deleteCustomer(ePrice.customerId)
+    const outboxBefore = await db.outbox.toArray()
+    const itemsBefore = await db.items.toArray()
+
+    expect(await resolveItemNameTaken(dCreate, existing.gid, 'Bánh flan', leader)).toBe('deferred')
+    expect(await db.outbox.toArray()).toEqual(outboxBefore)
+    expect(await db.items.toArray()).toEqual(itemsBefore)
+    expect(await db.customerPrices.get(ePrice.id!)).toBeUndefined()
+  })
+
+  it('nhóm của E đã bị xoá sau E: không khôi phục E trỏ vào nhóm đã mất, trả deferred', async () => {
+    const groupId = await createGroup({ name: 'Tráng miệng', sortOrder: 0 })
+    const existing = await seedExistingItem('Bánh flan', 15_000)
+    await db.items.update(existing.id, { groupId })
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1 })
+    const [dCreate] = await outboxRowsOf('items', (await db.items.get(dId))!.gid)
+    await deleteItem(existing.id)
+    await deleteGroup(groupId)
+    const outboxBefore = await db.outbox.toArray()
+
+    expect(await resolveItemNameTaken(dCreate!, existing.gid, 'Bánh flan', leader)).toBe('deferred')
+    expect(await db.outbox.toArray()).toEqual(outboxBefore)
+    expect(await db.items.get(existing.id)).toBeUndefined()
   })
 
   it('đổi tên bị chặn khi E đã bị xoá trên máy: vẫn hoàn lại món đó, không hoãn, lần xoá E giữ nguyên để đẩy', async () => {

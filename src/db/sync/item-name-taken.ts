@@ -163,7 +163,7 @@ class RestoreConflict extends Error {}
  * để có chỗ nối D vào; nếu không thì `create D` hoãn mãi vì lượt kéo không bao giờ gửi lại E. */
 async function restoreLocallyDeleted(transaction: Transaction, existingGid: string): Promise<ItemRow | undefined> {
   const outboxNow = (await db.outbox.toArray()) as OutboxRow[]
-  const deletion = outboxNow.find(
+  const deletion = outboxNow.findLast(
     (row) => row.table === 'items' && row.operation === 'delete' && row.entityKey === existingGid,
   )
   if (!deletion) return undefined
@@ -174,6 +174,14 @@ async function restoreLocallyDeleted(transaction: Transaction, existingGid: stri
       (row === deletion || (row.table === 'customerPrices' && row.refs.itemId === existingGid)),
   )
   if (!onlyDeletesOfE) return undefined
+  // Nhóm của E hoặc khách của giá riêng đã bị xoá sau E: khôi phục sẽ trỏ vào cha không còn, lần xoá cha bị sổ
+  // chung từ chối và cuộn mất cả đuôi hàng đợi phía sau. Hoãn còn hơn.
+  for (const row of txRows) {
+    const groupId = row.table === 'items' ? (row.before as { groupId?: number | null } | null)?.groupId : null
+    if (typeof groupId === 'number' && (await db.itemGroups.where('id').equals(groupId).count()) === 0) return undefined
+    const customerId = row.table === 'customerPrices' ? (row.before as { customerId?: number } | null)?.customerId : undefined
+    if (typeof customerId === 'number' && (await db.customers.where('id').equals(customerId).count()) === 0) return undefined
+  }
 
   for (const row of [...txRows].sort((a, b) => (b.id ?? 0) - (a.id ?? 0))) {
     if (!(await restoreRow(transaction, row))) throw new RestoreConflict()
