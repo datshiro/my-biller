@@ -32,7 +32,16 @@ vi.mock('../client', () => ({
   activatePairedDevice: mocks.activatePairedDevice,
   claimServerEpoch: mocks.claimServerEpoch,
   isLocalSyncHostname: () => false,
-  SyncApiError: class SyncApiError extends Error {},
+  SyncApiError: class SyncApiError extends Error {
+    constructor(
+      message: string,
+      readonly code: string,
+      readonly status: number,
+      readonly detail?: Record<string, unknown>,
+    ) {
+      super(message)
+    }
+  },
 }))
 vi.mock('../leader', () => ({
   claimLeadership: mocks.claimLeadership,
@@ -47,6 +56,7 @@ vi.mock('../outbox', () => ({
   OUTBOX_CHANGED_EVENT: 'my-biller:outbox-changed',
 }))
 
+import { SyncApiError } from '../client'
 import { startSyncRunner } from '../runner'
 
 const connection = {
@@ -137,5 +147,15 @@ describe('sync runner polling', () => {
     await flushAsyncWork()
 
     expect(mocks.resetReadReplica).toHaveBeenCalledTimes(2) // trước drain và sau drain, cả hai lần outbox đều rỗng
+  })
+
+  it('401 từ sổ chung đánh dấu thu hồi đúng token đang dùng để không thu hồi nhầm ghép mới', async () => {
+    mocks.claimServerEpoch.mockRejectedValue(new SyncApiError('x', 'unauthorized', 401))
+
+    stop = startSyncRunner()
+    await flushAsyncWork()
+
+    expect(mocks.markDeviceRevoked).toHaveBeenCalledTimes(1)
+    expect(mocks.markDeviceRevoked).toHaveBeenCalledWith('token-a')
   })
 })
