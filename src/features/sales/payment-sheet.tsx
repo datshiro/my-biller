@@ -69,6 +69,7 @@ export function PaymentSheet({
     <Sheet
       title="Thu tiền"
       onClose={onClose}
+      busy={submitting}
       footer={
         <div className="flex flex-col gap-2">
           {error ? <p className="text-[15px] font-semibold text-danger">{error}</p> : null}

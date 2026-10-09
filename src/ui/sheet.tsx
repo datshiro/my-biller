@@ -10,14 +10,19 @@ export function Sheet({
   onClose,
   children,
   footer,
+  busy = false,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
+  /** Đang lưu: phím Back bị nuốt để người bán không rời sheet trước khi biết kết quả. ✕ vẫn đóng. */
+  busy?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
-  useBackDismiss(onClose)
+  useBackDismiss(() => {
+    if (!busy) onClose()
+  })
 
   // Chỉ lấy focus đúng lúc mở. Gộp chung với listener Escape thì mỗi lần màn ngoài vẽ lại,
   // `onClose` là hàm mới nên effect chạy lại và giật focus ra khỏi ô người dùng đang gõ dở.

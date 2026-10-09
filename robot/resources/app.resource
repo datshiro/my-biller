@@ -357,3 +357,33 @@ Cài Logo Quán
         END
     END
     RETURN    ${logo}
+
+Giữ Ghi Sổ Lại
+    [Documentation]    Mở một giao dịch readwrite trên `orders` và giữ nó sống bằng chuỗi `count()` nối nhau.
+    ...    Chốt đơn và thu nợ đều mở giao dịch rw trên store này nên IndexedDB xếp chúng **sau** giao dịch này: lệnh ghi treo
+    ...    tới khi `Nhả Ghi Sổ Ra`. Giao dịch tự commit khi không còn request chờ, nên promise treo không giữ được
+    ...    nó — chỉ một request mới luôn được đặt ngay trong callback của request trước mới giữ được.
+    Evaluate JavaScript    ${None}
+    ...    () => new Promise((resolve, reject) => {
+    ...        const open = indexedDB.open('my-biller')
+    ...        open.onerror = () => reject(open.error)
+    ...        open.onsuccess = () => {
+    ...            const db = open.result
+    ...            const tx = db.transaction('orders', 'readwrite')
+    ...            const store = tx.objectStore('orders')
+    ...            tx.oncomplete = () => db.close()
+    ...            let giu = true
+    ...            const bom = () => {
+    ...                if (giu) store.count().onsuccess = bom
+    ...            }
+    ...            window.__giuGhiSo = () => { giu = false }
+    ...            store.count().onsuccess = () => {
+    ...                resolve()
+    ...                bom()
+    ...            }
+    ...        }
+    ...    })
+
+Nhả Ghi Sổ Ra
+    [Documentation]    Dừng chuỗi request để giao dịch giữ commit, lệnh ghi đang chờ chạy tiếp.
+    Evaluate JavaScript    ${None}    () => window.__giuGhiSo()

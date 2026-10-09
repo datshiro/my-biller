@@ -135,6 +135,11 @@ Cầu nối giả cũng giả plugin `App` cho phím Back: `window.__bamBack()` 
 cho biết app có đang giữ phím Back không (tắt thì `__bamBack()` không gọi listener nào, Back thuộc về Android).
 Keyword: `Bấm Back Android`, `Số Lần Thu App`, `Back Android Không Có Listener`, `Cờ Back Của Plugin Phải Là`. Phím Back thật và vuốt back chỉ kiểm được trên máy.
 
+Để kiểm cái gì xảy ra **trong lúc** đang lưu (ví dụ bấm Back khi nút còn "Đang lưu…"), dùng cặp `Giữ Ghi Sổ Lại` /
+`Nhả Ghi Sổ Ra`. `Giữ Ghi Sổ Lại` mở một giao dịch readwrite trên `orders` và giữ nó sống. Chốt đơn và thu nợ đều ghi
+vào `orders`, nên phải xếp hàng sau giao dịch đó. Gọi `Nhả Ghi Sổ Ra` trước khi ca kết thúc, nếu không mọi lần đọc
+`orders` của app sẽ treo theo.
+
 Đường **RawBT** (web/PWA) dựng một `<a data-rawbt href="rawbt:...">` — Robot **chỉ đọc** href bằng
 `Get Attribute href` để kiểm URL/giải mã ảnh, **không bao giờ `Click`** anchor đó. CI không cài RawBT nên
 một cú Click sẽ treo Chrome ở hộp "mở ứng dụng ngoài".

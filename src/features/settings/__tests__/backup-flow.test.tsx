@@ -95,7 +95,7 @@ describe('sao lưu trong recovery chỉ đọc', () => {
   it('tải đúng snapshot nhưng không ghi mốc hoặc tạo outbox', async () => {
     await seedItem()
     const prepared = await prepareBackup(NOW)
-    expect(JSON.parse(await prepared.file.text())).toMatchObject({ appVersion: '2.16.0' })
+    expect(JSON.parse(await prepared.file.text())).toMatchObject({ appVersion: '2.17.0' })
 
     await downloadRecoveryBackup(prepared)
 

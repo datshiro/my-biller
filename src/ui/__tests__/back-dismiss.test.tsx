@@ -170,3 +170,46 @@ describe('ngăn xếp Back', () => {
     expect(dismissTopOverlay()).toBe(false)
   })
 })
+
+describe('Sheet đang bận', () => {
+  it('bận thì Back vẫn nằm trên ngăn xếp nhưng không gọi onClose', () => {
+    const onClose = vi.fn()
+    render(
+      <Sheet title="Thu tiền" onClose={onClose} busy>
+        nội dung
+      </Sheet>,
+    )
+
+    expect(dismissTopOverlay()).toBe(true)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('hết bận thì Back gọi onClose', () => {
+    const onClose = vi.fn()
+    const { rerender } = render(
+      <Sheet title="Thu tiền" onClose={onClose} busy>
+        nội dung
+      </Sheet>,
+    )
+    rerender(
+      <Sheet title="Thu tiền" onClose={onClose} busy={false}>
+        nội dung
+      </Sheet>,
+    )
+
+    expect(dismissTopOverlay()).toBe(true)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('bận vẫn đóng được bằng ✕', async () => {
+    const onClose = vi.fn()
+    render(
+      <Sheet title="Thu tiền" onClose={onClose} busy>
+        nội dung
+      </Sheet>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Đóng' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
