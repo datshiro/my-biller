@@ -213,8 +213,14 @@ async function handleAdminView(request: Request, url: URL, env: Env): Promise<Re
   if (url.pathname === '/admin/shops') return listShops(url, env)
   if (url.pathname === '/admin/devices/unpaired') return listUnpairedDevices(env)
   const shop = url.pathname.match(/^\/admin\/shops\/([^/]+)(\/data)?$/)
-  if (shop?.[1]) return readShopView(url, env, decodeURIComponent(shop[1]), shop[2] === '/data')
-  return notFound()
+  if (!shop?.[1]) return notFound()
+  let shopId: string
+  try {
+    shopId = decodeURIComponent(shop[1])
+  } catch {
+    return notFound()
+  }
+  return readShopView(url, env, shopId, shop[2] === '/data')
 }
 
 type ReconcileOutcome =

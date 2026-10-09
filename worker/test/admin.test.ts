@@ -437,6 +437,11 @@ describe('danh sách sổ', () => {
 })
 
 describe('chi tiết và dữ liệu một sổ', () => {
+  it('mã sổ có phần trăm mã hoá hỏng trả 404, không phải 503', async () => {
+    expect((await adminGet('/admin/shops/%E0')).status).toBe(404)
+    expect((await adminGet('/admin/shops/%E0/data?table=orders')).status).toBe(404)
+  })
+
   it('/admin/shops/{id} trả overview kèm debts, khớp với DO', async () => {
     const shop = await createShop()
     const response = await adminGet(`/admin/shops/${shop.shopId}`)
