@@ -116,10 +116,17 @@ export function dataPage(rows: AdminDataRow[], next: number | null = null): Admi
 export const digitsOf = (element: Element | null): string => (element?.textContent ?? '').replace(/\D/g, '')
 
 export function spyStorageWrites() {
-  return [
-    vi.spyOn(window.localStorage, 'setItem'),
-    // sessionStorage của jsdom: spy trên chính đối tượng không bắt được lời gọi mà còn tạo khoá "setItem" trong kho.
-    vi.spyOn(Object.getPrototypeOf(window.sessionStorage) as Storage, 'setItem'),
-    vi.spyOn(Storage.prototype, 'setItem'),
-  ]
+  // Chỉ spy trên prototype: Storage của jsdom lưu mọi thuộc tính tự đặt trên chính đối tượng thành một khoá, nên spy
+  // trên `localStorage`/`sessionStorage` tự tạo khoá "setItem" (thấy trên Node 22) và làm sai phép đếm `length`.
+  const owners = new Set<Storage>(
+    [window.localStorage, window.sessionStorage, Storage.prototype].map(setItemOwner),
+  )
+  return [...owners].map((owner) => vi.spyOn(owner, 'setItem'))
+}
+
+/** Đối tượng gần nhất trên chuỗi prototype tự định nghĩa `setItem`; Node 22 và Node 25 dựng chuỗi prototype của Storage khác nhau. */
+function setItemOwner(storage: Storage): Storage {
+  let owner = storage
+  while (!Object.prototype.hasOwnProperty.call(owner, 'setItem')) owner = Object.getPrototypeOf(owner) as Storage
+  return owner
 }
