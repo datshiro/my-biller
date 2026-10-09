@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { AndroidBackButton } from './android-back-button'
 import { AppLayout } from './app-layout'
@@ -24,6 +25,10 @@ import { DoiSoatPage } from '@/features/settings/doi-soat-page'
 import { GhepMayPage } from '@/features/settings/ghep-may-page'
 import { NhapFilePage } from '@/features/settings/nhap-file-page'
 import { SaoLuuPage } from '@/features/settings/sao-luu-page'
+import { isNativeApp } from '@/features/printer/printer-sink'
+
+// Khu admin của người vận hành: tách chunk riêng để máy bán không tải mã này.
+const AdminPage = lazy(() => import('@/features/admin/admin-page'))
 
 export function AppRoutes() {
   return (
@@ -61,6 +66,7 @@ export function AppRoutes() {
         <Route path="/them/nhap-file" element={<NhapFilePage />} />
         <Route path="/cai-dat-may" element={<DeviceSetupPage />} />
         <Route path="/ghep-may" element={<GhepMayPage />} />
+        {!isNativeApp() && <Route path="/admin/*" element={<Suspense fallback={null}><AdminPage /></Suspense>} />}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
