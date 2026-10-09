@@ -11,6 +11,12 @@ const syncMocks = vi.hoisted(() => ({
   listShopDevices: vi.fn(),
 }))
 
+// Rời sổ chung gọi heartbeatAfterLeave; giữ ca này không gửi request thật tới Worker local.
+vi.mock('@/app/unpaired-heartbeat', () => ({
+  abortUnpairedHeartbeat: vi.fn(),
+  heartbeatAfterLeave: vi.fn(),
+}))
+
 vi.mock('@/db/sync/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/db/sync/client')>()
   return { ...original, listShopDevices: syncMocks.listShopDevices }
