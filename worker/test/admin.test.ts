@@ -1,4 +1,4 @@
-import { env as testEnv } from 'cloudflare:test'
+import { createExecutionContext, env as testEnv, waitOnExecutionContext } from 'cloudflare:test'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type {
   AdminDataPage,
@@ -37,8 +37,40 @@ type HeartbeatRow = {
 type QueryCounts = { statements: number; batches: number }
 type ListedShop = AdminShopsPage['shops'][number]
 
-function call(path: string, init: RequestInit = {}, overrides: Partial<Env> = {}): Promise<Response> {
-  return worker.fetch(new Request(`https://example.com${path}`, init), { ...env, ...overrides })
+async function call(path: string, init: RequestInit = {}, overrides: Partial<Env> = {}): Promise<Response> {
+  const ctx = createExecutionContext()
+  const response = await worker.fetch(new Request(`https://example.com${path}`, init), { ...env, ...overrides }, ctx)
+  await waitOnExecutionContext(ctx)
+  return response
+}
+
+/** D1 treo tới khi gọi `release`, rồi mọi lời gọi đang chờ đều lỗi. */
+function hangingDb(): { db: D1Database; release: () => void } {
+  const waiting: (() => void)[] = []
+  const hang = () =>
+    new Promise<never>((_, reject) => {
+      waiting.push(() => reject(new Error('D1 tạm thời lỗi')))
+    })
+  const statement = { bind: () => statement, run: hang, first: hang, all: hang, raw: hang }
+  const db = { prepare: () => statement, batch: hang, exec: hang } as unknown as D1Database
+  return { db, release: () => waiting.splice(0).forEach((fail) => fail()) }
+}
+
+/** Trả status nếu Worker trả lời trong một giây khi D1 treo, `'treo'` nếu không. */
+async function statusWhileD1Hangs(path: string, init: RequestInit): Promise<number | 'treo'> {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const { db, release } = hangingDb()
+  const ctx = createExecutionContext()
+  const pending = worker.fetch(new Request(`https://example.com${path}`, init), { ...env, ADMIN_DB: db }, ctx)
+  const settled = await Promise.race([
+    pending.then((response) => response.status),
+    new Promise<'treo'>((resolve) => setTimeout(() => resolve('treo'), 1000)),
+  ])
+  release()
+  await pending
+  await waitOnExecutionContext(ctx)
+  errors.mockRestore()
+  return settled
 }
 
 function jsonRequest(method: string, body: unknown, headers: Record<string, string> = {}): RequestInit {
@@ -753,6 +785,31 @@ describe('lượt chạm sổ ở /epoch', () => {
     await deleteShopRow(shopId)
     expect((await claimEpoch(shopId, device.token, 2)).status).toBe(200)
     expect(await shopRow(shopId)).toBeNull()
+  })
+})
+
+describe('D1 chậm không giữ phản hồi', () => {
+  it('POST /shop trả 201 trước khi ghi chỉ mục xong', async () => {
+    expect(await statusWhileD1Hangs('/shop', { method: 'POST', headers: bearer(adminSecret) })).toBe(201)
+  })
+
+  it('/pair kèm installId trả 201 trước khi đánh dấu dòng heartbeat xong', async () => {
+    const shop = await createShop()
+    const init = jsonRequest('POST', {
+      code: shop.code,
+      letter: 'A',
+      label: 'Máy A',
+      hasLocalLedger: false,
+      localLedgerRows: 0,
+      installId: crypto.randomUUID(),
+    })
+    expect(await statusWhileD1Hangs('/pair', init)).toBe(201)
+  })
+
+  it('/epoch trả 200 trước khi ghi lượt chạm xong', async () => {
+    const { shopId, device } = await pairedShop()
+    const init = jsonRequest('POST', { epoch: 1 }, bearer(device.token))
+    expect(await statusWhileD1Hangs(`/shop/${shopId}/epoch`, init)).toBe(200)
   })
 })
 

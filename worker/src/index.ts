@@ -357,7 +357,7 @@ async function acceptHeartbeat(request: Request, env: Env): Promise<Response> {
 }
 
 const worker = {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
 
@@ -373,12 +373,8 @@ const worker = {
         const shopId = crypto.randomUUID()
         response = await forward(shopStub(env, shopId), request, '/internal/bootstrap', { shopId })
         if (response.status === 201) {
-          try {
-            await indexShop(env, shopId, 'create')
-          } catch {
-            // Quán đã tạo xong; sổ thiếu trong chỉ mục sẽ vào lại qua điền bù hoặc lượt chạm `/epoch`.
-            console.error('admin-index-failed')
-          }
+          // Quán đã tạo xong; sổ thiếu trong chỉ mục sẽ vào lại qua điền bù hoặc lượt chạm `/epoch`.
+          ctx.waitUntil(indexShop(env, shopId, 'create').catch(() => console.error('admin-index-failed')))
         }
       }
     } else if (request.method === 'POST' && url.pathname === '/heartbeat') {
@@ -409,15 +405,13 @@ const worker = {
           })
           const installId = HeartbeatSchema.shape.installId.safeParse(body?.installId)
           if (response.status === 201 && installId.success) {
-            try {
-              const now = Date.now()
-              await withAdminDb(env, (db) =>
-                db.prepare(MARK_PAIRED_SQL).bind(installId.data, routed.shopId, now).run(),
-              )
-            } catch {
-              // Máy đã ghép xong; dòng nhịp báo chỉ lệch tới nhịp báo kế tiếp.
-              console.error('admin-pair-mark-failed')
-            }
+            // Máy đã ghép xong; D1 chậm hay lỗi chỉ làm dòng nhịp báo lệch tới nhịp báo kế tiếp.
+            const now = Date.now()
+            ctx.waitUntil(
+              withAdminDb(env, (db) => db.prepare(MARK_PAIRED_SQL).bind(installId.data, routed.shopId, now).run()).catch(
+                () => console.error('admin-pair-mark-failed'),
+              ),
+            )
           }
         }
       }
@@ -443,12 +437,12 @@ const worker = {
 
       // Sổ ngủ có thể thiếu trong danh sách DO của Cloudflare; máy đã ghép chạm `/epoch` thì đưa sổ vào chỉ mục.
       if (request.method === 'POST' && rest === '/epoch' && response.ok && !touchedShops.has(shopId)) {
-        try {
-          await indexShop(env, shopId, 'touch')
-          touchedShops.add(shopId)
-        } catch {
-          console.error('admin-index-failed')
-        }
+        ctx.waitUntil(
+          indexShop(env, shopId, 'touch').then(
+            () => touchedShops.add(shopId),
+            () => console.error('admin-index-failed'),
+          ),
+        )
       }
     }
 
