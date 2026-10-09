@@ -558,6 +558,16 @@ describe('reconcile chỉ mục', () => {
 })
 
 describe('heartbeat máy chưa ghép', () => {
+  it('đếm máy mới trong 24 giờ dùng chỉ mục firstSeenAt, không quét cả bảng', async () => {
+    expect((await adminGet('/admin/devices/unpaired')).status).toBe(200)
+    const plan = await env.ADMIN_DB.prepare(
+      'EXPLAIN QUERY PLAN SELECT COUNT(*) AS new24h FROM heartbeats WHERE firstSeenAt >= ?',
+    )
+      .bind(0)
+      .all<{ detail: string }>()
+    expect(plan.results.map((row) => row.detail).join(' ')).toMatch(/USING (COVERING )?INDEX/)
+  })
+
   it('nhận heartbeat hợp lệ, hiện ở danh sách chưa ghép và giữ một dòng khi gửi lại', async () => {
     const body = heartbeatBody()
     expect((await heartbeat(body)).status).toBe(204)

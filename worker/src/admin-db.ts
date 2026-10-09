@@ -21,6 +21,7 @@ const SCHEMA = [
     pairedAt INTEGER
   )`,
   'CREATE INDEX IF NOT EXISTS heartbeats_seen ON heartbeats(lastSeenAt)',
+  'CREATE INDEX IF NOT EXISTS heartbeats_first_seen ON heartbeats(firstSeenAt)',
 ]
 
 let schemaReady: Promise<void> | null = null
