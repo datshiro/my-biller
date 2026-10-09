@@ -497,15 +497,16 @@
 
 
 ### ISSUE-034 — Máy hoạt động cuối cùng tự huỷ ghép thì sổ chung không còn máy nào mở được
-- State: in-progress (#75 — quyết định 9/10/2026: cảnh báo trong hộp xác nhận, không chặn)
+- State: resolved (9/10/2026, 2.18.0 qua #78 — quyết định: cảnh báo trong hộp xác nhận, không chặn; máy ghép dở vẫn
+  tính là máy khác, ghi trong ghi chú phát hành 2.18.0)
 - Severity: medium
 - Raised by / Date: code-reviewer (#53) / 09/10/2026
 - Related task: #53, `src/db/sync/unpair.ts`
 - Description: "Huỷ ghép máy này" không xét máy đang huỷ có phải máy hoạt động duy nhất của quán không. Nếu phải, sau
   khi thu hồi không còn token nào mở được sổ chung trên Durable Object. Không mất dữ liệu: bản sao cục bộ đã đuổi kịp
   `latestSeq` trước khi thu hồi, và sổ chung vẫn nằm nguyên trên Worker. Hộp xác nhận hiện không cảnh báo trường hợp này.
-- Mitigation: cần quyết định sản phẩm — chặn hẳn, hay chỉ cảnh báo trong hộp xác nhận (danh sách `/devices` đã có sẵn
-  lúc bấm nên đếm được máy hoạt động khác).
+- Mitigation: chủ app chọn chỉ cảnh báo (9/10/2026). Hộp xác nhận đếm máy có `revokedAt === null` trong `/devices`,
+  tải lại khi mở hộp; còn mỗi máy này thì mở đầu bằng câu cảnh báo máy cuối cùng, nút Huỷ ghép vẫn chạy.
 
 ### ISSUE-035 — "Dùng máy này như máy chưa ghép" có thể giữ bản sao chưa tải xong
 - State: deferred
