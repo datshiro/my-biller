@@ -69,7 +69,11 @@ Admin hiện sổ, máy và số tiền khớp Đối soát và IndexedDB
     ${rút_gọn}=    Rút Gọn Mã    ${shop_id}
 
     ${khối}=    Set Variable    css=[data-shop-id="${shop_id}"]
-    Wait Until Keyword Succeeds    10x    2s    Sổ Trên Admin Đã Báo Máy A Hết Tụt    ${shop_id}
+    # Admin mở ở context riêng: trang /admin không chạy đồng bộ, mở trên trang của A là A ngừng kéo và không bao giờ
+    # báo hết tụt. Worker ghi tiến độ kéo tối đa một lần mỗi 60 giây mỗi máy, nên chờ quá 60 giây cộng một nhịp kéo.
+    New Context    viewport=${VIEWPORT}
+    New Page    ${BASE_URL}/admin
+    Wait Until Keyword Succeeds    90s    2s    Sổ Trên Admin Đã Báo Máy A Hết Tụt    ${shop_id}
     Get Text    ${khối} >> css=a    ==    Sổ: ${rút_gọn}
     Get Text    ${khối}    *=    Máy A · Quầy A
     ${ad_đơn}=    Số Nguyên Trong    ${khối} >> css=[data-field="orderCount"]
@@ -138,7 +142,7 @@ Máy chưa ghép hiện mã máy và số lượng, không có chi tiết
     Cần Secret Xem Local
     ${context_c}=    New Context    viewport=${VIEWPORT}
     ${page_c}=    New Page    ${BASE_URL}/
-    LocalStorage Get Item    ${KHOÁ_NHỊP_BÁO}    !=    ${None}
+    Chờ Máy Đã Gửi Nhịp Báo
     ${install_c}=    Mã Cài Đặt Của Máy    ${page_c}
     ${khối_c}=    Set Variable    css=[data-install-id="${install_c}"]
 
@@ -161,7 +165,7 @@ Máy chưa ghép hiện mã máy và số lượng, không có chi tiết
     # Lượt mở app trước đã báo số 0 và mốc 15 phút chặn báo lại; xoá mốc là thao tác của trình duyệt kiểm thử.
     LocalStorage Remove Item    ${KHOÁ_NHỊP_BÁO}
     Mở Màn    /
-    LocalStorage Get Item    ${KHOÁ_NHỊP_BÁO}    !=    ${None}
+    Chờ Máy Đã Gửi Nhịp Báo
     ${sổ_c}=    Tổng Tiền Tính Từ IndexedDB    ${page_c}
     Mở Màn    /them/cai-dat
     ${dòng_máy}=    Get Text    text=/Mã máy: / >> nth=0
@@ -187,7 +191,7 @@ Máy chưa ghép chuyển sang Đã ghép sau đó khi ghép
     ${context_c}=    New Context    viewport=${VIEWPORT}
     ${page_c}=    New Page    ${BASE_URL}/ghep-may
     Đặt Tên Máy Hiện Tại    Quầy C    C
-    LocalStorage Get Item    ${KHOÁ_NHỊP_BÁO}    !=    ${None}
+    Chờ Máy Đã Gửi Nhịp Báo
     ${install_c}=    Mã Cài Đặt Của Máy    ${page_c}
 
     Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
@@ -282,6 +286,11 @@ Người vận hành mở admin không thành máy chưa ghép
     Should Be Equal    ${nhịp}    ${None}    Trang admin đã gửi nhịp báo.
 
 *** Keywords ***
+Chờ Máy Đã Gửi Nhịp Báo
+    [Documentation]    App gửi nhịp báo 3 giây sau khi mở, lâu hơn khoảng thử lại mặc định của assertion Browser,
+    ...    nên chờ tới khi mốc gửi xuất hiện.
+    Wait Until Keyword Succeeds    15s    500ms    LocalStorage Get Item    ${KHOÁ_NHỊP_BÁO}    !=    ${None}
+
 Cần Secret Xem Local
     [Documentation]    Bỏ ca khi chạy remote hoặc thiếu secret xem. Đọc biến môi trường trong Python để giá trị
     ...    secret không bao giờ thành đối số keyword (đối số có thể vào log).
