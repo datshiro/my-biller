@@ -63,3 +63,36 @@ database_id = "3ac392e2-c6d9-4b5d-a1d8-18cec42b696b"
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["ShopDO"]
+
+# Chỉ dùng cho `wrangler dev` của Robot, không deploy: mọi máy giả lập gửi từ cùng 127.0.0.1 nên cần hạn heartbeat cao.
+[env.robot]
+name = "my-biller-sync-robot"
+
+[[env.robot.durable_objects.bindings]]
+name = "SHOP_DO"
+class_name = "ShopDO"
+
+[[env.robot.ratelimits]]
+name = "PAIR_RATE_LIMITER"
+namespace_id = "2610091001"
+
+[env.robot.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.robot.ratelimits]]
+name = "HEARTBEAT_RATE_LIMITER"
+namespace_id = "2610091002"
+
+[env.robot.ratelimits.simple]
+limit = 600
+period = 60
+
+[[env.robot.d1_databases]]
+binding = "ADMIN_DB"
+database_name = "my-biller-admin-robot"
+database_id = "11111111-1111-1111-1111-111111111111"
+
+[[env.robot.migrations]]
+tag = "v1"
+new_sqlite_classes = ["ShopDO"]

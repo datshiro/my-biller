@@ -191,7 +191,7 @@ else
   echo "→ Dựng Worker ở ${WORKER_URL}"
   WRANGLER_LOG_PATH="${repo_root}/robot/results/wrangler-debug.log" \
     ./node_modules/.bin/wrangler dev --config worker/wrangler.toml \
-    --ip 127.0.0.1 --port "${WORKER_PORT}" --var ADMIN_SECRET:"${WORKER_ADMIN_SECRET}" \
+    --env robot --ip 127.0.0.1 --port "${WORKER_PORT}" --var ADMIN_SECRET:"${WORKER_ADMIN_SECRET}" \
     --var ADMIN_VIEW_SECRET:"${WORKER_ADMIN_VIEW_SECRET}" \
     --persist-to robot/results/wrangler-state >robot/results/wrangler.log 2>&1 &
   worker_pid=$!
