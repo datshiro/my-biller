@@ -911,6 +911,50 @@ Huỷ ghép khi mất mạng báo cần mạng và máy vẫn ghép
     Danh Sách Máy Đã Tải
     Chờ Thấy Chữ    Quầy B · chữ B
 
+Huỷ ghép máy cuối cùng của quán thì hộp xác nhận cảnh báo nhưng vẫn cho huỷ
+    [Tags]    -regression
+    [Documentation]    Máy hoạt động cuối cùng rời đi thì sổ chung không còn máy nào mở được: hộp xác nhận phải nói
+    ...    điều đó khi chỉ còn một máy, im lặng khi còn máy khác, và mở hộp không được đổi gì trong sổ.
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Bản Sao Máy Phải Đuổi Kịp Sổ Chung    ${MÁY_A_PAGE}
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
+    Danh Sách Máy Đã Tải
+    Chờ Thấy Chữ    Quầy B · chữ B
+    Click    css=button:text-is("Huỷ ghép máy này")
+    Chờ Hộp Xác Nhận    Huỷ ghép “Quầy A”?
+    Chờ Thấy Chữ    phải sao lưu rồi xoá sổ trên máy trước
+    Không Được Thấy Chữ    máy cuối cùng còn ghép vào sổ chung
+    Bỏ Qua Hộp Xác Nhận
+
+    Click    xpath=//p[normalize-space()="Quầy B · chữ B"]/ancestor::div[contains(@class,"rounded-card")]//button[contains(.,"Thu hồi")]
+    Chờ Hộp Xác Nhận    Thu hồi “Quầy B”?
+    Xác Nhận Trong Hộp    Thu hồi máy
+    Không Được Thấy Chữ    Quầy B · chữ B
+
+    ${trước}=    Tổng Sổ Tiền Máy    ${MÁY_A_PAGE}
+    ${device_trước}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    ${khoá_trước}=    Evaluate    sorted(row['key'] for row in $device_trước)
+    Click    css=button:text-is("Huỷ ghép máy này")
+    Chờ Hộp Xác Nhận    Huỷ ghép “Quầy A”?
+    Chờ Thấy Chữ    máy cuối cùng còn ghép vào sổ chung
+    Chờ Thấy Chữ    sổ chung không còn máy nào dùng được nữa
+    ${lúc_hộp}=    Tổng Sổ Tiền Máy    ${MÁY_A_PAGE}
+    Should Be Equal    ${lúc_hộp}    ${trước}    Mở hộp cảnh báo làm đổi sổ tiền trên máy.
+    ${device_lúc_hộp}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    ${khoá_lúc_hộp}=    Evaluate    sorted(row['key'] for row in $device_lúc_hộp)
+    Should Be Equal    ${khoá_lúc_hộp}    ${khoá_trước}    Mở hộp cảnh báo làm đổi deviceState.
+    Should Contain    ${khoá_lúc_hộp}    connection
+    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+
+    Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
+    Chờ Thấy Chữ    giờ là sổ cục bộ
+    Wait For Elements State    css=button:text-is("GHÉP MÁY NÀY")    visible
+    ${sau}=    Tổng Sổ Tiền Máy    ${MÁY_A_PAGE}
+    Should Be Equal    ${sau}    ${trước}    Huỷ ghép máy cuối cùng làm đổi sổ tiền trên máy.
+    ${device_sau}=    Đọc Bảng    deviceState    ${MÁY_A_PAGE}
+    ${khoá_sau}=    Evaluate    [row['key'] for row in $device_sau]
+    Should Not Contain    ${khoá_sau}    connection    Máy cuối cùng đã huỷ ghép vẫn còn khoá connection.
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders

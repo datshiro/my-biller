@@ -17,8 +17,13 @@ import {
 } from '../../repositories/device-state'
 import { createItem } from '../../repositories/items'
 import { createOrder } from '../../repositories/orders'
-import { listShopDevices, revokeShopDevice, SyncApiError } from '../client'
-import { UnpairBlockedError, UnpairUncertainError, unpairThisDevice } from '../unpair'
+import { listShopDevices, revokeShopDevice, SyncApiError, type ShopDevice } from '../client'
+import {
+  isLastActiveDevice,
+  UnpairBlockedError,
+  UnpairUncertainError,
+  unpairThisDevice,
+} from '../unpair'
 
 vi.mock('../client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../client')>()),
@@ -512,5 +517,43 @@ describe('huỷ ghép máy này', () => {
     } finally {
       if (original) Object.defineProperty(AbortSignal, 'timeout', original)
     }
+  })
+})
+
+describe('isLastActiveDevice', () => {
+  const device = (overrides: Partial<ShopDevice>): ShopDevice => ({
+    id: 'srv-b',
+    letter: 'B',
+    label: 'Quầy sau',
+    createdAt: 2,
+    revokedAt: null,
+    current: false,
+    ...overrides,
+  })
+  const self = device({ id: 'srv-a', letter: 'A', label: 'Quầy trước', createdAt: 1, current: true })
+
+  it('chỉ còn máy hiện tại đang hoạt động thì là máy cuối cùng', () => {
+    expect(isLastActiveDevice([self])).toBe(true)
+  })
+
+  it('còn máy khác đang hoạt động thì không phải máy cuối cùng', () => {
+    expect(isLastActiveDevice([self, device({})])).toBe(false)
+  })
+
+  it('máy khác đã thu hồi không tính là đang hoạt động', () => {
+    expect(isLastActiveDevice([self, device({ revokedAt: 1_700_000_000_000 })])).toBe(true)
+  })
+
+  it('danh sách rỗng không phải máy cuối cùng', () => {
+    expect(isLastActiveDevice([])).toBe(false)
+  })
+
+  it('máy hiện tại đã thu hồi mà vẫn còn máy khác đang hoạt động thì không phải máy cuối cùng', () => {
+    expect(
+      isLastActiveDevice([
+        { ...self, revokedAt: 1_700_000_000_000 },
+        device({}),
+      ]),
+    ).toBe(false)
   })
 })
