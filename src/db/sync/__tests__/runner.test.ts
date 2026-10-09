@@ -31,7 +31,7 @@ vi.mock('../../repositories/device-state', () => ({
 vi.mock('../client', () => ({
   activatePairedDevice: mocks.activatePairedDevice,
   claimServerEpoch: mocks.claimServerEpoch,
-  isLocalSyncHostname: () => false,
+  SYNC_IS_LOCAL: false,
   SyncApiError: class SyncApiError extends Error {
     constructor(
       message: string,

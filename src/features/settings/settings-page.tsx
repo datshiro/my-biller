@@ -8,7 +8,8 @@ import { isNativeApp } from '../printer/printer-sink'
 import { BackupBanner } from './backup-banner'
 import { DangerZone } from './danger-zone'
 import { formatBytes, useStorageStatus } from './storage-status'
-import { useDeviceConnection, useDeviceIdentity, useLastBackupLine } from './use-settings'
+import { useDeviceConnection, useDeviceIdentity, useInstallId, useLastBackupLine } from './use-settings'
+import { shortId } from '@/domain/short-id'
 import { Button } from '@/ui/button'
 import { StatusChip } from '@/ui/chip'
 import { ListRow } from '@/ui/list-row'
@@ -28,6 +29,7 @@ export function SettingsPage() {
   const lastBackup = useLastBackupLine()
   const identity = useDeviceIdentity()
   const connection = useDeviceConnection()
+  const installId = useInstallId()
   const { status, pinning, pin } = useStorageStatus()
 
   return (
@@ -97,8 +99,12 @@ export function SettingsPage() {
           title="Máy bán hàng"
           subtitle={
             connection && identity
-              ? `${identity.label} · chữ ${identity.letter} · đã ghép sổ chung`
-              : 'Tên máy, chữ cái và ghép vào sổ chung'
+              ? `${identity.label} · Sổ: ${shortId(connection.shopId)} · Máy ${identity.letter}`
+              : installId && identity
+                ? `${identity.label} · chữ ${identity.letter} · Mã máy: ${shortId(installId)} · chưa ghép`
+                : installId
+                  ? `Mã máy: ${shortId(installId)} · chưa ghép`
+                  : 'Tên máy, chữ cái và ghép vào sổ chung'
           }
           right={<span className="text-[20px] text-muted">›</span>}
           onClick={() => void navigate('/ghep-may')}

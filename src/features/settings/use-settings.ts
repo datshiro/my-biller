@@ -8,6 +8,7 @@ import {
   getDeviceConnectionSnapshot,
   getDeviceIdentity,
   getDeviceNotice,
+  getInstallId,
 } from '@/db/repositories/device-state'
 import type { AppState, DeviceConnection, DeviceIdentity, DeviceNotice, ShopSettings } from '@/domain/schema'
 
@@ -28,6 +29,11 @@ export function useDeviceIdentity(): DeviceIdentity | null | undefined {
 /** `undefined` = đang đọc; `null` = máy chưa ghép vào sổ chung. */
 export function useDeviceConnection(): DeviceConnection | null | undefined {
   return useLiveQuery(async () => (await getDeviceConnection()) ?? null)
+}
+
+/** `undefined` = đang đọc; `null` = chưa có mã cài đặt. Chỉ đọc, không tạo. */
+export function useInstallId(): string | null | undefined {
+  return useLiveQuery(async () => (await getInstallId()) ?? null)
 }
 
 /** Connection và pairing phải đến từ cùng một snapshot để không mount UI active bằng token pending. */

@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import type { DeviceConnection } from '@/domain/schema'
 import type { ServerEvent, SyncEvent } from '@shared/sync-events'
 
@@ -10,15 +11,21 @@ export function isLocalSyncHostname(hostname: string): boolean {
   return localHostnames.has(hostname)
 }
 
-export function resolveDefaultSyncUrl(hostname: string, remoteSyncUrl: string): string {
+/** APK chạy WebView ở `https://localhost`, nên hostname không nói được máy có đang ở môi trường local hay không. */
+export function resolveDefaultSyncUrl(hostname: string, remoteSyncUrl: string, native = false): string {
+  if (native) return remoteSyncUrl
   if (isLocalSyncHostname(hostname)) return localSyncUrl
   return remoteSyncUrl
 }
 
+// Chỉ APK bản dựng mới trỏ remote: Robot và Playwright chạy Vite dev với shim APK giả, phải giữ Worker local.
 export const DEFAULT_SYNC_URL = resolveDefaultSyncUrl(
   globalThis.location?.hostname ?? '',
   __MY_BILLER_REMOTE_SYNC_URL__,
+  Capacitor.isNativePlatform() && !import.meta.env.DEV,
 )
+
+export const SYNC_IS_LOCAL = DEFAULT_SYNC_URL === localSyncUrl
 
 export type PairedDevice = {
   shopId: string
@@ -86,6 +93,7 @@ export function pairDevice(input: {
   hasLocalLedger: boolean
   localLedgerRows: number
   syncUrl?: string
+  installId?: string
 }): Promise<PairedDevice> {
   const syncUrl = input.syncUrl ?? DEFAULT_SYNC_URL
   return jsonRequest(`${syncUrl}/pair`, {
@@ -97,6 +105,7 @@ export function pairDevice(input: {
       letter: input.letter,
       hasLocalLedger: input.hasLocalLedger,
       localLedgerRows: input.localLedgerRows,
+      ...(input.installId ? { installId: input.installId } : {}),
     }),
   })
 }

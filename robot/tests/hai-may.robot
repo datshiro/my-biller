@@ -911,6 +911,19 @@ Huỷ ghép khi mất mạng báo cần mạng và máy vẫn ghép
     Danh Sách Máy Đã Tải
     Chờ Thấy Chữ    Quầy B · chữ B
 
+Cài đặt máy đã ghép hiện mã sổ rút gọn và chữ máy
+    [Tags]    -regression
+    [Documentation]    Dòng "Máy bán hàng" ở Cài đặt dựng chuỗi `Sổ:` từ `connection.shopId` thật của máy, để người bán
+    ...    so bằng mắt hai máy có đang chung một sổ không. Hai máy đã ghép cùng sổ nên cùng mã, khác chữ máy.
+    ${kỳ_vọng}=    Mã Sổ Rút Gọn Trên Máy    ${MÁY_B_PAGE}
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/cai-dat
+    Chờ Thấy Chữ    Sổ: ${kỳ_vọng} · Máy B
+
+    ${kỳ_vọng_a}=    Mã Sổ Rút Gọn Trên Máy    ${MÁY_A_PAGE}
+    Should Be Equal    ${kỳ_vọng_a}    ${kỳ_vọng}    Hai máy đã ghép cùng sổ mà mã sổ khác nhau.
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/cai-dat
+    Chờ Thấy Chữ    Sổ: ${kỳ_vọng_a} · Máy A
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
@@ -1067,3 +1080,13 @@ Thu Của Hai Máy Phải Cùng Đơn
     Sort List    ${đích_a}
     Sort List    ${đích_b}
     Should Be Equal    ${đích_a}    ${đích_b}    Phiếu thu hai máy chưa cùng trỏ tới một đơn.
+
+Mã Sổ Rút Gọn Trên Máy
+    [Documentation]    Bốn ký tự đầu, dấu `…` và ba ký tự cuối của `shopId` trong dòng `connection` của máy.
+    [Arguments]    ${page}
+    ${rows}=    Đọc Bảng    deviceState    ${page}
+    ${connection}=    Evaluate    [row for row in $rows if row['key'] == 'connection']
+    Length Should Be    ${connection}    1    Máy chưa có dòng connection.
+    ${shop_id}=    Set Variable    ${connection}[0][shopId]
+    ${rút_gọn}=    Evaluate    $shop_id[:4] + '…' + $shop_id[-3:]
+    RETURN    ${rút_gọn}

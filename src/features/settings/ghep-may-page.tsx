@@ -7,9 +7,11 @@ import {
   useDeviceNotice,
   useSyncAnchor,
 } from './use-settings'
+import { abortUnpairedHeartbeat, heartbeatAfterLeave } from '@/app/unpaired-heartbeat'
 import {
   beginDevicePairing,
   cancelDevicePairing,
+  getOrCreateInstallId,
   leaveSharedLedger,
   markDeviceRevoked,
   savePairedDevice,
@@ -119,6 +121,7 @@ function PairForm({
     let pairedDevice: Awaited<ReturnType<typeof pairDevice>> | null = null
     let connectionSaved = false
     try {
+      abortUnpairedHeartbeat()
       const pairing = await beginDevicePairing()
       pairingAttemptId = pairing.attemptId
       pairedDevice = await pairDevice({
@@ -127,6 +130,7 @@ function PairForm({
         letter: identity.letter,
         hasLocalLedger: pairing.hasLocalLedger,
         localLedgerRows: pairing.localLedgerRows,
+        installId: await getOrCreateInstallId(),
       })
       await savePairedDevice({
         ...pairedDevice,
@@ -474,12 +478,14 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
 export function GhepMayPage() {
   const connectionSnapshot = useDeviceConnectionSnapshot()
   const [leftNotice, setLeftNotice] = useState<string | null>(null)
-  const onLeft = (droppedOperations: number) =>
+  const onLeft = (droppedOperations: number) => {
+    heartbeatAfterLeave()
     setLeftNotice(
       droppedOperations > 0
         ? `${LEFT_NOTICE} ${droppedOperations} thay đổi ghi trong lúc huỷ ghép có thể chưa lên sổ chung — xem lại trên máy khác trước khi nhập lại.`
         : LEFT_NOTICE,
     )
+  }
   const connection = connectionSnapshot?.connection
   const pairing = connectionSnapshot?.pairing
   return (
