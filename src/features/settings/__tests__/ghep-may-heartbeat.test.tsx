@@ -9,6 +9,7 @@ import { db } from '@/db/db'
 import {
   beginDevicePairing,
   completeDevicePairing,
+  getDeviceConnection,
   getOrCreateInstallId,
   leaveSharedLedger,
   markDeviceRevoked,
@@ -60,7 +61,11 @@ vi.mock('@/db/sync/unpair', async (importOriginal) => {
 
 vi.mock('@/db/repositories/device-state', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/db/repositories/device-state')>()
-  return { ...original, beginDevicePairing: vi.fn(original.beginDevicePairing) }
+  return {
+    ...original,
+    beginDevicePairing: vi.fn(original.beginDevicePairing),
+    getOrCreateInstallId: vi.fn(original.getOrCreateInstallId),
+  }
 })
 
 beforeEach(async () => {
@@ -146,6 +151,25 @@ describe('ghép máy gửi mã cài đặt và huỷ heartbeat đang bay', () =>
 
     expect(installId).toMatch(/^[0-9a-f-]{36}$/i)
     expect(syncMocks.pairDevice).toHaveBeenCalledWith(expect.objectContaining({ installId }))
+  })
+
+  it('không tạo được mã cài đặt thì vẫn ghép máy, chỉ bỏ installId', async () => {
+    ;(getOrCreateInstallId as Mock).mockRejectedValueOnce(new Error('IndexedDB lỗi'))
+    syncMocks.pairDevice.mockResolvedValueOnce({
+      admissionExpiresAt: Date.now() + 60_000,
+      deviceId: DEVICE_ID,
+      label: 'Quầy trước',
+      letter: 'A',
+      shopId: testGid(500),
+      token: TOKEN,
+    })
+    renderPage()
+
+    await submitPairCode('ABC123')
+
+    await waitFor(() => expect(syncMocks.pairDevice).toHaveBeenCalledTimes(1))
+    expect(syncMocks.pairDevice.mock.calls[0]?.[0]).not.toHaveProperty('installId')
+    await waitFor(async () => expect(await getDeviceConnection()).toMatchObject({ shopId: testGid(500) }))
   })
 })
 

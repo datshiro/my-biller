@@ -124,13 +124,15 @@ function PairForm({
       abortUnpairedHeartbeat()
       const pairing = await beginDevicePairing()
       pairingAttemptId = pairing.attemptId
+      // Mã cài đặt chỉ phục vụ nhịp báo cho khu admin; tạo hỏng thì vẫn ghép, chỉ bỏ installId.
+      const installId = await getOrCreateInstallId().catch(() => undefined)
       pairedDevice = await pairDevice({
         code: code.trim(),
         label: identity.label,
         letter: identity.letter,
         hasLocalLedger: pairing.hasLocalLedger,
         localLedgerRows: pairing.localLedgerRows,
-        installId: await getOrCreateInstallId(),
+        ...(installId ? { installId } : {}),
       })
       await savePairedDevice({
         ...pairedDevice,
