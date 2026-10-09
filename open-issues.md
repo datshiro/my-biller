@@ -473,7 +473,7 @@
 - Mitigation: ngoài phạm vi #50, rất khó xảy ra. Sửa: hoãn khi outbox có hơn một lần xoá E, kèm ca Vitest.
 
 ### ISSUE-032 — Phím Back trên APK đóng sheet thu tiền/thu nợ đang lưu
-- State: deferred
+- State: resolved
 - Severity: low
 - Raised by / Date: code-reviewer (review trước PR #70, #65) / 09/10/2026
 - Related task: #65, `src/ui/sheet.tsx` (`useBackDismiss(onClose)`)
@@ -481,6 +481,9 @@
   chạy xong nên không mất dữ liệu, nhưng người bán không thấy kết quả. Trên điện thoại Back dễ bấm nhầm hơn ✕.
 - Mitigation: hành vi giống nút ✕ hiện nay; chắn Back ở form đã chốt là ngoài phạm vi #65. Nếu làm: cho `Sheet` nhận cờ
   đang lưu và nuốt Back như `ConfirmDialog` khi `pending`, kèm ca Vitest và Robot APK giả.
+- Resolution (09/10/2026, #72): làm đúng như trên. `Sheet` có cờ `busy`; khi bận, Back bị nuốt (lớp vẫn trên ngăn xếp,
+  không đóng, không lùi màn, không thu app). Sheet Thu tiền và Thu nợ bật cờ trong lúc lưu. ✕, lớp phủ và Escape
+  không đổi. Có ca Vitest cho mỗi sheet và ca Robot APK giả (`ban-hang.robot`, `cong-no.robot`) đối chiếu `payments`.
 
 ### ISSUE-033 — Hộp thoại mount cùng commit với Sheet cha thì Back đóng nhầm Sheet
 - State: deferred
@@ -513,3 +516,15 @@
   không còn token để hỏi Worker nên không kiểm được độ tươi; hộp xác nhận không nói bản sao có thể thiếu.
 - Mitigation: cần quyết định câu chữ — thêm một câu vào hộp xác nhận rằng sổ cục bộ có thể thiếu thay đổi của máy khác
   và nên nhờ máy còn ghép xuất sao lưu nếu cần.
+
+### ISSUE-036 — Bấm ✕ giữa lúc thu nợ rồi mở lại sheet thì thu được lần hai
+- State: deferred
+- Severity: medium
+- Raised by / Date: code-reviewer (review #72) / 09/10/2026
+- Related task: #72, `src/features/debts/collect-debt-sheet.tsx` (`useSubmitOnce` nằm trong sheet)
+- Description: cờ đang lưu của sheet Thu nợ là state trong chính sheet. Bấm ✕ trong lúc "Đang lưu…" làm sheet bị gỡ;
+  mở lại thì sheet mới có `saving=false`, nên bấm THU lần nữa sẽ gửi `collectDebt` thứ hai. Sheet Thu tiền không bị,
+  vì cờ của nó nằm ở màn bán hàng. Back đã bị chặn (#72); ✕ cố ý chưa đổi. `expense-sheet.tsx` cũng ghi tiền mà chưa có
+  `busy`.
+- Mitigation: chưa làm. Hướng sửa: nâng cờ đang lưu lên màn mở sheet (như sheet Thu tiền), hoặc khoá cả ✕ và lớp phủ
+  khi `busy`. Cả hai đều đổi hành vi của ✕, nên cần chủ app quyết định.
