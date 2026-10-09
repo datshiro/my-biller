@@ -63,8 +63,11 @@ export type ShopDebt = {
 
 export type ShopDetail = ShopOverview & { debts: ShopDebt[] }
 
+/** Đường đưa sổ vào chỉ mục D1: tạo quán, điền bù từ danh sách DO, hoặc lượt máy chạm sổ. */
+export type ShopIndexVia = 'create' | 'backfill' | 'touch'
+
 export type AdminShopsPage = {
-  shops: (ShopOverview | { shopId: string; error: string })[]
+  shops: ((ShopOverview & { via: ShopIndexVia }) | { shopId: string; error: string })[]
   next: string | null
 }
 
