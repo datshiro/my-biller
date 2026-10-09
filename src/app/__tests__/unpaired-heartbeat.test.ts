@@ -223,13 +223,14 @@ describe('nội dung và cách gửi heartbeat', () => {
     expect(bodies()[0].platform).toBe(expected)
   })
 
-  it('gửi POST tới Worker đã phân giải, kèm keepalive và AbortSignal', async () => {
+  it('gửi POST tới Worker đã phân giải, kèm AbortSignal và không dùng keepalive', async () => {
     await sendUnpairedHeartbeat(15 * MIN)
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe(HEARTBEAT_URL)
     expect(init.method).toBe('POST')
-    expect(init.keepalive).toBe(true)
+    // POST JSON khác origin cần preflight; vài WebView từ chối preflight đi cùng keepalive.
+    expect(init.keepalive).toBeUndefined()
     expect(init.signal).toBeDefined()
   })
 })

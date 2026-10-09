@@ -78,7 +78,6 @@ async function post(body: Heartbeat): Promise<void> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-      keepalive: true,
       signal: controller.signal,
     })
     if (response.ok) {
