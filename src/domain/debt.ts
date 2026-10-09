@@ -1,26 +1,18 @@
 import { differenceInCalendarDays } from 'date-fns'
-import { remainingOf, type OrderStatus } from './order-status'
+import {
+  groupDebts,
+  owingOf,
+  totalDebt,
+  type DebtOrder,
+} from '@shared/ledger-money'
 
-type DebtOrder = {
-  customerId: number | null
-  total: number
-  paidAmount: number
-  soldAt: number
-  status: OrderStatus
-}
-
-export type DebtGroup = {
-  customerId: number
-  total: number
-  orderCount: number
-  /** Đơn nợ cũ nhất của khách — quyết định thứ tự danh sách và số ngày nợ. */
-  oldestAt: number
-}
-
-/** Số tiền một đơn còn thiếu. Đơn huỷ không còn nợ ai. */
-export function owingOf(order: DebtOrder): number {
-  return order.status === 'void' ? 0 : remainingOf(order.total, order.paidAmount)
-}
+export {
+  groupDebts,
+  isCountedPayment,
+  owingOf,
+  totalDebt,
+  type DebtGroup,
+} from '@shared/ledger-money'
 
 /**
  * Phiếu có vẽ khối "Nợ cũ / TỔNG PHẢI TRẢ" hay không.
@@ -38,21 +30,6 @@ export function showsDebtBlock(order: DebtOrder, totalDue: number): boolean {
 }
 
 /**
- * Phiếu thu còn được tính vào tiền hay không.
- *
- * `refunded` là tiền đã trả lại khách, `discarded` là khoản ghi nhận sai đã có ghi vết. Cả hai vẫn
- * nằm trong lịch sử (phiếu thu không xoá được) nhưng không còn là tiền của quán. Một chỗ duy nhất
- * cho năm nơi hỏi cùng câu này — và hai trong năm không phải màn đọc: hàm này nằm trên đường in
- * phiếu (`use-receipt.ts`) và trong cổng ghi của thu nợ (`payments.ts`, trong `syncTransaction`).
- * Sửa nó là sửa cả tiền in ra giấy lẫn tiền ghi xuống sổ, không chỉ một con số trên màn hình.
- */
-export function isCountedPayment(payment: {
-  unallocatedStatus?: 'pending' | 'refunded' | 'discarded'
-}): boolean {
-  return (payment.unallocatedStatus ?? 'pending') === 'pending'
-}
-
-/**
  * Đơn này không góp đồng nào vào nợ, nên "Nợ cũ" và "TỔNG PHẢI TRẢ" sẽ ra ĐÚNG một con số. Hai dòng
  * trùng nhau trên tờ giấy đưa tận tay khách đọc như lỗi in, nên gộp thành một dòng mang nhãn tự nói
  * ra đây là nợ của đơn TRƯỚC — bỏ trơn dòng "Nợ cũ" thì "TỔNG PHẢI TRẢ" đứng ngay dưới "Đã trả" lại
@@ -63,52 +40,6 @@ export function isCountedPayment(payment: {
  */
 export function showsPriorDebtOnly(prior: number, totalDue: number): boolean {
   return prior > 0 && prior === totalDue
-}
-
-/**
- * Gộp nợ theo khách, nợ lâu nhất lên đầu.
- *
- * Đơn không gắn khách bị **loại hẳn**: nợ là tiền của một người cụ thể, đơn khách lẻ mà chưa trả đủ
- * là lỗi dữ liệu chứ không phải công nợ. Bán nợ đã bắt buộc chọn khách từ màn bán hàng. Nhờ loại ở
- * đây mà tổng nợ trên trang khách, màn Công nợ và card Báo cáo luôn bằng nhau — cả ba đọc hàm này.
- */
-export function groupDebts(
-  orders: readonly DebtOrder[],
-  unallocatedByCustomer: ReadonlyMap<number, number> = new Map(),
-): DebtGroup[] {
-  const byCustomer = new Map<number, DebtGroup>()
-
-  for (const order of orders) {
-    const owing = owingOf(order)
-    if (order.customerId === null || owing <= 0) continue
-
-    const current = byCustomer.get(order.customerId)
-    if (current) {
-      current.total += owing
-      current.orderCount += 1
-      current.oldestAt = Math.min(current.oldestAt, order.soldAt)
-    } else {
-      byCustomer.set(order.customerId, {
-        customerId: order.customerId,
-        total: owing,
-        orderCount: 1,
-        oldestAt: order.soldAt,
-      })
-    }
-  }
-
-  for (const [customerId, credit] of unallocatedByCustomer) {
-    const group = byCustomer.get(customerId)
-    if (!group) continue
-    group.total = Math.max(0, group.total - credit)
-    if (group.total === 0) byCustomer.delete(customerId)
-  }
-
-  return [...byCustomer.values()].sort((a, b) => a.oldestAt - b.oldestAt)
-}
-
-export function totalDebt(groups: readonly DebtGroup[]): number {
-  return groups.reduce((sum, group) => sum + group.total, 0)
 }
 
 /**
