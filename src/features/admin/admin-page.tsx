@@ -58,7 +58,7 @@ export default function AdminPage() {
         <TextField
           label="Mật khẩu xem"
           type="password"
-          autoComplete="current-password"
+          autoComplete="off"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           error={gateError ?? undefined}

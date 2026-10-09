@@ -130,6 +130,7 @@ describe('cổng mật khẩu xem', () => {
     renderAt('/admin')
 
     expect(screen.getByLabelText('Mật khẩu xem').getAttribute('type')).toBe('password')
+    expect(screen.getByLabelText('Mật khẩu xem').getAttribute('autocomplete')).toBe('off')
     expect(screen.getByRole('button', { name: 'Vào' })).toBeTruthy()
   })
 
@@ -238,7 +239,7 @@ describe('danh sách sổ /admin', () => {
     expect(digitsOf(b.querySelector('[data-field="revenue"]'))).toBe('500000')
   })
 
-  it('bảng máy hiện tên, đã thu hồi, đã áp tới #N, tụt, chưa kéo lần nào và đang kéo lại', async () => {
+  it('bảng máy hiện tên, đã thu hồi, đã áp tới #N, tụt, chưa kéo lần nào và lần kéo lại gần nhất', async () => {
     await signIn('/admin')
     await waitFor(() => expect(sectionOf(SHOP_A)).toBeTruthy())
 
@@ -249,7 +250,9 @@ describe('danh sách sổ /admin', () => {
     expect(text).toMatch(/đã áp tới #5, báo lúc/)
     expect(text).toContain('tụt 2')
     expect(text).toContain('chưa kéo lần nào')
-    expect(text).toMatch(/đang kéo lại từ đầu \(từ /)
+    // `rewoundAt` không bao giờ bị xoá, nên nhãn phải nói về quá khứ chứ không phải việc đang diễn ra.
+    expect(text).toMatch(/kéo lại từ đầu lần gần nhất lúc /)
+    expect(text).not.toContain('đang kéo lại')
     expect(text).toContain('tụt 5')
   })
 

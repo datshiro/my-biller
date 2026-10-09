@@ -28,6 +28,8 @@ Admin chặn sai mật khẩu và chặn ADMIN_SECRET
     Cần Secret Xem Local
     New Context    viewport=${VIEWPORT}
     New Page    ${BASE_URL}/admin
+    # Trình duyệt không được đề nghị lưu secret xem vào trình quản lý mật khẩu.
+    Get Attribute    ${Ô_MẬT_KHẨU_XEM}    autocomplete    ==    off
     Fill Text    ${Ô_MẬT_KHẨU_XEM}    sai-mat-khau
     Click    ${NÚT_VÀO}
     Chờ Thấy Chữ    Sai mật khẩu

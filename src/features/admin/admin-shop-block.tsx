@@ -12,7 +12,7 @@ function DeviceProgress({ device, latestSeq }: { device: DeviceOverview; latestS
       {device.pulledSeq === null
         ? 'chưa kéo lần nào'
         : `đã áp tới #${device.pulledSeq}, báo lúc ${formatAt(device.lastSeenAt)} · tụt ${Math.max(0, latestSeq - device.pulledSeq)}`}
-      {device.rewoundAt !== null ? ` · đang kéo lại từ đầu (từ ${formatAt(device.rewoundAt)})` : null}
+      {device.rewoundAt !== null ? ` · kéo lại từ đầu lần gần nhất lúc ${formatAt(device.rewoundAt)}` : null}
     </span>
   )
 }
