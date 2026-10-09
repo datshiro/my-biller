@@ -97,6 +97,8 @@ không đẩy từng event qua pusher.
   `/devices` (401 = đã thu hồi, còn sống = báo chưa huỷ, lại mất mạng = báo "chưa chắc", bấm lại sẽ hội
   tụ). Chốt cục bộ là một transaction `deviceState` + `outbox`: giữ nguyên bảng sổ và `identity`, xoá
   `connection`/`pairing`/`lease`/`writeBlock`/`notice`, đưa `lastSeq` về 0.
+- Khi `/devices` cho thấy máy này là máy hoạt động duy nhất (`revokedAt` rỗng), hộp xác nhận huỷ ghép cảnh báo
+  rằng sổ chung sẽ không còn máy nào mở được — chỉ cảnh báo, không chặn. Danh sách được tải lại lúc mở hộp.
 - Ghép lại sau khi huỷ ghép là ghép một máy có sổ cục bộ: vào quán đã có dữ liệu thì Worker trả
   `merge-required`, nên phải sao lưu rồi xoá sổ trên máy trước; và phải dùng chữ cái khác vì Worker giữ
   chữ của máy đã thu hồi.

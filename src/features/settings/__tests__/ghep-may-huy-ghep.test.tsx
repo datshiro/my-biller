@@ -24,6 +24,9 @@ import { installTestDevice, testGid } from '@/test-fixtures'
 
 const DEVICE_ID = testGid(10)
 const TOKEN = 't'.repeat(43)
+const currentDevice = { id: DEVICE_ID, letter: 'A', label: 'Quầy trước', createdAt: 1, revokedAt: null, current: true }
+const otherActiveDevice = { id: testGid(11), letter: 'B', label: 'Quầy sau', createdAt: 2, revokedAt: null, current: false }
+const otherRevokedDevice = { ...otherActiveDevice, revokedAt: 3 }
 
 const syncMocks = vi.hoisted(() => ({
   listShopDevices: vi.fn(),
@@ -59,6 +62,8 @@ vi.mock('@/db/sync/unpair', async (importOriginal) => {
 const LEAVE_TITLE = 'Huỷ ghép “Quầy trước”?'
 const LEAVE_BODY =
   'Máy này sẽ rời sổ chung và thành máy chưa ghép. Sổ trên máy được giữ nguyên làm sổ cục bộ, đúng như lúc huỷ ghép; máy khác sẽ không thấy thay đổi mới của máy này nữa. Muốn ghép lại vào sổ chung sau này phải sao lưu rồi xoá sổ trên máy trước, và dùng một chữ cái khác.'
+const LAST_DEVICE_WARNING =
+  'Đây là máy cuối cùng còn ghép vào sổ chung. Huỷ ghép xong thì sổ chung không còn máy nào dùng được nữa.'
 const PENDING_TEXT = 'Còn 2 thay đổi chưa lên sổ chung. Chờ đồng bộ xong rồi huỷ ghép.'
 const OFFLINE_TEXT =
   'Huỷ ghép cần mạng để các máy khác biết máy này đã rời sổ chung. Kết nối Internet rồi thử lại.'
@@ -115,6 +120,15 @@ async function ledgerSnapshot() {
   }
 }
 
+async function ledgerFingerprint() {
+  const [snapshot, outbox, deviceStateKeys] = await Promise.all([
+    ledgerSnapshot(),
+    db.outbox.count(),
+    db.deviceState.toCollection().primaryKeys(),
+  ])
+  return { ...snapshot, outbox, deviceStateKeys: [...deviceStateKeys].map(String).sort() }
+}
+
 /** Dựng máy đã ghép đúng khuôn outbox.test.ts: identity → pairing → savePairedDevice → completeDevicePairing. */
 async function pairThisDevice() {
   await saveDeviceIdentity({ label: 'Quầy trước', letter: 'A' })
@@ -169,6 +183,7 @@ async function openLeaveDialog() {
 describe('huỷ ghép máy này ở màn Máy bán hàng', () => {
   it('hàng đợi rỗng: hộp xác nhận nêu hệ quả ghép lại, bấm Huỷ ghép gọi unpairThisDevice đúng một lần', async () => {
     await pairThisDevice()
+    syncMocks.listShopDevices.mockResolvedValue({ devices: [currentDevice, otherActiveDevice], latestSeq: 0 })
     unpairMocks.unpairThisDevice.mockResolvedValue({ droppedOperations: 0 })
     renderPage()
 
@@ -177,6 +192,75 @@ describe('huỷ ghép máy này ở màn Máy bán hàng', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
     await waitFor(() => expect(unpairMocks.unpairThisDevice).toHaveBeenCalledTimes(1))
+  })
+
+  it('chỉ còn máy này đang hoạt động, máy khác đã thu hồi: hộp xác nhận hiện cảnh báo máy cuối cùng trước nội dung cũ', async () => {
+    await pairThisDevice()
+    syncMocks.listShopDevices.mockResolvedValue({ devices: [currentDevice, otherRevokedDevice], latestSeq: 0 })
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    expect(within(dialog).getByText(`${LAST_DEVICE_WARNING} ${LEAVE_BODY}`)).toBeDefined()
+  })
+
+  it('không còn máy nào khác trong danh sách: hộp xác nhận hiện cảnh báo máy cuối cùng', async () => {
+    await pairThisDevice()
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    expect(within(dialog).getByText(`${LAST_DEVICE_WARNING} ${LEAVE_BODY}`)).toBeDefined()
+  })
+
+  it('còn máy khác đang hoạt động: hộp xác nhận chỉ có nội dung cũ, không có cảnh báo máy cuối cùng', async () => {
+    await pairThisDevice()
+    syncMocks.listShopDevices.mockResolvedValue({ devices: [currentDevice, otherActiveDevice], latestSeq: 0 })
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    expect(within(dialog).getByText(LEAVE_BODY)).toBeDefined()
+    expect(within(dialog).queryByText(/Đây là máy cuối cùng/)).toBeNull()
+  })
+
+  it('mở hộp xác nhận tải lại danh sách máy: máy khác vừa ngừng hoạt động thì hiện cảnh báo máy cuối cùng', async () => {
+    await pairThisDevice()
+    syncMocks.listShopDevices
+      .mockResolvedValueOnce({ devices: [currentDevice, otherActiveDevice], latestSeq: 0 })
+      .mockResolvedValueOnce({ devices: [currentDevice], latestSeq: 0 })
+    renderPage()
+    await waitFor(() => expect(syncMocks.listShopDevices).toHaveBeenCalledTimes(1))
+
+    const dialog = await openLeaveDialog()
+
+    expect(syncMocks.listShopDevices).toHaveBeenCalledTimes(2)
+    expect(await within(dialog).findByText(`${LAST_DEVICE_WARNING} ${LEAVE_BODY}`)).toBeDefined()
+  })
+
+  it('đang hiện cảnh báo máy cuối cùng vẫn bấm Huỷ ghép thì gọi unpairThisDevice đúng một lần', async () => {
+    await pairThisDevice()
+    unpairMocks.unpairThisDevice.mockResolvedValue({ droppedOperations: 0 })
+    renderPage()
+
+    const dialog = await openLeaveDialog()
+    expect(within(dialog).getByText(`${LAST_DEVICE_WARNING} ${LEAVE_BODY}`)).toBeDefined()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Huỷ ghép' }))
+    await waitFor(() => expect(unpairMocks.unpairThisDevice).toHaveBeenCalledTimes(1))
+  })
+
+  it('mở hộp xác nhận có cảnh báo máy cuối cùng không đổi sổ, hàng đợi hay khoá ghép', async () => {
+    await pairThisDevice()
+    await createItem(item('Phở'))
+    await recordSale()
+    await db.outbox.clear()
+    renderPage()
+    await waitFor(() => expect(huyGhepButton().disabled).toBe(false))
+    const before = await ledgerFingerprint()
+
+    await userEvent.click(huyGhepButton())
+    const dialog = await screen.findByRole('alertdialog', { name: LEAVE_TITLE })
+    expect(within(dialog).getByText(`${LAST_DEVICE_WARNING} ${LEAVE_BODY}`)).toBeDefined()
+
+    expect(await ledgerFingerprint()).toEqual(before)
   })
 
   it('còn thay đổi chưa lên sổ chung: nút huỷ ghép khoá, hiện số, Đồng bộ ngay đánh thức sync đúng một lần', async () => {

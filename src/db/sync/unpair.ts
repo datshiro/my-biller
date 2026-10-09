@@ -1,6 +1,6 @@
 import { db } from '../db'
 import { getDeviceSyncState, leaveSharedLedger } from '../repositories/device-state'
-import { listShopDevices, revokeShopDevice, SyncApiError } from './client'
+import { listShopDevices, revokeShopDevice, SyncApiError, type ShopDevice } from './client'
 import { countPendingOperations } from './outbox'
 import { DeviceConnectionSchema } from '@/domain/schema'
 
@@ -24,6 +24,12 @@ export class UnpairUncertainError extends Error {
     super(message)
     this.name = 'UnpairUncertainError'
   }
+}
+
+/** Huỷ ghép máy hoạt động cuối cùng thì sổ chung không còn token nào mở được. */
+export function isLastActiveDevice(devices: ShopDevice[]): boolean {
+  const active = devices.filter((device) => device.revokedAt === null)
+  return active.length === 1 && active[0]?.current === true
 }
 
 const REQUEST_TIMEOUT_MS = 15_000

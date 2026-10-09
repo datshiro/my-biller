@@ -1,5 +1,33 @@
 # Ghi chú phát hành
 
+## 2.18.0 — cảnh báo khi máy cuối cùng của quán tự huỷ ghép (#75) (9/10/2026)
+
+> **Không đổi Worker**: không đổi mã Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay
+> định dạng file sao lưu; deploy theo thứ tự thường. APK dựng lại với versionCode 15 để cài đè; không thêm plugin
+> native.
+
+### Người bán thấy gì
+
+- **Cài đặt › Máy bán hàng › Huỷ ghép máy này**: nếu mọi máy khác của quán đã bị thu hồi, hộp xác nhận mở đầu bằng câu
+  "Đây là máy cuối cùng còn ghép vào sổ chung. Huỷ ghép xong thì sổ chung không còn máy nào dùng được nữa."
+- **Chỉ cảnh báo, không chặn**: bấm Huỷ ghép vẫn chạy y như 2.16.0. Sổ trên máy giữ nguyên làm sổ cục bộ; sổ chung vẫn
+  nằm nguyên trên Worker nhưng không còn máy nào mở được. Muốn ghép lại sau này phải dùng chữ cái khác.
+- Còn máy khác đang ghép thì hộp xác nhận giữ nguyên nội dung cũ.
+- Mở hộp xác nhận thì app tải lại danh sách máy, nên máy vừa bị thu hồi từ máy khác cũng được tính. Câu cảnh báo có
+  thể hiện ra ngay sau khi hộp mở, lúc danh sách mới về.
+
+### Giới hạn đã biết
+
+- **Máy ghép dở vẫn được tính là máy khác.** Tạo mã ghép mà máy kia bỏ dở thì máy đó vẫn nằm trong danh sách "CÁC MÁY
+  ĐÃ GHÉP" như đang hoạt động, kể cả sau khi mã hết hạn: Worker chỉ dọn lượt ghép dở khi có máy đẩy thay đổi, kích hoạt
+  hay tạo mã ghép mới, không dọn khi xem danh sách hay thu hồi. Khi đó hộp xác nhận **không** cảnh báo. Máy ghép dở hiện
+  trong danh sách nên người bán thấy được; thu hồi nó rồi mở lại hộp thì cảnh báo hiện đúng.
+- Chưa tải được danh sách máy (mất mạng) thì không có cảnh báo; huỷ ghép khi đó cũng dừng vì cần mạng.
+- Chưa kiểm trên máy Android thật. Cần kiểm trên S25 với APK 2.18.0:
+  - hai máy đã ghép: mở hộp Huỷ ghép, không có cảnh báo, bỏ qua;
+  - thu hồi máy kia rồi mở lại hộp: có câu cảnh báo, nút Huỷ ghép vẫn bấm được;
+  - xác nhận: máy về sổ cục bộ, tổng tiền không đổi.
+
 ## 2.17.0 — phím Back trên APK không đóng sheet Thu tiền / Thu nợ khi đang lưu (#72) (9/10/2026)
 
 > **Chỉ APK đổi hành vi**: không đổi Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay
