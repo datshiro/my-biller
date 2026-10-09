@@ -5,7 +5,12 @@ export default defineProject({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.toml' },
-      miniflare: { bindings: { ADMIN_SECRET: 'test-admin-secret' } },
+      miniflare: {
+        bindings: {
+          ADMIN_SECRET: 'test-admin-secret',
+          ADMIN_VIEW_SECRET: 'test-admin-view-secret-0123456789abcdef',
+        },
+      },
     }),
   ],
   test: {

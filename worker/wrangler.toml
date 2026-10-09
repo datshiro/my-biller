@@ -15,6 +15,19 @@ namespace_id = "2608091857"
 limit = 20
 period = 60
 
+[[ratelimits]]
+name = "HEARTBEAT_RATE_LIMITER"
+namespace_id = "2610031744"
+
+[ratelimits.simple]
+limit = 6
+period = 60
+
+[[d1_databases]]
+binding = "ADMIN_DB"
+database_name = "my-biller-admin"
+database_id = "dd8c1fb7-634f-490e-aba6-fc034d506909"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ShopDO"]
@@ -33,6 +46,19 @@ namespace_id = "2608110215"
 [env.staging.ratelimits.simple]
 limit = 20
 period = 60
+
+[[env.staging.ratelimits]]
+name = "HEARTBEAT_RATE_LIMITER"
+namespace_id = "2610031745"
+
+[env.staging.ratelimits.simple]
+limit = 6
+period = 60
+
+[[env.staging.d1_databases]]
+binding = "ADMIN_DB"
+database_name = "My-biller-admin-staging"
+database_id = "3ac392e2-c6d9-4b5d-a1d8-18cec42b696b"
 
 [[env.staging.migrations]]
 tag = "v1"
