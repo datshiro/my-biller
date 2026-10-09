@@ -286,9 +286,10 @@ Bản Sao Máy Phải Đuổi Kịp Sổ Chung
     ...        const [connection, sync] = [await read('connection'), await read('sync')]
     ...        db.close()
     ...        if (!connection) throw new Error('Máy chưa ghép.')
-    ...        const response = await fetch(`${connection.syncUrl}/shop/${connection.shopId}/devices`, {
-    ...            headers: { authorization: `Bearer ${connection.token}` },
+    ...        const response = await fetch(connection.syncUrl + '/shop/' + connection.shopId + '/devices', {
+    ...            headers: { authorization: 'Bearer ' + connection.token },
     ...        })
+    ...        if (!response.ok) throw new Error('/devices trả ' + response.status)
     ...        const body = await response.json()
     ...        return { lastSeq: sync?.lastSeq ?? 0, latestSeq: body.latestSeq ?? 0 }
     ...    }
