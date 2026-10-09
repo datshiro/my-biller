@@ -529,3 +529,23 @@
   `busy`.
 - Mitigation: chưa làm. Hướng sửa: nâng cờ đang lưu lên màn mở sheet (như sheet Thu tiền), hoặc khoá cả ✕ và lớp phủ
   khi `busy`. Cả hai đều đổi hành vi của ✕, nên cần chủ app quyết định.
+
+### ISSUE-037 — Máy có thể từng hiện "đã ghép sổ chung" dù APK chưa bao giờ ghép được
+- State: open
+- Severity: low
+- Raised by / Date: planner (#49) / 09/10/2026
+- Related task: #49, `src/db/sync/client.ts` (`resolveDefaultSyncUrl`), `src/features/settings/ghep-may-page.tsx`
+- Description: trước #49, APK coi WebView `https://localhost` là máy dev và trỏ sync về `http://127.0.0.1:8787`, nên theo
+  mã thì chưa APK nào ghép được. Chưa xác nhận trên S25 hay APK nào khác rằng Cài đặt › Máy bán hàng chưa từng hiện
+  "đã ghép sổ chung".
+- Mitigation: nếu có máy như vậy, thu hồi máy đó từ máy khác rồi ghép lại bằng APK mới. Chờ chủ app kiểm trên máy thật.
+
+### ISSUE-038 — Ghi chú riêng tư về nhịp báo chỉ có trong tài liệu, chưa có trong app
+- State: deferred
+- Severity: low
+- Raised by / Date: planner (#49) / 09/10/2026
+- Related task: #49, `src/app/unpaired-heartbeat.ts`, `docs/dong-bo.md#ranh-giới-dữ-liệu`
+- Description: máy chưa ghép gửi tên quán, phiên bản, số đơn, số khách và tổng nợ lên Worker mà app không nói với người
+  bán, cũng không có nút tắt. Ghi chú hiện chỉ nằm ở `docs/dong-bo.md` và `README.md`.
+- Mitigation: mặc định chỉ ghi trong docs (quyết định của #49). Nếu chủ app muốn, thêm một dòng ở Cài đặt hoặc một nút
+  tắt nhịp báo; cả hai là quyết định sản phẩm.

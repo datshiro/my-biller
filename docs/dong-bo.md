@@ -43,6 +43,21 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   lưu khi máy 2.10.0 lưu cấu hình hình chìm thiếu khoá này. Hệ quả khi các máy chạy lẫn bản: máy 2.10.0 không đưa
   được logo bên phải về giữa (bấm "Giữa tem" ở đó vẫn giữ `right`) — đổi vị trí từ máy đã cập nhật.
   `getShop()` trộn mặc định từng trường của `labelWatermark` vì dòng IndexedDB do 2.10.0 ghi không qua schema mới.
+- Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
+  đang mở, và ngay sau khi tự huỷ ghép hoặc chuyển thành máy chưa ghép. Nhịp báo chỉ gồm mã cài đặt, tên quán, phiên
+  bản, nền tảng, số đơn, số khách và tổng nợ; **không** có đơn, khách hay tên khách. Máy đã ghép không gửi nhịp báo.
+  Body bị Worker trả 4xx (trừ 429) bị bỏ, không gửi lại.
+- Dòng nhịp báo **không được xác thực**: ai cũng gửi được và có thể giả mạo, nên chỉ dùng để quan sát, không làm căn cứ
+  cho việc gì. Worker giới hạn 6 lần một phút mỗi IP và xoá dòng quá 30 ngày; màn admin hiện tổng và số dòng mới trong 24
+  giờ để thấy đợt tràn.
+- Khoá `deviceState.install` giữ mã cài đặt (`installId`) của máy. Khoá này sống qua ghép, thu hồi, huỷ ghép và xoá sổ,
+  không vào file sao lưu. Ghép máy gửi kèm `installId`; tạo mã hỏng thì vẫn ghép, chỉ bỏ trường này. Server giữ trạng
+  thái "đã ghép" của dòng nhịp báo nếu máy ghép chưa quá 10 phút, nên máy huỷ ghép trong 10 phút đầu vẫn hiện "đã ghép"
+  tới nhịp báo kế tiếp. Dòng tạo ở `/pair` cho máy chưa từng gửi nhịp báo có nền tảng `browser` và số đếm 0 tới nhịp
+  báo đầu tiên.
+- Khu `/admin` (chỉ trên web, không có trong APK) đọc toàn bộ sổ chung của mọi quán bằng `ADMIN_VIEW_SECRET`. Khu này
+  chỉ đọc; app chỉ giữ secret trong bộ nhớ của tab, không tự lưu. Trình quản lý mật khẩu của trình duyệt vẫn có thể
+  đề nghị lưu ô này; đừng đồng ý trên máy dùng chung.
 
 ## Đường ghi và đọc
 
@@ -163,6 +178,18 @@ không đẩy từng event qua pusher.
 ## Vận hành
 
 Worker production dùng domain miễn phí `my-biller-sync.datshiro.workers.dev`; domain riêng để sau.
-`ADMIN_SECRET` là secret phía Worker, chỉ operator dùng để tạo quán đầu tiên. Xem
+`ADMIN_SECRET` là secret phía Worker, operator dùng để tạo quán và chạy điền bù chỉ mục sổ. `ADMIN_VIEW_SECRET` (≥ 32 ký
+tự, khác `ADMIN_SECRET`) chỉ mở khu `/admin` chỉ đọc; thiếu secret này thì khu admin luôn trả 401.
+
+- **`deviceActivity`** trong mỗi sổ chung: tiến độ kéo báo gần nhất của từng máy (`seq` đã kéo tới, lần kéo lại từ đầu
+  gần nhất). Ghi tối đa một lần mỗi 60 giây mỗi máy và không bao giờ làm hỏng lượt đồng bộ, nên số liệu chậm tối đa 60
+  giây. Lần kéo lại được nhận ra bằng cách so với mốc đã ghi; lần kéo lại xảy ra giữa hai lần ghi chỉ được nhớ trong bộ
+  nhớ của DO, nên có thể mất khi DO ngủ. Mốc kéo lại vì vậy là gần đúng, chỉ dùng để quan sát.
+- **Chỉ mục sổ trong D1** (`ADMIN_DB`, bảng `shops`): Cloudflare không liệt kê được Durable Object, nên Worker tự ghi
+  mã sổ theo ba nguồn: `create` khi tạo quán, `touch` khi máy đã ghép gọi `/epoch` lần đầu trong một isolate, và
+  `backfill` từ script `worker/scripts/admin-backfill.mjs` (điền bù sổ tạo trước khi có chỉ mục, xem
+  [`deploy.md`](./deploy.md#khu-admin-d1-và-điền-bù-chỉ-mục)). Ghi D1 chạy sau khi đã trả lời, nên D1 chậm hay lỗi không
+  làm chậm ghép máy, tạo quán hay đồng bộ; sổ thiếu chỉ mục vào lại ở lượt chạm hoặc lượt điền bù sau.
+- Hạn mức D1 gói Free là 50 truy vấn mỗi lần gọi, nên mỗi lượt điền bù gửi tối đa 20 mã sổ trong một batch. Xem
 [`deploy.md`](./deploy.md) để deploy và [`kiem-thu-live.md`](./kiem-thu-live.md) để chạy diễn tập hai
 máy. Không đưa token, mã ghép hay secret vào log, ảnh lỗi hoặc file sao lưu.
