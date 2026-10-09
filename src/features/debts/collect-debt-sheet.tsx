@@ -51,6 +51,7 @@ export function CollectDebtSheet({
     <Sheet
       title={`Thu nợ · ${name}`}
       onClose={onClose}
+      busy={saving}
       footer={
         <div className="flex flex-col gap-2">
           {error ? <p role="alert" className="text-[15px] font-semibold text-danger">{error}</p> : null}

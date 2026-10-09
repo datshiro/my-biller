@@ -1131,6 +1131,38 @@ APK: màn chặn dữ liệu trả Back cho Android, không giữ người bán 
     Wait Until Keyword Succeeds    10x    200ms    Cờ Back Của Plugin Phải Là    False
     Back Android Không Có Listener
 
+APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu thu
+    [Documentation]    Lỗi cũ (#72): Back trên APK đóng luôn sheet Thu tiền giữa lúc đang lưu đơn. Sheet biến mất
+    ...    nên người bán tưởng đã huỷ, nhưng lệnh ghi vẫn chạy nốt rồi app nhảy sang phiếu. Ca này giữ lệnh ghi treo
+    ...    bằng một giao dịch IndexedDB khác trên `orders`, bấm Back trong lúc treo, rồi nhả: sheet vẫn mở, app không
+    ...    thu xuống nền, và `payments` chỉ có đúng một dòng cho đơn.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Giữ Ghi Sổ Lại
+    Click    ${NÚT_XONG}
+    Chờ Thấy Chữ    Đang lưu…
+
+    Bấm Back Android
+    # Back đóng sheet là một lần vẽ lại sau lệnh Back: đợi qua nó rồi mới kiểm sheet còn mở.
+    Sleep    300ms
+    Wait For Elements State    ${SHEET_THU_TIỀN}    visible
+    Chờ Thấy Chữ    Đang lưu…
+    Get Url    ==    ${BASE_URL}/
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back khi đang lưu mà app thu xuống nền.
+
+    Nhả Ghi Sổ Ra
+    Wait For Condition    Url    contains    /phieu
+    ${đơn}=    Đơn Mới Nhất
+    ${mã_đơn}=    Set Variable    ${đơn}[id]
+    ${thu}=    Đọc Bảng    payments
+    ${dòng_thu}=    Evaluate    [dòng for dòng in $thu if dòng['orderId'] == $mã_đơn]
+    Length Should Be    ${dòng_thu}    1    Sổ phải có đúng một dòng thu cho đơn vừa bán, không được ghi hai lần.
+    Should Be Equal As Integers    ${dòng_thu}[0][amount]    ${đơn}[total]    Số tiền trong dòng thu không khớp tổng đơn.
+
 
 *** Keywords ***
 Nâng Version Sổ Trên Máy
