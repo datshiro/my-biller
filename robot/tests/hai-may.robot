@@ -773,8 +773,10 @@ Huỷ ghép máy B giữ nguyên sổ tiền, máy A thấy B đã rời và B s
     Chờ Thấy Chữ    phải sao lưu rồi xoá sổ trên máy trước
     # `text-is`: `has-text("Huỷ ghép")` khớp cả nút "Huỷ" của hộp.
     Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
-    Chờ Thấy Chữ    Máy này đã rời sổ chung
-    Wait For Elements State    css=button:has-text("GHÉP MÁY NÀY")    visible
+    # Câu báo lỗi mất mạng cũng chứa "máy này đã rời sổ chung", và `has-text` khớp cả nút "Huỷ ghép máy
+    # này"; chờ đúng câu báo đã rời và đúng nhãn nút ghép.
+    Chờ Thấy Chữ    giờ là sổ cục bộ
+    Wait For Elements State    css=button:text-is("GHÉP MÁY NÀY")    visible
 
     ${sau}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
     Should Be Equal    ${sau}    ${trước}    Huỷ ghép làm đổi sổ tiền trên máy.
@@ -842,8 +844,11 @@ Còn thay đổi chưa lên sổ chung thì không huỷ ghép được cho tớ
     Click    css=button:text-is("Huỷ ghép máy này")
     Chờ Hộp Xác Nhận    Huỷ ghép “Quầy B”?
     Click    ${HỘP_XÁC_NHẬN} >> css=button:text-is("Huỷ ghép")
-    Chờ Thấy Chữ    Máy này đã rời sổ chung
+    Chờ Thấy Chữ    giờ là sổ cục bộ
     Không Được Thấy Chữ    thay đổi ghi trong lúc huỷ ghép
+    ${device}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
+    ${khoá}=    Evaluate    [row['key'] for row in $device]
+    Should Not Contain    ${khoá}    connection    Máy đã huỷ ghép vẫn còn khoá connection.
 
     Wait Until Keyword Succeeds    40x    500ms    Món Phải Có Trên Máy    Món chờ đồng bộ    ${MÁY_A_PAGE}
 
@@ -865,9 +870,10 @@ Máy bị máy khác thu hồi dùng lại được như máy chưa ghép mà kh
     Chờ Hộp Xác Nhận    Dùng máy này như máy chưa ghép?
     Chờ Thấy Chữ    ghép lại ngay bằng mã mới
     Xác Nhận Trong Hộp    Dùng như máy chưa ghép
-    Chờ Thấy Chữ    Máy này đã rời sổ chung
+    Chờ Thấy Chữ    giờ là sổ cục bộ
     ${device}=    Đọc Bảng    deviceState    ${MÁY_B_PAGE}
     ${khoá}=    Evaluate    [row['key'] for row in $device]
+    Should Not Contain    ${khoá}    connection
     Should Not Contain    ${khoá}    writeBlock
     Should Not Contain    ${khoá}    notice
     ${sau}=    Tổng Sổ Tiền Máy    ${MÁY_B_PAGE}
