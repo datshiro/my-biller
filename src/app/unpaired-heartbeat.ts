@@ -26,7 +26,7 @@ const SHOP_NAME_MAX = 80
 
 let started = false
 let inFlight: AbortController | null = null
-/** Body của lần gửi thất bại; `online`/`visibilitychange` chỉ gửi lại body này, không quét sổ lần nữa. */
+/** Body của lần gửi lỗi mạng, 5xx hoặc 429; `online`/`visibilitychange` chỉ gửi lại body này, không quét sổ lần nữa. */
 let pending: Heartbeat | null = null
 
 const readTime = (key: string) => Number(localStorage.getItem(key) ?? 0)
@@ -86,6 +86,9 @@ async function post(body: Heartbeat): Promise<void> {
       if (pending === body) pending = null
     } else if (response.status === 429) {
       localStorage.setItem(HEARTBEAT_BACKOFF_KEY, String(Date.now() + BACKOFF_MS))
+    } else if (response.status < 500) {
+      // Worker từ chối chính body này; gửi lại y nguyên chỉ bị từ chối tiếp. Lượt hẹn giờ sau dựng body mới.
+      if (pending === body) pending = null
     }
   } finally {
     if (inFlight === controller) inFlight = null

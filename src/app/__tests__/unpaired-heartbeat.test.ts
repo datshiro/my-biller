@@ -283,6 +283,21 @@ describe('kết quả gửi heartbeat', () => {
     expect(bodies()[1]).toEqual(bodies()[0])
   })
 
+  it.each([400, 413])('%i bỏ body: focus hay có mạng lại không gửi lại body bị từ chối', async (status) => {
+    startHeartbeat()
+    fetchMock.mockResolvedValueOnce(new Response(null, { status }))
+    await sendUnpairedHeartbeat(15 * MIN)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    fire(document, 'visibilitychange')
+    fire(window, 'online')
+    await retryPendingHeartbeat()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(HEARTBEAT_AT_KEY)).toBeNull()
+  })
+
   it('sau khi huỷ heartbeat đang bay, body của lượt đó không được gửi lại', async () => {
     fetchMock.mockImplementationOnce(
       (_url: string, init: RequestInit) =>
