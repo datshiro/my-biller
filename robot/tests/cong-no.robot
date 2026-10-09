@@ -106,6 +106,37 @@ Nợ mới phát sinh hôm nay thì ghi rõ là từ hôm nay
     Mở Màn    /cong-no
     Chờ Thấy Chữ    từ hôm nay
 
+APK: Back khi đang lưu thu nợ bị nuốt, sổ ghi đúng một phiếu thu
+    [Documentation]    Lỗi cũ (#72): Back trên APK đóng luôn sheet Thu nợ giữa lúc đang lưu. Sheet biến mất nên
+    ...    người bán không biết tiền đã vào sổ chưa và dễ thu lần nữa. Ca này treo lệnh ghi, bấm Back trong lúc
+    ...    treo, rồi nhả: sheet vẫn mở tới khi lưu xong, app không thu xuống nền, và `payments` chỉ thêm đúng
+    ...    một dòng 100.000 cho Anh Hùng.
+    [Tags]    regression
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    ${trước}=    Đọc Bảng    payments
+    Mở Sheet Thu Nợ    Anh Hùng
+    Giữ Ghi Sổ Lại
+    Click    ${SHEET_THU_NỢ} >> css=button:has-text("THU ")
+    Chờ Thấy Chữ    Đang lưu…
+
+    Bấm Back Android
+    # Back đóng sheet là một lần vẽ lại sau lệnh Back: đợi qua nó rồi mới kiểm sheet còn mở.
+    Sleep    300ms
+    Wait For Elements State    ${SHEET_THU_NỢ}    visible
+    Chờ Thấy Chữ    Đang lưu…
+    Get Url    ==    ${BASE_URL}/cong-no
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back khi đang lưu mà app thu xuống nền.
+
+    Nhả Ghi Sổ Ra
+    Wait For Elements State    ${SHEET_THU_NỢ}    detached
+    Chờ Thấy Chữ    Chưa ai nợ tiền
+    ${sau}=    Đọc Bảng    payments
+    ${id_cũ}=    Evaluate    {dòng['id'] for dòng in $trước}
+    ${mới}=    Evaluate    [dòng for dòng in $sau if dòng['id'] not in $id_cũ]
+    Length Should Be    ${mới}    1    Thu nợ một lần phải ra đúng một dòng thu, không được ghi hai lần.
+    Should Be Equal As Integers    ${mới}[0][amount]    100000    Dòng thu không đúng số nợ đã thu.
+
 
 *** Keywords ***
 Mở Sheet Thu Nợ

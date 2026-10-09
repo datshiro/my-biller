@@ -1141,7 +1141,7 @@ APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu t
     Mở Màn    /
     Chọn Món    Phở bò
     Mở Sheet Thu Tiền
-    Giữ Ghi Đơn Lại
+    Giữ Ghi Sổ Lại
     Click    ${NÚT_XONG}
     Chờ Thấy Chữ    Đang lưu…
 
@@ -1154,7 +1154,7 @@ APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu t
     ${thu_app}=    Số Lần Thu App
     Should Be Equal As Integers    ${thu_app}    0    Back khi đang lưu mà app thu xuống nền.
 
-    Nhả Ghi Đơn Ra
+    Nhả Ghi Sổ Ra
     Wait For Condition    Url    contains    /phieu
     ${đơn}=    Đơn Mới Nhất
     ${mã_đơn}=    Set Variable    ${đơn}[id]
@@ -1186,33 +1186,3 @@ Nâng Version Sổ Trên Máy
     ...    () => JSON.parse(localStorage.getItem('${KHOÁ_NHÁP_GIỎ}')).lines.map((line) => ({ name: line.name, qty: line.qty }))
     Length Should Be    ${dòng}    ${số_dòng}    Nháp giỏ chưa có đủ ${số_dòng} dòng.
     RETURN    ${dòng}
-
-Giữ Ghi Đơn Lại
-    [Documentation]    Mở một giao dịch readwrite trên `orders` và giữ nó sống bằng chuỗi `count()` nối nhau.
-    ...    `createOrder` mở giao dịch rw trên cùng store nên IndexedDB xếp nó **sau** giao dịch này: lệnh ghi treo
-    ...    tới khi `Nhả Ghi Đơn Ra`. Giao dịch tự commit khi không còn request chờ, nên promise treo không giữ được
-    ...    nó — chỉ một request mới luôn được đặt ngay trong callback của request trước mới giữ được.
-    Evaluate JavaScript    ${None}
-    ...    () => new Promise((resolve, reject) => {
-    ...        const open = indexedDB.open('my-biller')
-    ...        open.onerror = () => reject(open.error)
-    ...        open.onsuccess = () => {
-    ...            const db = open.result
-    ...            const tx = db.transaction('orders', 'readwrite')
-    ...            const store = tx.objectStore('orders')
-    ...            tx.oncomplete = () => db.close()
-    ...            let giu = true
-    ...            const bom = () => {
-    ...                if (giu) store.count().onsuccess = bom
-    ...            }
-    ...            window.__giuGhiDon = () => { giu = false }
-    ...            store.count().onsuccess = () => {
-    ...                resolve()
-    ...                bom()
-    ...            }
-    ...        }
-    ...    })
-
-Nhả Ghi Đơn Ra
-    [Documentation]    Dừng chuỗi request để giao dịch giữ commit, lệnh ghi đơn đang chờ chạy tiếp.
-    Evaluate JavaScript    ${None}    () => window.__giuGhiDon()
