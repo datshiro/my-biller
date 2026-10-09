@@ -1,5 +1,30 @@
 # Ghi chú phát hành
 
+## 2.17.0 — phím Back trên APK không đóng sheet Thu tiền / Thu nợ khi đang lưu (#72) (9/10/2026)
+
+> **Chỉ APK đổi hành vi**: không đổi Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay
+> định dạng file sao lưu; deploy theo thứ tự thường. Web/PWA không đổi hành vi. APK dựng lại với versionCode 14 để cài
+> đè; không thêm plugin native.
+
+### Người bán thấy gì
+
+- **Thu tiền** và **Thu nợ**: sau khi bấm XONG & XUẤT PHIẾU hoặc THU, trong lúc nút còn "Đang lưu…", phím Back và vuốt
+  back **không làm gì**: sheet không đóng, không đổi màn, không thu app. Người bán luôn thấy kết quả của lần lưu.
+- Lưu xong thì đi tiếp như cũ: Thu tiền sang phiếu, Thu nợ đóng sheet. Lưu hỏng thì sheet ở lại và báo lỗi; khi đó
+  Back lại đóng sheet như bình thường.
+- Sheet Thu tiền cũng giữ Back trong lúc app đang tính lại giá sỉ, như nút XONG đã bị khoá trong lúc đó.
+- Nút ✕ và chạm ra ngoài sheet **không đổi**: vẫn đóng sheet kể cả khi đang lưu. Lệnh ghi vẫn chạy xong.
+
+### Giới hạn đã biết
+
+- Bấm ✕ giữa lúc thu nợ rồi mở lại sheet Thu nợ thì có thể bấm THU lần nữa (ISSUE-036). Sổ không bao giờ ghi vượt số
+  nợ, vì lần thu sau đọc lại nợ còn lại trong cùng giao dịch, nhưng có thể thu hai lần một phần. Cách sửa đổi hành vi
+  của ✕, nên chờ chủ app quyết định.
+- Sheet Chi phí và các sheet cài đặt có lưu chưa giữ Back khi đang lưu; Back vẫn đóng chúng như ✕.
+- Chưa kiểm trên máy Android thật: các ca Robot giả lập APK trên trình duyệt. Cần kiểm trên S25: Back và vuốt back hai
+  mép ngay sau khi bấm XONG / THU; Back khi bàn phím số đang mở trong sheet; Back khi đổi SỈ/LẺ với khách có bảng giá
+  riêng.
+
 ## 2.16.0 — huỷ ghép máy này, máy bị thu hồi dùng lại được như máy chưa ghép (#53) (9/10/2026)
 
 > **Không đổi mã Worker**: máy tự thu hồi qua route sẵn có `POST /shop/:id/devices/:id/revoke`; bản này chỉ thêm ca
@@ -55,7 +80,7 @@
 - Chưa kiểm trên máy Android thật: toàn bộ ca Robot chạy trên APK giả lập cầu nối Capacitor. Cần kiểm trên S25
   (Android 16, predictive back): các đường Back ở trên, vuốt back hai mép, Back khi bàn phím đang mở, Back sau khi khôi
   phục sao lưu (app tự tải lại), và `adb logcat` không có lỗi luồng từ `AppPlugin`.
-- Back không chắn form đang gõ dở; Back đóng sheet thu tiền/thu nợ đang lưu giống nút ✕ (ISSUE-032). Hộp thoại mount
+- Back không chắn form đang gõ dở; Back đóng sheet thu tiền/thu nợ đang lưu giống nút ✕ (ISSUE-032, đã sửa ở 2.17.0). Hộp thoại mount
   cùng lúc với Sheet cha thì Back đóng nhầm Sheet — hiện không có chỗ nào như vậy (ISSUE-033).
 
 ## 2.14.0 — nhập món, nhóm và khách từ file CSV; sổ chung chặn món trùng tên (#50) (9/10/2026)
