@@ -89,6 +89,17 @@ không đẩy từng event qua pusher.
   ngoài transaction activation, các đường này không để lại ledger hoặc oplog seed dở dang.
 - Nếu cả sổ cục bộ lẫn Durable Object đã có dữ liệu, Worker trả `merge-required`; phải đối soát hai
   sổ, không tự seed hoặc ghi đè một bên.
+- **Huỷ ghép máy này** (màn Máy bán hàng, mục RỜI SỔ CHUNG) đưa một máy đã ghép về sổ cục bộ. Chỉ chạy
+  khi có mạng, `outbox` rỗng, không đang kéo lại sổ (`resyncRequired`) và `lastSeq` đã đuổi kịp `latestSeq`
+  của `/devices`; mọi điều kiện này được kiểm **trước** lệnh thu hồi vì lệnh đó không đảo ngược được. Bỏ
+  hàng đợi khi còn mạng có thể bỏ nhầm thao tác đã lên Worker mà chưa kịp xoá dòng, nên app chặn thay vì
+  bỏ. Máy tự thu hồi qua route `POST /shop/:id/devices/:selfId/revoke` sẵn có; mất response thì hỏi lại
+  `/devices` (401 = đã thu hồi, còn sống = báo chưa huỷ, lại mất mạng = báo "chưa chắc", bấm lại sẽ hội
+  tụ). Chốt cục bộ là một transaction `deviceState` + `outbox`: giữ nguyên bảng sổ và `identity`, xoá
+  `connection`/`pairing`/`lease`/`writeBlock`/`notice`, đưa `lastSeq` về 0.
+- Ghép lại sau khi huỷ ghép là ghép một máy có sổ cục bộ: vào quán đã có dữ liệu thì Worker trả
+  `merge-required`, nên phải sao lưu rồi xoá sổ trên máy trước; và phải dùng chữ cái khác vì Worker giữ
+  chữ của máy đã thu hồi.
 
 ## Idempotency và từ chối
 
@@ -117,6 +128,10 @@ không đẩy từng event qua pusher.
   `writeBlock=revoked` trong `deviceState`, bỏ connection cũ và chặn mọi `syncTransaction` để không
   âm thầm tạo một nhánh sổ cục bộ. Khi ghép lại sau thu hồi, app xoá bản sao sổ và `outbox` cũ, đưa
   con trỏ về `lastSeq=0`, bỏ lease cũ rồi mới xoá marker/thông báo để kéo lại sổ theo token mới.
+- Máy đã bị thu hồi có thể chọn "Dùng máy này như máy chưa ghép" (không gọi mạng): cùng chốt cục bộ với
+  Huỷ ghép máy này, bỏ hàng đợi có báo số thao tác chưa từng lên sổ chung. Chọn rồi thì ghép lại phải
+  theo luật `merge-required` ở trên. `markDeviceRevoked(token)` chỉ ghi `writeBlock` khi máy còn đúng
+  connection của token nhận 401, nên 401 đến muộn sau khi máy đã rời sổ không khoá ghi máy chưa ghép.
 - Tạo mới hoặc đổi tên/bán lại một `items` thành trùng tên (không phân biệt hoa thường/khoảng trắng)
   với một món khác đang `isActive` bị từ chối `item-name-taken`. Luật chỉ áp cho máy gửi `caps` kèm
   `item-name-taken` trong request; máy ở bản cũ hơn chưa gửi `caps` không bị ảnh hưởng, đơn của máy đó

@@ -1,5 +1,40 @@
 # Ghi chú phát hành
 
+## 2.16.0 — huỷ ghép máy này, máy bị thu hồi dùng lại được như máy chưa ghép (#53) (9/10/2026)
+
+> **Không đổi mã Worker**: máy tự thu hồi qua route sẵn có `POST /shop/:id/devices/:id/revoke`; bản này chỉ thêm ca
+> kiểm thử Worker khoá hành vi đó. Không đổi schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay
+> định dạng file sao lưu; deploy theo thứ tự thường. Máy 2.15.0 ghép chung với máy 2.16.0 vẫn thấy máy đã rời là máy
+> bị thu hồi như trước. APK dựng lại với versionCode 13 để cài đè; không thêm plugin native.
+
+### Người bán thấy gì
+
+- **Cài đặt › Máy bán hàng › mục RỜI SỔ CHUNG › Huỷ ghép máy này**: máy đã ghép rời sổ chung và dùng tiếp sổ trên
+  máy như máy chưa ghép. Món, nhóm, khách, đơn, chi phí và tiền trên máy giữ nguyên; máy khác thấy máy này đã rời.
+- **Nút chỉ chạy khi an toàn**, vì thu hồi không đảo ngược được. App báo rõ lý do và không huỷ ghép khi: mất mạng,
+  máy đang ghép, máy đang kéo lại sổ từ đầu, còn thay đổi chưa lên sổ chung (bấm **Đồng bộ ngay** rồi chờ), hoặc bản
+  sao trên máy chưa nhận đủ thay đổi mới nhất của máy khác.
+- **Mạng rớt đúng lúc bấm**: app hỏi lại sổ chung. Đã rời thì về sổ cục bộ; chưa rời thì báo lỗi và máy vẫn ghép; không
+  hỏi được thì báo "Chưa chắc lệnh huỷ ghép đã tới sổ chung" — có mạng lại bấm lần nữa là xong.
+- **Máy đã bị máy khác thu hồi** có thêm nút **Dùng máy này như máy chưa ghép**: không cần mạng, giữ sổ trên máy, báo số
+  thay đổi còn trong hàng đợi sẽ bị bỏ.
+- **Màn Sao lưu** trên máy đã ghép giờ chỉ đường huỷ ghép ở Cài đặt › Máy bán hàng thay vì nói không có cách nào.
+- Ghép lại sau khi huỷ ghép: vào quán đã có dữ liệu thì phải sao lưu rồi xoá sổ trên máy trước, và phải chọn chữ cái
+  khác vì sổ chung giữ chữ của máy đã rời.
+
+### Giới hạn đã biết
+
+- **Máy hoạt động cuối cùng của quán tự huỷ ghép** thì sổ chung không còn máy nào mở được, và app chưa cảnh báo điều
+  này (ISSUE-034). Không mất dữ liệu: máy chỉ được huỷ ghép khi đã nhận đủ sổ chung. Muốn có lại sổ chung thì operator
+  tạo quán mới (`POST /shop`, xem [`deploy.md`](deploy.md)) rồi ghép máy này vào để nạp từ sổ cục bộ; sổ chung cũ nằm
+  lại trên Worker. Việc tiếp: thêm câu cảnh báo trong hộp xác nhận khi chỉ còn một máy hoạt động.
+- **Dùng máy này như máy chưa ghép** không hỏi được sổ chung, nên nếu máy bị thu hồi giữa lúc đang kéo lại sổ thì sổ
+  trên máy có thể thiếu thay đổi của máy khác; hộp xác nhận chưa nói điều này (ISSUE-035). Nếu nghi thiếu, nhờ máy còn
+  ghép xuất sao lưu.
+- Chưa kiểm trên máy Android thật: toàn bộ ca Robot chạy trên trình duyệt. Cần kiểm trên S25: huỷ ghép khi tắt cả
+  Wi-Fi lẫn dữ liệu di động (phải báo cần mạng), huỷ ghép khi mạng chậm (mỗi lần hỏi sổ chung chờ tối đa 15 giây rồi báo), và luồng
+  "Dùng máy này như máy chưa ghép" trên máy bị thu hồi.
+
 ## 2.15.0 — phím Back trên APK đi lùi trong app thay vì thoát (#65) (9/10/2026)
 
 > **Chỉ APK đổi**: không đổi Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay định dạng

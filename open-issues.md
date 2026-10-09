@@ -492,3 +492,24 @@
   `src/ui/__tests__/back-dismiss.test.tsx` báo khi điều này đổi.
 - Mitigation: nếu cần, xếp lớp theo thứ tự mount trong DOM thay vì thứ tự effect.
 
+
+### ISSUE-034 — Máy hoạt động cuối cùng tự huỷ ghép thì sổ chung không còn máy nào mở được
+- State: deferred
+- Severity: medium
+- Raised by / Date: code-reviewer (#53) / 09/10/2026
+- Related task: #53, `src/db/sync/unpair.ts`
+- Description: "Huỷ ghép máy này" không xét máy đang huỷ có phải máy hoạt động duy nhất của quán không. Nếu phải, sau
+  khi thu hồi không còn token nào mở được sổ chung trên Durable Object. Không mất dữ liệu: bản sao cục bộ đã đuổi kịp
+  `latestSeq` trước khi thu hồi, và sổ chung vẫn nằm nguyên trên Worker. Hộp xác nhận hiện không cảnh báo trường hợp này.
+- Mitigation: cần quyết định sản phẩm — chặn hẳn, hay chỉ cảnh báo trong hộp xác nhận (danh sách `/devices` đã có sẵn
+  lúc bấm nên đếm được máy hoạt động khác).
+
+### ISSUE-035 — "Dùng máy này như máy chưa ghép" có thể giữ bản sao chưa tải xong
+- State: deferred
+- Severity: medium
+- Raised by / Date: code-reviewer (#53) / 09/10/2026
+- Related task: #53, `src/db/repositories/device-state.ts` (`leaveSharedLedger` nhánh `revoked`), `src/features/settings/ghep-may-page.tsx`
+- Description: máy bị thu hồi giữa lúc đang tải lại sổ chung thì bản sao cục bộ thiếu thay đổi của máy khác. Nhánh này
+  không còn token để hỏi Worker nên không kiểm được độ tươi; hộp xác nhận không nói bản sao có thể thiếu.
+- Mitigation: cần quyết định câu chữ — thêm một câu vào hộp xác nhận rằng sổ cục bộ có thể thiếu thay đổi của máy khác
+  và nên nhờ máy còn ghép xuất sao lưu nếu cần.

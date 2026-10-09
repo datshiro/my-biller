@@ -233,11 +233,16 @@ export function saveDeviceNotice(
   )
 }
 
-export function markDeviceRevoked(): Promise<void> {
+/**
+ * `expectedToken` là token của request vừa nhận 401: máy đã rời sổ chung hoặc đã ghép lại bằng token khác thì
+ * 401 đó đã cũ, không được dựng lại khoá ghi.
+ */
+export function markDeviceRevoked(expectedToken?: string): Promise<void> {
   const message =
     'Máy này đã bị thu hồi. Thay đổi mới không thể lên sổ chung; hãy ghép lại để tiếp tục.'
   return db.transaction('rw', db.deviceState, async () => {
     const connection = await getDeviceConnection()
+    if (expectedToken !== undefined && connection?.token !== expectedToken) return
     await db.deviceState.put(
       DeviceNoticeSchema.parse({
         key: 'notice',
@@ -257,5 +262,54 @@ export function markDeviceRevoked(): Promise<void> {
     )
     await db.deviceState.delete('connection')
     await db.deviceState.delete('pairing')
+  })
+}
+
+export type LeaveSharedLedgerFrom =
+  | { kind: 'connected'; token: string }
+  | { kind: 'revoked' }
+
+const LEAVE_STATE_CHANGED = 'Trạng thái ghép của máy vừa đổi. Mở lại màn Máy bán hàng rồi thử lại.'
+
+/**
+ * Đưa máy về chế độ chưa ghép: bảng sổ và `identity` giữ nguyên làm sổ cục bộ, hàng đợi bị bỏ (đếm theo `txId`).
+ * `connected` chỉ gọi sau khi Worker đã thu hồi token đó; `revoked` dành cho máy đã bị máy khác thu hồi.
+ */
+export async function leaveSharedLedger(
+  from: LeaveSharedLedgerFrom,
+): Promise<{ droppedOperations: number }> {
+  return db.transaction('rw', db.deviceState, db.outbox, async () => {
+    const [pairing, connection, writeBlock] = await Promise.all([
+      db.deviceState.get('pairing'),
+      getDeviceConnection(),
+      db.deviceState.get('writeBlock'),
+    ])
+    if (
+      pairing?.key === 'pairing' &&
+      (pairing.connectionSaved || pairing.expiresAt > Date.now())
+    ) {
+      throw new Error('Máy đang ghép vào sổ chung. Chờ ghép xong rồi thử lại.')
+    }
+    const revoked = writeBlock?.key === 'writeBlock' && writeBlock.reason === 'revoked'
+    const accepted =
+      from.kind === 'connected'
+        ? connection
+          ? connection.token === from.token
+          : revoked
+        : !connection && revoked
+    if (!accepted) throw new Error(LEAVE_STATE_CHANGED)
+
+    const droppedOperations = new Set((await db.outbox.toArray()).map((row) => row.txId)).size
+    await db.outbox.clear()
+    await db.deviceState.bulkDelete(['connection', 'pairing', 'lease', 'writeBlock', 'notice'])
+    const previousSync = await getDeviceSyncState()
+    await db.deviceState.put({
+      key: 'sync',
+      lastSeq: 0,
+      revision: previousSync.revision + 1,
+      resyncRequired: false,
+      lastConnectedAt: null,
+    })
+    return { droppedOperations }
   })
 }
