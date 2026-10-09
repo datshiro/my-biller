@@ -25,6 +25,7 @@ import {
 } from '@/db/sync/client'
 import { SYNC_WAKE_EVENT } from '@/db/sync/runner'
 import {
+  isLastActiveDevice,
   isTimeout,
   UnpairBlockedError,
   UnpairUncertainError,
@@ -45,6 +46,10 @@ const LEFT_NOTICE = 'Máy này đã rời sổ chung. Sổ trên máy giữ nguy
 const pendingText = (pending: number) =>
   `Còn ${pending} thay đổi chưa lên sổ chung. Chờ đồng bộ xong rồi huỷ ghép.`
 const RESYNC_TEXT = 'Máy đang kéo lại sổ chung. Chờ xong rồi huỷ ghép.'
+const LEAVE_TEXT =
+  'Máy này sẽ rời sổ chung và thành máy chưa ghép. Sổ trên máy được giữ nguyên làm sổ cục bộ, đúng như lúc huỷ ghép; máy khác sẽ không thấy thay đổi mới của máy này nữa. Muốn ghép lại vào sổ chung sau này phải sao lưu rồi xoá sổ trên máy trước, và dùng một chữ cái khác.'
+const LAST_DEVICE_WARNING =
+  'Đây là máy cuối cùng còn ghép vào sổ chung. Huỷ ghép xong thì sổ chung không còn máy nào dùng được nữa.'
 
 function unpairErrorText(caught: unknown): string {
   if (caught instanceof UnpairBlockedError) {
@@ -434,7 +439,15 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
               Đồng bộ ngay
             </Button>
           ) : null}
-          <Button variant="danger" disabled={busy || !ready} onClick={() => setLeaving(true)}>
+          <Button
+            variant="danger"
+            disabled={busy || !ready}
+            onClick={() => {
+              setLeaving(true)
+              // Máy khác có thể vừa bị thu hồi hay ghép thêm; cảnh báo máy cuối cùng phải theo danh sách mới.
+              void load()
+            }}
+          >
             Huỷ ghép máy này
           </Button>
         </div>
@@ -460,7 +473,9 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
       {leaving ? (
         <ConfirmDialog
           title={`Huỷ ghép “${identity.label}”?`}
-          message="Máy này sẽ rời sổ chung và thành máy chưa ghép. Sổ trên máy được giữ nguyên làm sổ cục bộ, đúng như lúc huỷ ghép; máy khác sẽ không thấy thay đổi mới của máy này nữa. Muốn ghép lại vào sổ chung sau này phải sao lưu rồi xoá sổ trên máy trước, và dùng một chữ cái khác."
+          message={
+            devices && isLastActiveDevice(devices) ? `${LAST_DEVICE_WARNING} ${LEAVE_TEXT}` : LEAVE_TEXT
+          }
           confirmLabel="Huỷ ghép"
           pending={busy}
           onConfirm={() => void confirmLeave()}

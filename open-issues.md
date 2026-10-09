@@ -497,7 +497,7 @@
 
 
 ### ISSUE-034 — Máy hoạt động cuối cùng tự huỷ ghép thì sổ chung không còn máy nào mở được
-- State: deferred
+- State: in-progress (#75 — quyết định 9/10/2026: cảnh báo trong hộp xác nhận, không chặn)
 - Severity: medium
 - Raised by / Date: code-reviewer (#53) / 09/10/2026
 - Related task: #53, `src/db/sync/unpair.ts`
