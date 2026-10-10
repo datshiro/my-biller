@@ -23,6 +23,52 @@ Bán tiền mặt trả đủ thì đơn ghi đã thu hết
     Should Be Equal As Integers    ${đơn}[paidAmount]    55000
     Should Be Equal    ${đơn}[status]    paid
 
+Sheet xác nhận liệt kê đủ dòng, Sửa đơn không ghi sổ, và BÁN ĐƠN MỚI về giỏ trống
+    [Documentation]    Sheet "Xác nhận & thu tiền" là bước duy nhất tạo đơn. Sửa đơn phải quay về giỏ mà chưa
+    ...    ghi gì xuống sổ; sau khi xác nhận, phiếu có thanh BÁN ĐƠN MỚI để về màn Bán với giỏ trống.
+    ${trước}=    Đọc Bảng    orders
+    ${số_trước}=    Get Length    ${trước}
+    Mở Màn    /
+    Chọn Món    Phở bò    2
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    ${dòng}=    Get Text    ${SHEET_THU_TIỀN} >> css=ul[aria-label="Các món trong đơn"]
+    Should Contain    ${dòng}    Phở bò
+    Should Contain    ${dòng}    × 2
+    Should Contain    ${dòng}    110.000
+    Should Contain    ${dòng}    Trà đá
+    Should Contain    ${dòng}    × 1
+    Chờ Thấy Chữ    XÁC NHẬN TẠO ĐƠN · 113.000 đ
+
+    Click    ${SHEET_THU_TIỀN} >> css=button:text-is("Sửa đơn")
+    Wait For Elements State    ${SHEET_THU_TIỀN}    detached
+    Wait For Elements State    ${SHEET_ĐƠN}    visible
+    ${sau_sửa}=    Đọc Bảng    orders
+    Should Be Equal As Integers    ${{ len($sau_sửa) }}    ${số_trước}    Sửa đơn đã ghi thêm một đơn vào sổ trước khi xác nhận.
+    Wait Until Keyword Succeeds    10x    200ms    Đọc Dòng Giỏ Nháp Phải Có    2
+
+    Mở Sheet Thu Tiền
+    Chờ Thấy Chữ    XÁC NHẬN TẠO ĐƠN · 113.000 đ
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    113000    Tổng đơn trong sổ không khớp tổng trên sheet xác nhận.
+    Should Be Equal As Integers    ${đơn}[paidAmount]    113000
+    Should Be Equal    ${đơn}[status]    paid
+    ${sau}=    Đọc Bảng    orders
+    Should Be Equal As Integers    ${{ len($sau) }}    ${{ $số_trước + 1 }}    Phải có đúng một đơn mới trong sổ.
+    ${dòng_đơn}=    Đọc Bảng    orderLines
+    ${mã_đơn}=    Set Variable    ${đơn}[id]
+    ${của_đơn}=    Evaluate    sorted([(d['name'], d['qty']) for d in $dòng_đơn if d['orderId'] == $mã_đơn])
+    Should Be Equal    ${của_đơn}    ${{ [('Phở bò đặc biệt', 2), ('Trà đá', 1)] }}    Dòng đơn trong sổ không khớp các món trên sheet.
+    ${tổng_dòng}=    Evaluate    sum([d['unitPrice'] * d['qty'] for d in $dòng_đơn if d['orderId'] == $mã_đơn])
+    Should Be Equal As Integers    ${tổng_dòng}    ${đơn}[total]    Tổng các dòng không khớp tổng đơn đã ghi.
+
+    Click    css=button:text-is("BÁN ĐƠN MỚI")
+    Wait For Condition    Url    ==    ${BASE_URL}/
+    Wait For Elements State    ${NÚT_THU_TIỀN}    detached
+    Wait Until Keyword Succeeds    10x    200ms    Nháp Giỏ Phải Trống
+
 Chọn món nhiều lần thì số lượng cộng dồn và tổng tiền nhân lên
     Mở Màn    /
     Chọn Món    Trà đá    3
@@ -130,6 +176,35 @@ Giảm giá và phụ thu đổi đúng tổng cộng
     Should Be Equal As Integers    ${đơn}[discount]    5000
     Should Be Equal As Integers    ${đơn}[surcharge]    2000
     Should Be Equal As Integers    ${đơn}[total]    52000
+
+Sheet xác nhận hiện Tiền hàng, Giảm giá và Phụ thu đúng số, và sổ ghi đủ ba con số
+    [Documentation]    Đơn có cả giảm giá lẫn phụ thu: sheet xác nhận phải hiện đúng từng khoản và nút xác nhận mang
+    ...    đúng tổng. Sổ phải khớp: total = tiền hàng − giảm giá + phụ thu, đối chiếu thẳng từ IndexedDB.
+    Mở Màn    /
+    Chọn Món    Phở bò    2
+    Chọn Món    Trà đá
+    Mở Đơn
+    Bấm Nút    Giảm giá / phụ thu
+    Điền Ô    Giảm giá    5000
+    Điền Ô    Phụ thu    2000
+    Bấm Nút    ÁP DỤNG
+    Chờ Thấy Chữ    110.000 đ
+
+    Mở Sheet Thu Tiền
+    ${sheet}=    Get Text    ${SHEET_THU_TIỀN}
+    Should Contain    ${sheet}    Tiền hàng
+    Should Contain    ${sheet}    113.000 đ
+    Should Contain    ${sheet}    −5.000 đ
+    Should Contain    ${sheet}    +2.000 đ
+    Chờ Thấy Chữ    XÁC NHẬN TẠO ĐƠN · 110.000 đ
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[subtotal]    113000
+    Should Be Equal As Integers    ${đơn}[discount]    5000
+    Should Be Equal As Integers    ${đơn}[surcharge]    2000
+    Should Be Equal As Integers    ${đơn}[total]    110000    Tổng đơn không bằng tiền hàng − giảm giá + phụ thu.
+    Should Be Equal As Integers    ${đơn}[paidAmount]    110000
 
 Giảm giá lớn hơn tiền hàng thì bị chặn
     Mở Màn    /

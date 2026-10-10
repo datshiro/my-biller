@@ -3,8 +3,8 @@ Documentation    Thao tác trên màn Bán hàng — dùng lại ở suite Bán 
 Resource         app.resource
 
 *** Variables ***
-${SHEET_THU_TIỀN}       css=[role=dialog][aria-label="Thu tiền"]
-${NÚT_XONG}             css=button:has-text("XONG & XUẤT PHIẾU")
+${SHEET_THU_TIỀN}       css=[role=dialog][aria-label="Xác nhận & thu tiền"]
+${NÚT_XONG}             css=button:has-text("XÁC NHẬN TẠO ĐƠN")
 ${NÚT_CHỌN_KHÁCH_NỢ}    css=button:has-text("CHỌN KHÁCH ĐỂ GHI NỢ")
 ${KHOÁ_NHÁP_GIỎ}        my-biller:cart-draft
 ${NÚT_KHÁCH_TRÊN_ĐẦU}    css=header >> css=button:has-text("KHÁCH")

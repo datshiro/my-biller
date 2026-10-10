@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import './receipt.css'
 import { LabelSheet } from './label-sheet'
 import { ReceiptView } from './receipt-view'
@@ -28,6 +28,8 @@ const MANY_LABELS = 50
 export function ReceiptPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  /** Phiếu vừa xuất từ màn Bán, nên bước ngay trước nó trong lịch sử là màn Bán với giỏ đã trống. */
+  const fromSale = (useLocation().state as { fromSale?: boolean } | null)?.fromSale === true
   const data = useReceipt(Number(id))
   const signature = receiptSignature(data)
 
@@ -517,6 +519,14 @@ export function ReceiptPage() {
           ) : null}
         </div>
       </div>
+
+      {fromSale ? (
+        <div className="no-print border-t border-line bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <Button size="cta" onClick={() => void navigate(-1)}>
+            BÁN ĐƠN MỚI
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

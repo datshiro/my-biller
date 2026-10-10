@@ -1079,8 +1079,8 @@ Logo Máy B Phải Hội Tụ Với
 Bán Nhanh Khi Đang Ngoại Tuyến
     [Documentation]    `Bán Nhanh` mở lại màn Bán bằng URL nên không chạy được khi máy đang offline. Keyword này
     ...    đi bằng tab "Bán" ở thanh đáy rồi bán như `Bán Nhanh`. Sau khi chốt, phiếu nằm ngoài thanh đáy nên
-    ...    keyword lùi lại trang trước bằng điều hướng trong app (không tải lại trang) để lượt bán kế tiếp
-    ...    còn tab "Bán" để bấm.
+    ...    keyword lùi về màn Bán (giỏ đã trống) bằng điều hướng trong app (không tải lại trang) để lượt bán kế
+    ...    tiếp còn tab "Bán" để bấm.
     [Arguments]    ${tên_món}
     Click    css=nav a:text-is("Bán")
     Chọn Món    ${tên_món}
