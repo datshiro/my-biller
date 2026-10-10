@@ -95,12 +95,12 @@ describe('rung khi món vào giỏ ở màn Bán hàng', () => {
     expect(vibrate).not.toHaveBeenCalled()
   })
 
-  it('gõ "2 tra da" rồi Enter thì rung đúng một lần, không rung theo từng món', async () => {
+  it('gõ "2 tra da, 1 ca phe sua" rồi Enter thì rung đúng một lần, không rung theo từng dòng', async () => {
     await seedItems()
     renderSales()
 
-    await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra da{Enter}')
-    expect(await screen.findByRole('button', { name: /Xem đơn · 2 món/ })).toBeDefined()
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra da, 1 ca phe sua{Enter}')
+    expect(await screen.findByRole('button', { name: /Xem đơn · 3 món/ })).toBeDefined()
 
     expect(vibrate).toHaveBeenCalledTimes(1)
     expect(vibrate).toHaveBeenCalledWith(10)

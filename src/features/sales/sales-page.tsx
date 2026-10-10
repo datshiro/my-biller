@@ -184,7 +184,7 @@ export function SalesPage() {
 
   const menuOf = (groupId: number | null | undefined) => groups?.find((group) => group.id === groupId)
 
-  /** Mọi đường đưa món vào giỏ đều đi qua đây, để người bán cảm thấy món đã vào mà không phải nhìn xuống. */
+  /** Ba đường thêm món (chạm lưới, THÊM của sheet, Enter ở ô tìm) đều rung: người bán biết món đã vào mà không cần nhìn. */
   const onAdded = () => tapHaptic()
 
   const addItem = (item: Item) => {
