@@ -512,6 +512,26 @@ describe('device pairing', () => {
     expect(response.status).toBe(404)
   })
 
+  it('mã sổ hoặc mã máy có phần trăm mã hoá hỏng trả 404, không phải 503', async () => {
+    const { shop, device } = await pairFirst()
+    const malformedShop = await SELF.fetch('https://example.com/shop/%E0/epoch', {
+      method: 'POST',
+      headers: authorized(device.token),
+    })
+    expect(malformedShop.status).toBe(404)
+
+    const malformedDevice = await SELF.fetch(`https://example.com/shop/${shop.shopId}/devices/%E0/revoke`, {
+      method: 'POST',
+      headers: authorized(device.token),
+    })
+    expect(malformedDevice.status).toBe(404)
+
+    const stillPaired = await SELF.fetch(`https://example.com/shop/${shop.shopId}/devices`, {
+      headers: authorized(device.token),
+    })
+    expect(stillPaired.status).toBe(200)
+  })
+
   it('rate-limits public pairing attempts by the edge actor before Durable Object dispatch', async () => {
     const actor = `203.0.113.${Math.floor(Math.random() * 200) + 1}`
     let response: Response | undefined

@@ -423,7 +423,12 @@ const worker = {
       }
     } else {
       const matched = url.pathname.match(/^\/shop\/([^/]+)(\/.*)$/)
-      const shopId = matched?.[1] ? decodeURIComponent(matched[1]) : ''
+      let shopId = ''
+      try {
+        shopId = matched?.[1] ? decodeURIComponent(matched[1]) : ''
+      } catch {
+        // Mã % sai dạng: để shopId rỗng rơi vào nhánh 404 như mọi mã sổ không hợp lệ.
+      }
       const rest = matched?.[2] ?? ''
       const safeShopId = /^[0-9a-f-]{36}$/i.test(shopId)
       const allowed =

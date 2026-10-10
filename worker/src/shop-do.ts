@@ -1513,7 +1513,13 @@ export class ShopDO extends DurableObject<Env> {
 
     const revoke = url.pathname.match(/^\/devices\/([^/]+)\/revoke$/)
     if (request.method === 'POST' && revoke?.[1]) {
-      return this.revokeDevice(request, decodeURIComponent(revoke[1]))
+      let deviceId: string
+      try {
+        deviceId = decodeURIComponent(revoke[1])
+      } catch {
+        return new Response('Not found', { status: 404 })
+      }
+      return this.revokeDevice(request, deviceId)
     }
     return new Response('Not found', { status: 404 })
   }
