@@ -258,3 +258,17 @@ describe('receiptToText với tuỳ chọn và topping', () => {
     )
   })
 })
+
+describe('Mang về trên phiếu chữ', () => {
+  const text = (over: Partial<Order>) =>
+    receiptToText({ shop: DEFAULT_SHOP, order: order(over), lines, payments: [], ...khongNo(113_000) })
+
+  it('đơn Mang về có dòng MANG VỀ ngay dưới số phiếu', () => {
+    expect(text({ serviceMode: 'takeaway' })).toContain('Số: PBH-260807-001\nMANG VỀ\n')
+  })
+
+  it('đơn Tại chỗ và đơn của bản cũ (thiếu trường) không in gì', () => {
+    expect(text({ serviceMode: 'dine-in' })).not.toContain('MANG VỀ')
+    expect(text({})).not.toContain('MANG VỀ')
+  })
+})

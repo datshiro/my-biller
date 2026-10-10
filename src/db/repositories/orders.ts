@@ -39,6 +39,8 @@ export type OrderDraft = {
   surcharge: number
   soldAt: number
   note: string
+  /** Như `note` của dòng: optional để ~90 chỗ gọi không phải sửa cơ học. Thiếu thì ghi Tại chỗ. */
+  serviceMode?: NonNullable<Order['serviceMode']>
   /** Tiền khách trả ngay lúc bán. `null` = ghi nợ toàn bộ. */
   payment: Pick<Payment, 'amount' | 'method' | 'note'> | null
 }
@@ -267,6 +269,8 @@ export async function createOrder(draft: OrderDraft): Promise<{ id: number; code
         status: deriveStatus(totals.total, paidAmount),
         soldAt: draft.soldAt,
         note: draft.note,
+        // Đơn mới luôn ghi tường minh, để "không có trường" chỉ còn nghĩa là đơn của bản cũ.
+        serviceMode: draft.serviceMode ?? 'dine-in',
         createdAt: stamp,
         updatedAt: stamp,
       }),

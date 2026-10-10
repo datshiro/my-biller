@@ -250,6 +250,7 @@ export function SalesPage() {
         surcharge: cart.surcharge,
         soldAt: Date.now(),
         note: cart.note,
+        serviceMode: cart.serviceMode,
         payment,
       })
 
@@ -530,6 +531,8 @@ export function SalesPage() {
           surcharge={totals.surcharge}
           total={totals.total}
           hasCustomer={cart.customerId !== null}
+          serviceMode={cart.serviceMode}
+          onServiceModeChange={(serviceMode) => dispatch({ type: 'setServiceMode', serviceMode })}
           method={payMethod}
           given={given ? given.value : totals.total}
           givenWarning={

@@ -1,8 +1,9 @@
 import { calcChange, suggestCashAmounts } from '@/domain/cash-suggestion'
-import type { CartLine } from '@/domain/cart'
+import type { CartLine, ServiceMode } from '@/domain/cart'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import type { Payment } from '@/domain/schema'
 import { Button } from '@/ui/button'
+import { SelectChip } from '@/ui/chip'
 import { MoneyInput } from '@/ui/money-input'
 import { Sheet } from '@/ui/sheet'
 import { CartLinesSummary } from './cart-lines'
@@ -10,6 +11,11 @@ import { CartLinesSummary } from './cart-lines'
 export type PaymentChoice = Pick<Payment, 'amount' | 'method' | 'note'> | null
 
 export type PayMethod = 'cash' | 'transfer' | 'debt'
+
+const SERVICE_MODES: { value: ServiceMode; label: string }[] = [
+  { value: 'dine-in', label: 'Tại chỗ' },
+  { value: 'takeaway', label: 'Mang về' },
+]
 
 const METHODS: { value: PayMethod; label: string }[] = [
   { value: 'cash', label: 'Tiền mặt' },
@@ -32,7 +38,8 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
  *
  * `method` và `given` do màn ngoài giữ, không phải state trong đây: ghi nợ phải đi chọn khách, mà
  * lúc đó sheet này bị gỡ khỏi cây. Nếu để state ở đây thì quay lại nó về mặc định "tiền mặt, đưa đủ"
- * và đơn nợ bị ghi thành đã thu đủ.
+ * và đơn nợ bị ghi thành đã thu đủ. `serviceMode` thì nằm hẳn trong giỏ: "Sửa đơn" rồi mở lại, hay tải
+ * lại trang giữa đơn, vẫn giữ Mang về.
  */
 export function PaymentSheet({
   lines,
@@ -43,6 +50,8 @@ export function PaymentSheet({
   surcharge,
   total,
   hasCustomer,
+  serviceMode,
+  onServiceModeChange,
   method,
   given,
   givenWarning,
@@ -63,6 +72,8 @@ export function PaymentSheet({
   surcharge: number
   total: number
   hasCustomer: boolean
+  serviceMode: ServiceMode
+  onServiceModeChange: (serviceMode: ServiceMode) => void
   method: PayMethod
   given: number | null
   /** Số khách đưa đã gõ từ trước mà tổng đơn đổi sau lưng — tiền thối tính ra sẽ sai. */
@@ -125,6 +136,18 @@ export function PaymentSheet({
             <CartLinesSummary lines={lines} />
           </div>
         </section>
+
+        <div role="group" aria-label="Tại chỗ hay mang về" className="flex gap-2">
+          {SERVICE_MODES.map((option) => (
+            <SelectChip
+              key={option.value}
+              selected={serviceMode === option.value}
+              onClick={() => onServiceModeChange(option.value)}
+            >
+              {option.label}
+            </SelectChip>
+          ))}
+        </div>
 
         <div role="group" aria-label="Hình thức thanh toán" className="flex gap-2">
           {METHODS.map((option) => (

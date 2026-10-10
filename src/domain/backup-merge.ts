@@ -156,6 +156,23 @@ const mapNullable = (map: IdMap, id: number | null) => (id === null ? null : map
 type Counter = { summary: MergeSummary }
 
 /**
+ * Máy 2.19.0 không biết `serviceMode`: đơn mang về mà nó thu thêm tiền thắng bằng `updatedAt` mới hơn với
+ * hàng thiếu cờ, và ngược lại máy nâng từ 2.19.0 giữ hàng thiếu cờ trong khi file có. Cờ bất biến sau khi
+ * tạo, nên phía nào có thì giá trị đó đúng.
+ */
+function keepServiceMode(
+  rows: Row<'orders'>[],
+  local: readonly Row<'orders'>[],
+  file: readonly Row<'orders'>[],
+): Row<'orders'>[] {
+  const known = new Map([...file, ...local].flatMap((row) => (row.serviceMode ? [[row.gid, row.serviceMode] as const] : [])))
+  return rows.map((row) => {
+    const serviceMode = known.get(row.gid)
+    return row.serviceMode === undefined && serviceMode !== undefined ? { ...row, serviceMode } : row
+  })
+}
+
+/**
  * Bảng có `updatedAt`: cùng gid ⇒ bản mới hơn thắng, giữ id máy; bằng hoặc cũ hơn ⇒ giữ máy. Chỉ có
  * trong file ⇒ thêm với id mới sau id lớn nhất trên máy.
  */
@@ -363,7 +380,11 @@ function mergeLedger(
     (row) => ({ ...row, customerId: mapNullable(customers.idMap, row.customerId) }),
     counter,
   )
-  const { orders, codeChanges } = recodeCollisions(versionedOrders.rows, versionedOrders.fromFile, fallbackLetter)
+  const { orders, codeChanges } = recodeCollisions(
+    keepServiceMode(versionedOrders.rows, current.orders, incoming.orders),
+    versionedOrders.fromFile,
+    fallbackLetter,
+  )
   summary.codeChanges = codeChanges
   const orderIds = versionedOrders.idMap
 

@@ -197,3 +197,32 @@ describe('ShopSettings: logo và hình chìm trên tem', () => {
     expect(ShopSettingsSchema.safeParse({ ...cũ, labelWatermark }).success).toBe(false)
   })
 })
+
+describe('OrderSchema.serviceMode', () => {
+  const đơnCũ = {
+    gid: testGid(6),
+    code: 'PBH-261010-A001',
+    customerId: null,
+    customerName: 'Khách lẻ',
+    subtotal: 40_000,
+    discount: 0,
+    surcharge: 0,
+    total: 40_000,
+    paidAmount: 40_000,
+    status: 'paid',
+    soldAt: 1,
+    note: '',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  it('đơn thiếu trường parse ra KHÔNG có khoá, không tự điền Tại chỗ', () => {
+    // Điền mặc định lúc đọc là máy mới đẩy 'dine-in' đè lên đơn mang về mà máy 2.19.0 vừa ghi lại thiếu trường.
+    expect('serviceMode' in OrderSchema.parse(đơnCũ)).toBe(false)
+  })
+
+  it('giữ Mang về, từ chối giá trị lạ', () => {
+    expect(OrderSchema.parse({ ...đơnCũ, serviceMode: 'takeaway' }).serviceMode).toBe('takeaway')
+    expect(OrderSchema.safeParse({ ...đơnCũ, serviceMode: 'delivery' }).success).toBe(false)
+  })
+})

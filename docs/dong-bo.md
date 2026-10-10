@@ -43,6 +43,13 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   lưu khi máy 2.10.0 lưu cấu hình hình chìm thiếu khoá này. Hệ quả khi các máy chạy lẫn bản: máy 2.10.0 không đưa
   được logo bên phải về giữa (bấm "Giữa tem" ở đó vẫn giữ `right`) — đổi vị trí từ máy đã cập nhật.
   `getShop()` trộn mặc định từng trường của `labelWatermark` vì dòng IndexedDB do 2.10.0 ghi không qua schema mới.
+- `orders.serviceMode` (`dine-in`/`takeaway`, Tại chỗ / Mang về của cả đơn) **không có `.default`** và không có
+  đường đọc nào điền mặc định: thiếu trường nghĩa là đơn do bản chưa có trường này tạo, phiếu và tem không in gì. Máy mới
+  luôn ghi tường minh lúc tạo đơn. Cờ **bất biến sau khi tạo**: Worker dựng `put` của đơn từ bản đã lưu và không
+  nhận trường này, nên máy bản cũ thu tiền, huỷ hay sửa ghi chú (đẩy hàng thiếu trường) không làm mất cờ, và cũng
+  không có đường nào đổi được nó. Gộp sao lưu giữ cờ của phía nào có, vì file của máy cũ thiếu trường. Worker phải
+  lên TRƯỚC Pages/APK: Worker cũ cắt trường ở `create` vĩnh viễn, và applier đặt lại nguyên hàng từ event phát
+  lại nên chính máy vừa tạo đơn cũng mất cờ. Không rollback Worker về bản chưa biết trường.
 - Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
   đang mở, và ngay sau khi tự huỷ ghép hoặc chuyển thành máy chưa ghép. Nhịp báo chỉ gồm mã cài đặt, tên quán, phiên
   bản, nền tảng, số đơn, số khách và tổng nợ; **không** có đơn, khách hay tên khách. Máy đã ghép không gửi nhịp báo.

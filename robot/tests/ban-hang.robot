@@ -206,6 +206,54 @@ Sheet xác nhận hiện Tiền hàng, Giảm giá và Phụ thu đúng số, v�
     Should Be Equal As Integers    ${đơn}[total]    110000    Tổng đơn không bằng tiền hàng − giảm giá + phụ thu.
     Should Be Equal As Integers    ${đơn}[paidAmount]    110000
 
+Sheet xác nhận mặc định Tại chỗ; chốt Mang về thì sổ ghi takeaway, đơn sau quay về Tại chỗ
+    [Documentation]    Công tắc Tại chỗ / Mang về nằm trên sheet xác nhận và áp cho cả đơn. Đối chiếu cờ và tiền
+    ...    bằng `Đọc Bảng`: giao diện chọn Mang về mà sổ ghi Tại chỗ thì phiếu và tem in sai mà không ai thấy.
+    Mở Màn    /
+    Chọn Món    Phở bò    2
+    Mở Sheet Thu Tiền
+    Get Attribute    ${CHIP_TẠI_CHỖ}    aria-pressed    ==    true
+    Get Attribute    ${CHIP_MANG_VỀ}    aria-pressed    ==    false
+    Click    ${CHIP_MANG_VỀ}
+    Get Attribute    ${CHIP_MANG_VỀ}    aria-pressed    ==    true
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[serviceMode]    takeaway    Chọn Mang về mà sổ không ghi takeaway.
+    Should Be Equal As Integers    ${đơn}[total]    110000    Đổi Mang về không được đụng tới tiền.
+    Should Be Equal As Integers    ${đơn}[paidAmount]    110000
+
+    Click    css=button:text-is("BÁN ĐƠN MỚI")
+    Chọn Món    Trà đá
+    Mở Sheet Thu Tiền
+    Get Attribute    ${CHIP_TẠI_CHỖ}    aria-pressed    ==    true
+    Chốt Đơn
+    ${đơn_sau}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn_sau}[serviceMode]    dine-in    Đơn sau phải về Tại chỗ, không dính Mang về của đơn trước.
+
+Bật Mang về rồi tải lại trang hay bấm Sửa đơn thì đơn vẫn Mang về
+    [Documentation]    Cờ nằm trong giỏ và nháp giỏ, không phải state của sheet: tải lại trang giữa đơn hay quay về
+    ...    giỏ bằng "Sửa đơn" rồi mở lại đều phải giữ Mang về, và đơn chốt sau đó ghi takeaway.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Click    ${CHIP_MANG_VỀ}
+    Wait Until Keyword Succeeds    10x    200ms    Nháp Giỏ Phải Là Mang Về
+    Reload
+    Chờ Thấy Chữ    Đã khôi phục đơn đang lên dở
+    Mở Sheet Thu Tiền
+    Get Attribute    ${CHIP_MANG_VỀ}    aria-pressed    ==    true
+
+    Click    ${SHEET_THU_TIỀN} >> css=button:text-is("Sửa đơn")
+    Wait For Elements State    ${SHEET_ĐƠN}    visible
+    Mở Sheet Thu Tiền
+    Get Attribute    ${CHIP_MANG_VỀ}    aria-pressed    ==    true
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[serviceMode]    takeaway
+    Should Be Equal As Integers    ${đơn}[total]    55000
+
 Giảm giá lớn hơn tiền hàng thì bị chặn
     Mở Màn    /
     Chọn Món    Trà đá
@@ -1252,6 +1300,11 @@ Nâng Version Sổ Trên Máy
     ...            request.onerror = () => reject(request.error)
     ...        })
     ...    }
+
+Nháp Giỏ Phải Là Mang Về
+    ${nháp}=    LocalStorage Get Item    ${KHOÁ_NHÁP_GIỎ}
+    ${giỏ}=    Evaluate    json.loads($nháp)    modules=json
+    Should Be Equal    ${giỏ}[serviceMode]    takeaway    Nháp giỏ chưa ghi Mang về.
 
 Đọc Dòng Giỏ Nháp Phải Có
     [Documentation]    Tên và số lượng từng dòng trong nháp giỏ ở localStorage. Nháp ghi trễ khoảng 300 ms sau mỗi

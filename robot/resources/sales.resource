@@ -6,6 +6,8 @@ Resource         app.resource
 ${SHEET_THU_TIỀN}       css=[role=dialog][aria-label="Xác nhận & thu tiền"]
 ${NÚT_XONG}             css=button:has-text("XÁC NHẬN TẠO ĐƠN")
 ${NÚT_CHỌN_KHÁCH_NỢ}    css=button:has-text("CHỌN KHÁCH ĐỂ GHI NỢ")
+${CHIP_TẠI_CHỖ}         css=[role=group][aria-label="Tại chỗ hay mang về"] >> css=button:text-is("Tại chỗ")
+${CHIP_MANG_VỀ}         css=[role=group][aria-label="Tại chỗ hay mang về"] >> css=button:text-is("Mang về")
 ${KHOÁ_NHÁP_GIỎ}        my-biller:cart-draft
 ${NÚT_KHÁCH_TRÊN_ĐẦU}    css=header >> css=button:has-text("KHÁCH")
 # Dòng đơn nằm trong sheet mở từ thanh tổng ở đáy màn Bán; lớp phủ của sheet chặn chạm vào lưới phía sau.

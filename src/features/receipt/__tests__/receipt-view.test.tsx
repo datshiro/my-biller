@@ -77,3 +77,35 @@ describe('ReceiptView với tuỳ chọn và topping', () => {
     expect(row.textContent).not.toContain('+ ')
   })
 })
+
+describe('ReceiptView: Mang về', () => {
+  const view = (over: Partial<Order>, page = 1, pageCount = 1) =>
+    render(
+      <ReceiptView
+        shop={DEFAULT_SHOP}
+        order={{ ...order, ...over }}
+        lines={[line()]}
+        payments={[]}
+        priorDebt={0}
+        totalDue={0}
+        debtAsOf={null}
+        page={page}
+        pageCount={pageCount}
+      />,
+    ).container.textContent ?? ''
+
+  it('in MANG VỀ dưới số phiếu, trên MỌI trang của phiếu nhiều tấm', () => {
+    const first = view({ serviceMode: 'takeaway' }, 1, 2)
+    cleanup()
+    const last = view({ serviceMode: 'takeaway' }, 2, 2)
+
+    expect(first.indexOf('Số: PBH-260926-A001')).toBeLessThan(first.indexOf('MANG VỀ'))
+    expect(last).toContain('MANG VỀ')
+  })
+
+  it('đơn Tại chỗ và đơn thiếu trường không in', () => {
+    expect(view({ serviceMode: 'dine-in' })).not.toContain('MANG VỀ')
+    cleanup()
+    expect(view({})).not.toContain('MANG VỀ')
+  })
+})

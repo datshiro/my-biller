@@ -37,6 +37,15 @@ beforeEach(async () => {
 })
 
 describe('createOrder', () => {
+  it('ghi Tại chỗ / Mang về tường minh lên đơn mới', async () => {
+    const { id: mangVe } = await createOrder(draft({ serviceMode: 'takeaway' }))
+    const { id: khongNoi } = await createOrder(draft())
+
+    expect((await db.orders.get(mangVe))?.serviceMode).toBe('takeaway')
+    // Draft không nói gì vẫn ghi 'dine-in': "thiếu trường" phải chỉ còn nghĩa là đơn của bản cũ.
+    expect((await db.orders.get(khongNoi))?.serviceMode).toBe('dine-in')
+  })
+
   it('ghi đơn + dòng hàng + phiếu thu, tính đúng tổng và trạng thái', async () => {
     const { id, code } = await createOrder(draft({ payment: { amount: 110_000, method: 'cash', note: '' } }))
 

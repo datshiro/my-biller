@@ -322,6 +322,26 @@ describe('khôi phục nháp', () => {
   })
 })
 
+describe('Tại chỗ / Mang về', () => {
+  it('giỏ mới là Tại chỗ; đổi sang Mang về giữ nguyên các dòng; xoá giỏ về lại Tại chỗ', () => {
+    const mangVe = run([
+      { type: 'addItem', item: item(), book: RONG },
+      { type: 'setServiceMode', serviceMode: 'takeaway' },
+    ])
+
+    expect(emptyCart().serviceMode).toBe('dine-in')
+    expect(mangVe.serviceMode).toBe('takeaway')
+    expect(mangVe.lines).toHaveLength(1)
+    expect(cartReducer(mangVe, { type: 'clear' }).serviceMode).toBe('dine-in')
+  })
+
+  it('khôi phục nháp giữ Mang về', () => {
+    const gio = run([{ type: 'restore', cart: { ...emptyCart(), serviceMode: 'takeaway' } }])
+
+    expect(gio.serviceMode).toBe('takeaway')
+  })
+})
+
 describe('hoàn lại dòng vừa gỡ', () => {
   const SI = (giá: number): PriceBook => new Map([[1, giá]])
 

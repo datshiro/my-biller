@@ -886,6 +886,59 @@ APK: máy chưa ghép mở app không gọi Worker remote nào
     ${sau}=    Số Lần Gọi Worker Remote
     Should Be Equal As Integers    ${sau}    1    Shim không ghi lại fetch tới *.workers.dev.
 
+Đơn Mang về in MANG VỀ trên phiếu và phiếu chữ; đơn Tại chỗ không in
+    [Documentation]    MANG VỀ đứng ngay dưới số phiếu ở cả bản in lẫn bản chữ dán Zalo. Bản chữ đi qua nút
+    ...    "Chép nội dung", chỉ hiện khi máy không chia sẻ được file ảnh, nên ca giả `canShare` trả false và
+    ...    bắt chữ chép ra thay vì đọc clipboard thật. Cờ đối chiếu với sổ bằng `Đọc Bảng`.
+    Bán Một Đơn Và Bắt Phiếu Chữ    Phở bò    ${True}
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[serviceMode]    takeaway
+    ${phiếu}=    Get Text    css=.receipt-view
+    Should Contain    ${phiếu}    MANG VỀ
+    ${chữ}=    Chép Phiếu Chữ
+    Should Contain    ${chữ}    Số: ${đơn}[code]\nMANG VỀ\n    Phiếu chữ thiếu MANG VỀ ngay dưới số phiếu.
+
+    Bán Một Đơn Và Bắt Phiếu Chữ    Trà đá    ${False}
+    ${đơn_tại_chỗ}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn_tại_chỗ}[serviceMode]    dine-in
+    ${phiếu}=    Get Text    css=.receipt-view
+    Should Not Contain    ${phiếu}    MANG VỀ
+    ${chữ}=    Chép Phiếu Chữ
+    Should Contain    ${chữ}    Số: ${đơn_tại_chỗ}[code]
+    Should Not Contain    ${chữ}    MANG VỀ
+
+In tem: đơn Mang về có MANG VỀ trên mọi tem, kể cả tem tiếp của ghi chú dài, và số tem bằng đơn Tại chỗ
+    [Documentation]    MANG VỀ chung hàng tên quán ở đầu tem, không thêm hàng nào, nên thân tem giữ nguyên chỗ và
+    ...    ly ghi chú dài chia ra đúng bằng số tờ của cùng đơn đó khi bán Tại chỗ. Đo trên Chrome thật vì chia
+    ...    trang dựa vào chiều cao chữ thật; không assert số tờ cố định, chỉ so hai đơn với nhau.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /them/cai-dat
+    Điền Ô    Địa chỉ IP máy in tem    192.168.1.60
+    Bấm Nút    LƯU MÁY IN TEM
+    Chờ Thấy Chữ    Đã lưu 192.168.1.60:9100 · tem 50×30 mm
+    ${câu}=    Set Variable    không lấy ống hút, để đá riêng ra túi nylon, gói kỹ giúp em nhé
+    ${ghi_chú}=    Evaluate    ' '.join([$câu] * 6)
+
+    Bán Hai Ly Có Ghi Chú Dài    ${ghi_chú}    ${True}
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[serviceMode]    takeaway
+    Get Element Count    css=[data-label]    >=    3
+    ${tem_mang_về}=    Đọc Chữ Các Tem
+    FOR    ${t}    IN    @{tem_mang_về}
+        Should Contain    ${t}    MANG VỀ    Có tem của đơn Mang về thiếu chữ MANG VỀ.
+    END
+    Click    css=button[data-label-print]
+    Chờ Hộp Xác Nhận    In 2 tem cho đơn ${đơn}[code]?
+    Bỏ Qua Hộp Xác Nhận
+
+    Bán Hai Ly Có Ghi Chú Dài    ${ghi_chú}    ${False}
+    Get Element Count    css=[data-label]    >=    3
+    ${tem_tại_chỗ}=    Đọc Chữ Các Tem
+    FOR    ${t}    IN    @{tem_tại_chỗ}
+        Should Not Contain    ${t}    MANG VỀ
+    END
+    Length Should Be    ${tem_mang_về}    ${{ len($tem_tại_chỗ) }}    MANG VỀ làm đổi số tờ tem của cùng một đơn.
+
 *** Keywords ***
 Chờ Tem Xem Trước Dựng Xong
     [Documentation]    Canvas tem xem trước dựng lại sau mỗi lần đổi cấu hình (có trễ ngắn để khỏi dựng theo từng phím
@@ -1023,3 +1076,43 @@ Heartbeat Local Đã Được Thử
 Số Lần Gọi Worker Remote
     ${số}=    Evaluate JavaScript    ${None}    () => JSON.parse(sessionStorage.getItem('__remoteCalls') || '[]').length
     RETURN    ${số}
+
+Bán Một Đơn Và Bắt Phiếu Chữ
+    [Documentation]    Giả máy không chia sẻ được file ảnh (để hiện nút "Chép nội dung") và bắt chữ chép ra vào
+    ...    `window.__phiếuChữ`. Phải làm SAU khi trang nạp: `Chốt Đơn` sang phiếu bằng điều hướng trong app nên
+    ...    hai chỗ giả còn sống tới màn phiếu.
+    [Arguments]    ${tên_món}    ${mang_về}
+    Mở Màn    /
+    Evaluate JavaScript    ${None}
+    ...    () => {
+    ...        Object.defineProperty(navigator, 'canShare', { value: () => false, configurable: true })
+    ...        Object.defineProperty(navigator.clipboard, 'writeText', {
+    ...            value: async (text) => { window.__phiếuChữ = text }, configurable: true })
+    ...    }
+    Chọn Món    ${tên_món}
+    Mở Sheet Thu Tiền
+    IF    ${mang_về}    Click    ${CHIP_MANG_VỀ}
+    Chốt Đơn
+
+Chép Phiếu Chữ
+    Click    css=button:has-text("Chép nội dung")
+    Chờ Thấy Chữ    Đã chép nội dung phiếu
+    ${chữ}=    Evaluate JavaScript    ${None}    () => window.__phiếuChữ
+    RETURN    ${chữ}
+
+Bán Hai Ly Có Ghi Chú Dài
+    [Arguments]    ${ghi_chú}    ${mang_về}
+    Mở Màn    /
+    Chọn Món    Trà đá
+    Chọn Món    Cà phê sữa
+    Sửa Dòng    Cà phê sữa
+    Điền Ô    Ghi chú    ${ghi_chú}
+    Bấm Nút    XONG
+    Mở Sheet Thu Tiền
+    IF    ${mang_về}    Click    ${CHIP_MANG_VỀ}
+    Chốt Đơn
+
+Đọc Chữ Các Tem
+    ${tem}=    Evaluate JavaScript    ${None}
+    ...    () => [...document.querySelectorAll('[data-label]')].map((n) => n.textContent)
+    RETURN    ${tem}
