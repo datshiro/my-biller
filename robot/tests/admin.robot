@@ -9,6 +9,7 @@ Library             String
 Suite Setup         Mở Trình Duyệt Cho Suite
 Suite Teardown      Đóng Trình Duyệt Cuối Suite
 Test Teardown       Đóng Hai Máy
+Test Tags           shard-a
 
 *** Variables ***
 ${Ô_MẬT_KHẨU_XEM}       xpath=//label[normalize-space()="Mật khẩu xem"]/following::input[1]
