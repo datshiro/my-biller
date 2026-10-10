@@ -1163,6 +1163,23 @@ APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu t
     Length Should Be    ${dòng_thu}    1    Sổ phải có đúng một dòng thu cho đơn vừa bán, không được ghi hai lần.
     Should Be Equal As Integers    ${dòng_thu}[0][amount]    ${đơn}[total]    Số tiền trong dòng thu không khớp tổng đơn.
 
+Mỗi lần món vào giỏ thì máy rung đúng một lần 10 ms, kể cả khi thêm bằng Enter
+    [Documentation]    Chrome desktop không rung, nên ca gắn một hàm đếm lên `navigator.vibrate` trong trang rồi đọc
+    ...    lại. Gắn phải làm SAU `Mở Màn`, vì đi bằng URL là nạp lại trang và xoá hàm đếm.
+    Mở Màn    /
+    Evaluate JavaScript    ${None}
+    ...    () => { window.__rung = []; navigator.vibrate = (ms) => { window.__rung.push(ms); return true } }
+    Chọn Món    Trà đá
+    Chờ Thấy Chữ    Xem đơn · 1 món
+    ${sau_chạm}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${sau_chạm}    ${{[10]}}    Chạm món không có thực đơn phải rung đúng một lần 10 ms.
+
+    Gõ Vào Ô Tìm Món    2 tra da
+    Keyboard Key    press    Enter
+    Chờ Thấy Chữ    Xem đơn · 3 món
+    ${sau_enter}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${sau_enter}    ${{[10, 10]}}    Gõ "2 tra da" rồi Enter là một lần vào giỏ, phải thêm đúng một lần rung.
+
 
 *** Keywords ***
 Nâng Version Sổ Trên Máy
