@@ -1,5 +1,70 @@
 # Ghi chú phát hành
 
+## 2.19.0 — khu /admin chỉ đọc, nhịp báo máy chưa ghép, APK ghép được sổ chung (#49) (10/10/2026)
+
+> **Đổi Worker**: thêm route, thêm D1 `ADMIN_DB`, secret `ADMIN_VIEW_SECRET` và rate limiter `HEARTBEAT_RATE_LIMITER`.
+> Route cũ giữ nguyên; `/pair` nhận thêm `installId` tuỳ chọn, response không đổi. Không đổi schema IndexedDB, định dạng
+> file sao lưu hay hợp đồng đồng bộ; Durable Object chỉ thêm chỉ mục `ledger_seq`, tự tạo ở request đầu của mỗi sổ.
+> Thứ tự: D1 và secret, Worker, Pages, rồi điền bù chỉ mục
+> (xem [`deploy.md`](./deploy.md#khu-admin-d1-và-điền-bù-chỉ-mục)).
+> APK dựng lại với versionCode 16 để cài đè; không thêm plugin native.
+
+### Người bán thấy gì
+
+- **Cài đặt › Máy bán hàng** hiện mã rút gọn để đối chiếu với admin:
+  - máy đã ghép: `Tên máy · Sổ: xxxx…yyy · Máy A`;
+  - máy chưa ghép: `Tên máy · chữ A · Mã máy: xxxx…yyy · chưa ghép`.
+- **APK ghép được vào sổ chung.** Các APK trước coi WebView là máy dev và trỏ đồng bộ về `127.0.0.1`, nên chưa từng ghép
+  được. Từ 2.19.0, APK dùng Worker thật và kéo sổ như bản web. Đã kiểm trên S25 với staging: hai máy khớp sổ chung.
+- Không có nút hay màn mới nào khác cho người bán. Nhịp báo chạy ngầm.
+
+### Khu `/admin` (chủ app)
+
+- **Chỉ trên web, chỉ đọc.** `/admin` cần `ADMIN_VIEW_SECRET`, dài ít nhất 32 ký tự và khác `ADMIN_SECRET`; thiếu, ngắn
+  hay trùng thì Worker luôn trả 401. Secret chỉ giữ trong bộ nhớ của tab, app không lưu.
+- Mỗi sổ hiện tên quán, số đơn, số khách, doanh thu, còn nợ và các máy của sổ: đã áp tới thay đổi nào, báo lúc nào,
+  tụt bao nhiêu. Bấm vào một sổ để xem đơn, phiếu thu và khách theo trang (`Tải thêm`).
+- **Máy chưa ghép** (`/admin/may-chua-ghep`): các dòng nhịp báo trong 30 ngày, tổng và số máy mới trong 24 giờ; máy ghép
+  sau đó chuyển sang nhóm "Đã ghép sau đó".
+- Khoá khu admin ngay bằng cách xoá `ADMIN_VIEW_SECRET` khỏi Worker.
+
+### Nhịp báo từ máy chưa ghép
+
+- Máy chưa ghép gửi `POST /heartbeat` khi mở app (nếu lần trước đã quá 15 phút), mỗi 6 giờ khi app đang mở, và ngay
+  sau khi huỷ ghép. Máy đã ghép không gửi.
+- **Chỉ gồm** mã cài đặt, tên quán, phiên bản, nền tảng, số đơn, số khách và tổng nợ. Không có đơn, khách hay tên
+  khách. Ranh giới đầy đủ ở [`dong-bo.md`](./dong-bo.md#ranh-giới-dữ-liệu).
+- Mã cài đặt nằm trong `deviceState`, sống qua ghép, huỷ ghép và xoá sổ, không vào file sao lưu.
+
+### D1 và điền bù chỉ mục
+
+- Mỗi môi trường một database D1 (`my-biller-admin`, `My-biller-admin-staging`), giữ chỉ mục sổ và các dòng nhịp báo.
+  Bảng tự tạo ở request đầu, không cần migration. Ghi D1 chạy sau khi Worker đã trả lời, nên D1 lỗi hay cạn hạn mức chỉ
+  làm hỏng nhịp báo và chỉ mục, không chạm đồng bộ hay tiền.
+- Sổ tự vào chỉ mục khi tạo và khi một máy của sổ nhận lượt đồng bộ mới (`/epoch`, lúc mở app hay tab tiếp quản).
+  Sổ có từ trước chỉ hiện ở `/admin` sau khi chạy `worker/scripts/admin-backfill.mjs` một lần. Trên staging:
+  `listed 645 / registered 613 / alreadyIndexed 32 / skipped 0`, và `/admin` hiện đủ 645 sổ.
+
+### Giới hạn đã biết
+
+- **Preflight CORS.** Mỗi request đồng bộ từ app có thể kèm một request `OPTIONS`; đo trên S25, tỉ lệ `OPTIONS` trên
+  request đồng bộ là 0,4 đến 0,67. Preflight chỉ tốn hạn mức request của Worker, không tốn Durable Object, và đã có
+  từ trước 2.19.0. Tính cả preflight, gói Free chịu được khoảng **7 máy** cho một sổ dùng cả ngày (Worker 100.000
+  request mỗi ngày); riêng Durable Object chịu khoảng 10.
+- **Nhịp báo không được xác thực**: ai cũng gửi được, có thể giả mạo, nên chỉ để quan sát. Worker giới hạn 6 lần một
+  phút mỗi IP và xoá dòng quá 30 ngày.
+- App chưa nói với người bán về nhịp báo và chưa có nút tắt; ghi chú chỉ nằm trong tài liệu (ISSUE-038).
+- Số liệu ở `/admin` là ước lượng ở vài chỗ: máy ghép từ `/pair` mà chưa từng gửi nhịp báo hiện nền tảng `browser` với
+  số đếm 0; mốc "kéo lại từ đầu" chỉ là lần gần nhất Durable Object còn nhớ.
+- Mỗi lần mở một sổ, admin đọc mọi đơn, phiếu thu và khách của sổ đó. Trên staging, cả ngày (điền bù 645 sổ, Robot,
+  một phiên admin lật hết 645 sổ, các lượt thử S25) tốn 64.000 hàng đọc Durable Object, dưới ngưỡng dừng 250.000 cho
+  một phiên.
+- Trình quản lý mật khẩu vẫn có thể đề nghị lưu ô secret; đừng đồng ý trên máy dùng chung.
+- Máy nào từng hiện "đã ghép sổ chung" trên APK cũ thì thực ra chưa ghép được: thu hồi từ máy khác rồi ghép lại bằng
+  APK 2.19.0 (ISSUE-037).
+- Đường `/shop/{id}/…` có mã `%` sai dạng trả 503 thay vì 404; lỗi có sẵn trước 2.19.0, theo dõi ở #80. Đường
+  `/admin/shops/…` đã trả 404.
+
 ## 2.18.0 — cảnh báo khi máy cuối cùng của quán tự huỷ ghép (#75) (9/10/2026)
 
 > **Không đổi Worker**: không đổi mã Worker, schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay
