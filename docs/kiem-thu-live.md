@@ -67,9 +67,11 @@ Vite, Worker và cổng riêng, bên trong vẫn một tiến trình `robot`:
 
 | Shard | Chạy gì |
 | --- | --- |
-| `hai-may-a` | Ca trong `hai-may.robot` có thẻ `shard-a` |
-| `hai-may-b` | Ca trong `hai-may.robot` **không** có thẻ `shard-a` — ca mới quên gắn thẻ vẫn chạy ở đây |
-| `con-lai` | Mọi `robot/tests/*.robot` khác (suite mới tự vào), rồi `npm run test:live:recovery` |
+| `hai-may-a` | Ca có thẻ `hai-may` (Test Tags của `hai-may.robot`) và thẻ `shard-a` |
+| `hai-may-b` | Ca có thẻ `hai-may` nhưng **không** có `shard-a` — ca mới quên gắn thẻ vẫn chạy ở đây |
+| `con-lai` | Mọi ca còn lại trong `robot/tests` (suite mới tự vào), rồi `npm run test:live:recovery` |
+
+Cả ba đều chạy cả thư mục `robot/tests` và chỉ lọc theo thẻ, nên mọi ca rơi vào đúng một shard.
 
 Job `Robot live` đứng sau ba shard: đỏ khi bất kỳ shard nào đỏ hoặc bị huỷ, rồi chạy
 [`robot/kiem-du-ca.py`](../robot/kiem-du-ca.py) đối chiếu `output-*.xml` của các shard với mọi ca trong
@@ -78,7 +80,8 @@ hai nửa hai-may (mỗi ca dựng quán ghép mới trong `Test Setup`, nên th
 hơn nửa kia quá 20% thì chuyển thẻ theo thời gian từng ca trong artifact `robot-output-*`. Cục bộ
 `npm run test:live` vẫn chạy cả bộ như cũ.
 
-Khi cùng một pull request hoặc ref có lượt mới, lượt cũ đang chạy bị huỷ. Nếu một shard thất bại,
+Khi cùng một pull request có lượt mới, lượt cũ đang chạy bị huỷ. Run push lên `main` nhóm theo SHA nên
+không huỷ hay chờ nhau, để tag phát hành luôn tìm được run thành công trên đúng commit. Nếu một shard thất bại,
 workflow tải `robot/results/` của shard đó lên artifact `robot-live-results-<shard>` và giữ 7 ngày. Branch protection của
 `main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
 merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.

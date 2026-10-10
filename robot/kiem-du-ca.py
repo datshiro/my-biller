@@ -12,11 +12,13 @@ from pathlib import Path
 
 from robot.api import ExecutionResult, TestSuiteBuilder
 
-THƯ_MỤC_CA = ("robot/tests", "robot/recovery")
+THƯ_MỤC_ROBOT = Path(__file__).resolve().parent
+THƯ_MỤC_CA = (THƯ_MỤC_ROBOT / "tests", THƯ_MỤC_ROBOT / "recovery")
 
 
 def khoá(test):
-    return Path(test.source).name, test.name
+    nguồn = Path(test.source)
+    return f"{nguồn.parent.name}/{nguồn.name}", test.name
 
 
 def main(outputs):
