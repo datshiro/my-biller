@@ -30,6 +30,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Chặn database_id giữ chỗ của D1
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if grep -q '00000000-0000-0000-0000-000000000000' worker/wrangler.toml; then
+            echo "worker/wrangler.toml còn database_id giữ chỗ của D1." >&2
+            exit 1
+          fi
+
       - name: ESLint
         run: npm run lint
 

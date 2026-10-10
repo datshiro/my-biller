@@ -6,6 +6,8 @@
 // - App (phím Back): `window.__bamBack()` bấm Back cho mọi listener `backButton` đang đăng ký và trả số
 //   listener đã gọi (0 khi handler đang tắt, như plugin thật). `window.__backHandlerEnabled` là cờ handler mặc định của plugin, còn `window.__appMinimized`
 //   đếm lần app bị thu xuống nền — đúng việc Android làm khi Back ở tab gốc.
+// - fetch: mọi URL `*.workers.dev` bị chặn và ghi vào `sessionStorage['__remoteCalls']` (mảng JSON, sống qua nạp
+//   lại trang); lần thử heartbeat tới Worker local đặt `sessionStorage['__localHeartbeatSeen'] = '1'`.
 async function giaLapApk(context) {
   await context.addInitScript(() => {
     window.__printJobs = []
@@ -21,6 +23,19 @@ async function giaLapApk(context) {
       const listeners = [...window.__backListeners.values()]
       for (const listener of listeners) listener({ canGoBack: window.history.length > 1 })
       return listeners.length
+    }
+    if (sessionStorage.getItem('__remoteCalls') === null) sessionStorage.setItem('__remoteCalls', '[]')
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (new URL(url, window.location.href).hostname.endsWith('.workers.dev')) {
+        const calls = JSON.parse(sessionStorage.getItem('__remoteCalls') || '[]')
+        calls.push(url)
+        sessionStorage.setItem('__remoteCalls', JSON.stringify(calls))
+        return Promise.reject(new TypeError('blocked'))
+      }
+      if (url === 'http://127.0.0.1:8787/heartbeat') sessionStorage.setItem('__localHeartbeatSeen', '1')
+      return originalFetch(input, init)
     }
     window.androidBridge = { postMessage() {} }
     window.Capacitor = {

@@ -86,6 +86,7 @@ elif [[ "${REMOTE_MODE}" == "0" ]]; then
   WORKER_PORT=8787
   WORKER_URL="http://127.0.0.1:${WORKER_PORT}"
   WORKER_ADMIN_SECRET="robot-admin-secret"
+  WORKER_ADMIN_VIEW_SECRET="robot-admin-view-secret-0123456789abcdef"
 else
   echo "ROBOT_REMOTE chỉ nhận 0 hoặc 1." >&2
   exit 1
@@ -190,7 +191,8 @@ else
   echo "→ Dựng Worker ở ${WORKER_URL}"
   WRANGLER_LOG_PATH="${repo_root}/robot/results/wrangler-debug.log" \
     ./node_modules/.bin/wrangler dev --config worker/wrangler.toml \
-    --ip 127.0.0.1 --port "${WORKER_PORT}" --var ADMIN_SECRET:"${WORKER_ADMIN_SECRET}" \
+    --env robot --ip 127.0.0.1 --port "${WORKER_PORT}" --var ADMIN_SECRET:"${WORKER_ADMIN_SECRET}" \
+    --var ADMIN_VIEW_SECRET:"${WORKER_ADMIN_VIEW_SECRET}" \
     --persist-to robot/results/wrangler-state >robot/results/wrangler.log 2>&1 &
   worker_pid=$!
   for _ in {1..60}; do
@@ -301,6 +303,7 @@ fi
 # Không `exec`: `exec` thay luôn tiến trình shell nên cái trap ở trên không bao giờ chạy và dev
 # server bị bỏ lại giữ cổng.
 export ROBOT_WORKER_ADMIN_SECRET="${WORKER_ADMIN_SECRET}"
+export ROBOT_WORKER_ADMIN_VIEW_SECRET="${WORKER_ADMIN_VIEW_SECRET:-}"
 "${VENV}/bin/robot" \
   --outputdir robot/results \
   --variable "BASE_URL:${BASE_URL}" \

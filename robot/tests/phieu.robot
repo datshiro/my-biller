@@ -838,6 +838,24 @@ APK: Back từ phiếu về chi tiết đơn rồi về danh sách
     ${thu_app}=    Số Lần Thu App
     Should Be Equal As Integers    ${thu_app}    0    Back từ phiếu thu app thay vì lùi về chi tiết đơn.
 
+APK: máy chưa ghép mở app không gọi Worker remote nào
+    [Documentation]    Bản Vite dev với shim APK giả chỉ được gọi Worker local: cờ native chỉ trỏ Worker remote ở bản
+    ...    dựng, nên Robot và CI không bao giờ chạm Worker production. Shim chặn và ghi mọi `fetch` tới `*.workers.dev`.
+    ...    Đối chứng dương: heartbeat lúc mở app đã được thử tới Worker local, nên danh sách rỗng không phải vì
+    ...    app chưa gọi gì. Đối chứng âm: một `fetch` cố ý tới `*.workers.dev` bị chặn và được ghi lại.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Skip If    '%{ROBOT_REMOTE=0}' == '1'    Ở remote, bundle staging cố ý gọi Worker staging.
+    Wait Until Keyword Succeeds    15x    1s    Heartbeat Local Đã Được Thử
+
+    ${trước}=    Số Lần Gọi Worker Remote
+    Should Be Equal As Integers    ${trước}    0    App trong shim APK đã gọi Worker remote.
+
+    ${kết_quả}=    Evaluate JavaScript    ${None}
+    ...    () => fetch('https://kiem-chan.workers.dev/x').then(() => 'qua', () => 'chan')
+    Should Be Equal    ${kết_quả}    chan    Shim không chặn fetch tới *.workers.dev.
+    ${sau}=    Số Lần Gọi Worker Remote
+    Should Be Equal As Integers    ${sau}    1    Shim không ghi lại fetch tới *.workers.dev.
+
 *** Keywords ***
 Chờ Tem Xem Trước Dựng Xong
     [Documentation]    Canvas tem xem trước dựng lại sau mỗi lần đổi cấu hình (có trễ ngắn để khỏi dựng theo từng phím
@@ -967,3 +985,11 @@ Trả Media Về Mặc Định
     ...    `media=null` mới tắt emulation. Đặt ở Teardown để ca chết giữa chừng cũng không bỏ lại
     ...    page ở media print.
     Emulate Media    media=null
+
+Heartbeat Local Đã Được Thử
+    ${đã_thử}=    Evaluate JavaScript    ${None}    () => sessionStorage.getItem('__localHeartbeatSeen') === '1'
+    Should Be True    ${đã_thử}    Heartbeat lúc mở app chưa được thử tới Worker local.
+
+Số Lần Gọi Worker Remote
+    ${số}=    Evaluate JavaScript    ${None}    () => JSON.parse(sessionStorage.getItem('__remoteCalls') || '[]').length
+    RETURN    ${số}

@@ -3,6 +3,7 @@ import { newGid } from '@/domain/gid'
 import {
   DeviceConnectionSchema,
   DeviceIdentitySchema,
+  DeviceInstallSchema,
   DeviceNoticeSchema,
   DevicePairingLockSchema,
   DeviceWriteBlockSchema,
@@ -66,6 +67,21 @@ export function getDeviceIdentity(): Promise<DeviceIdentity | undefined> {
 
 export function getDeviceConnection(): Promise<DeviceConnection | undefined> {
   return db.deviceState.get('connection') as Promise<DeviceConnection | undefined>
+}
+
+export async function getInstallId(): Promise<string | undefined> {
+  const install = await db.deviceState.get('install')
+  return install?.key === 'install' ? install.installId : undefined
+}
+
+export function getOrCreateInstallId(): Promise<string> {
+  return db.transaction('rw', db.deviceState, async () => {
+    const current = await db.deviceState.get('install')
+    if (current?.key === 'install') return current.installId
+    const install = DeviceInstallSchema.parse({ key: 'install', installId: newGid(), createdAt: Date.now() })
+    await db.deviceState.put(install)
+    return install.installId
+  })
 }
 
 /** Một ảnh đọc duy nhất để UI không ghép kết quả từ hai observer ở hai thời điểm khác nhau. */

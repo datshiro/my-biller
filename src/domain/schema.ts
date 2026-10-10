@@ -100,6 +100,13 @@ export const DevicePairingLockSchema = z.object({
   expiresAt: Timestamp,
 })
 
+/** Mã của một lần cài app; sống qua ghép, thu hồi, huỷ ghép và xoá sổ. */
+export const DeviceInstallSchema = z.object({
+  key: z.literal('install'),
+  installId: Gid,
+  createdAt: Timestamp,
+})
+
 export const DeviceStateSchema = z.discriminatedUnion('key', [
   DeviceIdentitySchema,
   DeviceSchemaStateSchema,
@@ -109,6 +116,7 @@ export const DeviceStateSchema = z.discriminatedUnion('key', [
   DeviceNoticeSchema,
   DeviceWriteBlockSchema,
   DevicePairingLockSchema,
+  DeviceInstallSchema,
 ])
 
 /**

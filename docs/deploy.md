@@ -72,9 +72,12 @@ Repo không cung cấp lệnh deploy Worker production thủ công. Staging dùn
 hành production bên dưới.
 
 Deploy Worker và kiểm `/health` **trước** Pages. Frontend production đã trỏ vào domain miễn phí
-`my-biller-sync.datshiro.workers.dev`; chỉ đổi `DEFAULT_SYNC_URL` khi mua domain riêng và phải giữ
-CORS/HTTPS hoạt động. `ADMIN_SECRET` chỉ dùng để operator tạo quán đầu tiên qua `POST /shop`, không
-được đóng gói vào PWA. Protocol pending không thêm endpoint ADMIN: client kích hoạt reservation bằng
+`my-biller-sync.datshiro.workers.dev`. URL sync được đóng vào bản dựng qua `__MY_BILLER_REMOTE_SYNC_URL__`
+(`vite.config.ts`), áp cho cả web lẫn APK (APK bản dựng luôn dùng URL remote này), nên mua domain riêng là đổi giá trị
+đó lúc build, và phải giữ CORS/HTTPS hoạt động. `ADMIN_SECRET` dùng để operator tạo quán qua `POST /shop` và chạy điền
+bù chỉ mục qua `POST /admin/index/reconcile`, không được đóng gói vào PWA. Khu `/admin` chỉ đọc dùng secret riêng
+`ADMIN_VIEW_SECRET` (xem [Khu admin, D1 và điền bù chỉ mục](#khu-admin-d1-và-điền-bù-chỉ-mục)). Protocol pending
+không thêm endpoint ADMIN: client kích hoạt reservation bằng
 token máy tạm qua `POST /shop/{shopId}/seed` (route `/seed` trong ShopDO). Trước khi Pages 2.x cắt
 traffic, Worker mới phải tương thích cả frontend 1.0.3 đang chạy và frontend mới. Nếu Worker smoke
 không đạt thì chỉ rollback về một Worker version đã chứng minh tương thích; rollback Worker không
@@ -84,6 +87,85 @@ chỉ roll-forward một bản 2.x đã kiểm hoặc kích hoạt recovery cùn
 Health endpoint đã trả `200 {"status":"ok"}` từ mạng Internet ngày 09/08/2026. Release 2.0.0 chấp
 nhận bỏ cổng iPhone/4G theo quyết định người vận hành ngày 12/08/2026; đây là residual risk được ghi
 nhận, không phải bằng chứng đường mạng di động hay native share đã được kiểm.
+
+## Khu admin, D1 và điền bù chỉ mục
+
+Khu `/admin` (chỉ trên web) đọc mọi sổ chung bằng `ADMIN_VIEW_SECRET`; máy chưa ghép gửi nhịp báo vào D1. Dữ liệu gửi
+đi và giới hạn của nó ở [`dong-bo.md`](./dong-bo.md#ranh-giới-dữ-liệu).
+
+**D1.** Mỗi môi trường một database, binding `ADMIN_DB`: `my-biller-admin` (production) và
+`My-biller-admin-staging` (staging; tên thật trên Cloudflare có chữ M hoa, Worker gắn theo `database_id` nên tên chỉ
+quan trọng khi gọi `wrangler d1 execute` theo tên).
+Tạo một lần rồi commit `database_id` vào `worker/wrangler.toml`; id không phải secret. Bảng tự tạo ở request đầu tiên,
+không cần migration. CI chặn PR vào `main` nếu `wrangler.toml` còn id giữ chỗ toàn số 0.
+
+```bash
+npx wrangler d1 create my-biller-admin
+npx wrangler d1 create my-biller-admin-staging
+```
+
+**Secret xem.** Sinh ngẫu nhiên, dài ≥ 32 ký tự và **khác** `ADMIN_SECRET`: ngắn hơn hoặc trùng thì Worker luôn trả
+401. Thiếu secret thì khu admin cũng chỉ trả 401. Đặt qua stdin, không gõ giá trị vào lệnh:
+
+```bash
+npx wrangler secret put ADMIN_VIEW_SECRET --config worker/wrangler.toml --env staging
+npx wrangler secret put ADMIN_VIEW_SECRET --config worker/wrangler.toml
+```
+
+Khoá khu admin ngay: `npx wrangler secret delete ADMIN_VIEW_SECRET --config worker/wrangler.toml [--env staging]`.
+
+**Điền bù chỉ mục.** Cloudflare không liệt kê Durable Object cho Worker, nên sổ tạo trước khi có chỉ mục (và sổ chưa
+máy nào gọi `/epoch` từ khi deploy) chỉ hiện sau khi chạy `worker/scripts/admin-backfill.mjs`. Script dùng API token
+Cloudflare **chỉ** có quyền `Account › Workers Scripts › Read`, chỉ nhận `WORKER_URL` HTTPS của hai host Worker, không
+in token hay secret. Export secret từ trước (ví dụ `read -rs`), lệnh chỉ nhắc tên biến, `unset` ngay sau đó:
+
+```bash
+read -rs CLOUDFLARE_API_TOKEN; export CLOUDFLARE_API_TOKEN
+read -rs ADMIN_SECRET; export ADMIN_SECRET
+CLOUDFLARE_ACCOUNT_ID=<account-id> \
+WORKER_URL=https://my-biller-sync-staging.datshiro.workers.dev \
+SCRIPT_NAME=my-biller-sync-staging \
+node worker/scripts/admin-backfill.mjs        # DRY_RUN=1 để chỉ liệt kê
+unset CLOUDFLARE_API_TOKEN ADMIN_SECRET
+```
+
+Script in `listed`, `registered`, `alreadyIndexed` và `skipped`; chạy lại bao nhiêu lần cũng được. Đối chiếu: số sổ
+trong `/admin` phải bằng `registered + alreadyIndexed`, và mỗi dòng `skipped` có lý do. Mỗi lượt gửi tối đa 20 id trong
+một batch D1 (gói Free cho 50 truy vấn mỗi lần gọi). Xoá token sau khi dùng.
+
+**Thứ tự deploy.**
+1. D1, secret, rate limiter `HEARTBEAT_RATE_LIMITER` có trong `wrangler.toml`.
+2. Worker. Chỉ thêm route; `/pair` nhận thêm `installId` tuỳ chọn, response không đổi.
+3. Điền bù chỉ mục (cần route `reconcile` của Worker mới).
+4. Pages. Nếu Worker chưa lên, heartbeat nhận 404 và im lặng, còn `installId` bị bỏ qua.
+
+Rollback: Worker bằng `npx wrangler rollback <version-id> --config worker/wrangler.toml [--env staging]`; Pages
+quay về deployment trước. Không đổi
+version Dexie. Ghi D1 chạy sau khi Worker đã trả lời, nên D1 lỗi hay cạn hạn mức chỉ làm hỏng heartbeat và chỉ mục,
+không chạm đồng bộ.
+
+**APK.** Từ bản này APK ghép được vào sổ chung và kéo sổ mỗi 30 giây; các APK trước trỏ nhầm `127.0.0.1` nên chưa
+từng ghép được.
+
+**Quyền token deploy.** Token Workers của GitHub Environment `staging`/`production` (`Workers Scripts:Edit`) deploy được
+Worker có binding D1 hay không: chưa xác nhận. Người vận hành kiểm quyền D1 của token trong dashboard Cloudflare
+trước lần deploy production đầu tiên có D1.
+
+**Lưu lượng trên gói Free.** Workers và DO mỗi loại 100.000 request/ngày, tính chung toàn tài khoản; vượt là lỗi
+1027 tới 00:00 UTC. Với `D` máy đã ghép, mở app 14 giờ, khoảng 300 sự kiện mỗi máy mỗi ngày:
+
+| Nguồn | Request Worker (và DO) mỗi ngày |
+|---|---|
+| Máy đứng yên: tick 30 giây × 3 request | `5.040·D` |
+| Đẩy sự kiện | `300·D` |
+| Phát tán WebSocket, `k` tick mỗi sự kiện mỗi máy | `300·k·D²` |
+| **Tổng** | `5.340·D + 300·k·D²` |
+
+Ước lượng `k` từ 0,9 (gộp tốt) tới 3 (không gộp) cho trần khoảng 7 máy ở cận trên. `k` thật chưa đo; đo trên máy thật trước khi phát hành production.
+Heartbeat của mỗi máy chưa ghép tốn 2 request (preflight CORS và POST) cho mỗi lần mở app cách lần gửi trước quá 15
+phút, cộng một lần mỗi 6 giờ khi app mở liên tục; khoảng 12 lần mỗi ngày là ước lượng, không phải trần; một phiên admin tốn 1 Worker + ≤ 20 DO mỗi trang danh sách.
+Mỗi overview admin đọc mọi hàng `orders`, `payments`, `customers` của sổ; số hàng đọc DO của một phiên admin chưa đo;
+dừng phát hành nếu một phiên vượt 250.000 hàng (5% của 5 triệu hàng đọc mỗi ngày).
 
 ## Staging tách khỏi production
 

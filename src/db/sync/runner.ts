@@ -8,7 +8,7 @@ import {
 import {
   activatePairedDevice,
   claimServerEpoch,
-  isLocalSyncHostname,
+  SYNC_IS_LOCAL,
   SyncApiError,
 } from './client'
 import { claimLeadership, renewLeadership, type LeaderToken } from './leader'
@@ -20,9 +20,8 @@ import { resetReadReplica } from './applier'
 import { listPendingOutbox, OUTBOX_CHANGED_EVENT } from './outbox'
 
 const LOCAL_POLL_MS = 2_000
-const isLocalRuntime = isLocalSyncHostname(globalThis.location?.hostname ?? '')
 const LEASE_MAINTENANCE_MS = 5_000
-const REMOTE_POLL_MS = isLocalRuntime ? LOCAL_POLL_MS : 30_000
+const REMOTE_POLL_MS = SYNC_IS_LOCAL ? LOCAL_POLL_MS : 30_000
 
 let started = false
 

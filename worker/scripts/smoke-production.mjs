@@ -53,6 +53,8 @@ async function checkHttpContract() {
     throw new Error('Worker CORS không cho phép production origin.')
   }
 
+  await checkedFetch('/admin/shops', undefined, 401)
+
   await checkedFetch(
     `/shop/${shopId}/epoch`,
     {

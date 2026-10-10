@@ -8,7 +8,9 @@ import {
 } from './auth'
 import type { Env } from './env'
 import { SyncEventSchema, type SyncEvent } from '../../shared/sync-events'
-import { safeParseLedgerPayload } from '../../shared/ledger-schemas'
+import { LedgerTableSchema, safeParseLedgerPayload } from '../../shared/ledger-schemas'
+import { summarizeServerLedger } from '../../shared/ledger-money'
+import type { AdminDataPage, DeviceOverview, ShopDebt, ShopDetail, ShopOverview } from '../../shared/admin-contract'
 import { itemNameKey } from '../../shared/item-name'
 
 const INITIALIZED_KEY = 'initialized'
@@ -16,6 +18,10 @@ const PAIR_TTL_MS = 5 * 60 * 1000
 const PAIR_ADMISSION_TTL_MS = 2 * 60 * 1000
 const PAIR_FAILURE_LIMIT = 8
 const PAIR_LOCK_MS = 5 * 60 * 1000
+const ACTIVITY_WRITE_INTERVAL_MS = 60 * 1000
+const ADMIN_DATA_MAX_LIMIT = 200
+const ADMIN_ORDER_IDS_MAX = 50
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 type DeviceRow = {
   id: string
@@ -67,6 +73,15 @@ function first<T>(rows: Iterable<T>): T | undefined {
   return rows[Symbol.iterator]().next().value as T | undefined
 }
 
+function nonNegativeInteger(raw: string | null): number | null {
+  return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null
+}
+
+function parseAfterRefs(payload: string): { after: unknown; refs: unknown } {
+  const parsed = JSON.parse(payload) as { after?: unknown; refs?: unknown }
+  return { after: parsed.after ?? null, refs: parsed.refs ?? {} }
+}
+
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const body: unknown = await request.json()
@@ -78,6 +93,9 @@ async function readJson(request: Request): Promise<Record<string, unknown> | nul
 
 export class ShopDO extends DurableObject<Env> {
   private readonly sql: SqlStorage
+  private adminSchemaReady = false
+  /** Máy đã kéo lùi trong cửa sổ không ghi; lần ghi kế tiếp phải đặt `rewoundAt`. */
+  private readonly pendingRewind = new Set<string>()
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -155,6 +173,70 @@ export class ShopDO extends DurableObject<Env> {
         now,
       )
     })
+  }
+
+  /**
+   * Sổ tạo trước khi có khu admin không bao giờ chạy lại `initializeSchema`, nên phần schema này được bù ở
+   * request đầu của mỗi instance. Hỏng ở đây chỉ làm mất số liệu admin, không được chặn đồng bộ.
+   */
+  private ensureAdminSchema(): void {
+    if (this.adminSchemaReady) return
+    try {
+      this.sql.exec(`
+        CREATE TABLE IF NOT EXISTS deviceActivity (
+          deviceId TEXT PRIMARY KEY,
+          lastSeenAt INTEGER NOT NULL,
+          pulledSeq INTEGER NOT NULL,
+          rewoundAt INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS ledger_seq ON ledger(tableName, updatedSeq);
+      `)
+      this.adminSchemaReady = true
+    } catch (error) {
+      this.adminSchemaReady = false
+      console.error('admin-schema-failed', error)
+    }
+  }
+
+  /**
+   * Ghi `since` báo gần nhất, tối đa một lần mỗi phút mỗi máy kể cả khi máy tiến tới, để quota ghi của DO không
+   * tăng theo nhịp kéo. Không lấy max: số nhỏ hơn nghĩa là máy đã kéo lại từ đầu.
+   */
+  private recordPullProgress(deviceId: string, since: number): void {
+    try {
+      const now = Date.now()
+      const row = first(
+        this.sql.exec<{ lastSeenAt: number; pulledSeq: number; rewoundAt: number | null }>(
+          'SELECT lastSeenAt, pulledSeq, rewoundAt FROM deviceActivity WHERE deviceId = ?',
+          deviceId,
+        ),
+      )
+      if (!row) {
+        this.sql.exec(
+          'INSERT INTO deviceActivity (deviceId, lastSeenAt, pulledSeq, rewoundAt) VALUES (?, ?, ?, NULL)',
+          deviceId,
+          now,
+          since,
+        )
+        return
+      }
+      const rewound = since < row.pulledSeq
+      if (now - row.lastSeenAt < ACTIVITY_WRITE_INTERVAL_MS) {
+        if (rewound) this.pendingRewind.add(deviceId)
+        return
+      }
+      const pending = this.pendingRewind.delete(deviceId)
+      this.sql.exec(
+        'UPDATE deviceActivity SET lastSeenAt = ?, pulledSeq = ?, rewoundAt = ? WHERE deviceId = ?',
+        now,
+        since,
+        rewound || pending ? now : row.rewoundAt,
+        deviceId,
+      )
+    } catch (error) {
+      this.adminSchemaReady = false
+      console.error('admin-activity-failed', error)
+    }
   }
 
   private shopId(): string {
@@ -1303,11 +1385,110 @@ export class ShopDO extends DurableObject<Env> {
     const url = new URL(request.url)
     const since = Number(url.searchParams.get('since') ?? 0)
     if (!Number.isInteger(since) || since < 0) return json({ error: 'invalid-request' }, 400)
+    this.recordPullProgress(device.id, since)
     const rows = [...this.sql.exec<{ seq: number; payload: string }>(
       'SELECT seq, payload FROM oplog WHERE seq > ? ORDER BY seq ASC LIMIT 500',
       since,
     )]
     return json({ events: rows.map((row) => JSON.parse(row.payload)), hasMore: rows.length === 500 })
+  }
+
+  private shopIdentity(): { shopId: string; createdAt: number } {
+    const row = first(this.sql.exec<{ shopId: string; createdAt: number }>('SELECT id AS shopId, createdAt FROM shop LIMIT 1'))
+    if (!row) throw new Error('Shop chưa được khởi tạo.')
+    return { shopId: row.shopId, createdAt: row.createdAt }
+  }
+
+  private adminIdentity(): Response {
+    return json(this.shopIdentity())
+  }
+
+  private adminOverview(url: URL): Response {
+    const devices = [...this.sql.exec<DeviceOverview>(
+      'SELECT d.id, d.letter, d.label, d.createdAt, d.revokedAt, a.lastSeenAt, a.pulledSeq, a.rewoundAt FROM devices d LEFT JOIN deviceActivity a ON a.deviceId = d.id ORDER BY d.createdAt',
+    )].map((device) => ({
+      id: device.id,
+      letter: device.letter,
+      label: device.label,
+      createdAt: device.createdAt,
+      revokedAt: device.revokedAt,
+      lastSeenAt: device.lastSeenAt,
+      pulledSeq: device.pulledSeq,
+      rewoundAt: device.rewoundAt,
+    }))
+    const latestSeq =
+      Number(first(this.sql.exec<{ seq: number }>('SELECT MAX(seq) AS seq FROM oplog'))?.seq) || 0
+    const settings = first(
+      this.sql.exec<LedgerRow>("SELECT payload FROM ledger WHERE tableName = 'settings' AND entityKey = 'shop'"),
+    )
+    const shopValue = settings ? parseAfterRefs(settings.payload).after : null
+    const value = isRecord(shopValue) ? shopValue.value : null
+    const shopName = isRecord(value) && typeof value.name === 'string' ? value.name : null
+
+    const rows = [...this.sql.exec<{ tableName: string; entityKey: string; payload: string }>(
+      "SELECT tableName, entityKey, payload FROM ledger WHERE tableName IN ('orders', 'payments', 'customers')",
+    )]
+    const { debts, ...summary } = summarizeServerLedger(rows)
+    const overview: ShopOverview = { ...this.shopIdentity(), shopName, latestSeq, devices, summary }
+    if (url.searchParams.get('debts') !== '1') return json(overview)
+
+    const customerNames = new Map<string, string>()
+    for (const row of rows) {
+      if (row.tableName !== 'customers') continue
+      const after = parseAfterRefs(row.payload).after
+      if (isRecord(after) && typeof after.name === 'string') customerNames.set(row.entityKey, after.name)
+    }
+    const named: ShopDebt[] = debts.map((debt) => ({
+      customerGid: debt.customerGid,
+      name: customerNames.get(debt.customerGid) ?? null,
+      total: debt.total,
+      orderCount: debt.orderCount,
+      oldestAt: debt.oldestAt,
+    }))
+    const detail: ShopDetail = { ...overview, debts: named }
+    return json(detail)
+  }
+
+  private adminData(url: URL): Response {
+    const table = LedgerTableSchema.safeParse(url.searchParams.get('table'))
+    const after = nonNegativeInteger(url.searchParams.get('after') ?? '0')
+    const limit = nonNegativeInteger(url.searchParams.get('limit'))
+    if (!table.success || after === null || limit === null || limit < 1 || limit > ADMIN_DATA_MAX_LIMIT) {
+      return json({ error: 'invalid-request' }, 400)
+    }
+
+    let rows: { entityKey: string; updatedSeq: number; payload: string }[]
+    const rawOrderIds = url.searchParams.get('orderIds')
+    if (rawOrderIds === null) {
+      rows = [...this.sql.exec<{ entityKey: string; updatedSeq: number; payload: string }>(
+        'SELECT entityKey, updatedSeq, payload FROM ledger WHERE tableName = ? AND updatedSeq > ? ORDER BY updatedSeq LIMIT ?',
+        table.data,
+        after,
+        limit,
+      )]
+    } else {
+      const orderIds = rawOrderIds.split(',')
+      if (
+        table.data !== 'orderLines' ||
+        orderIds.length > ADMIN_ORDER_IDS_MAX ||
+        !orderIds.every((id) => UUID_PATTERN.test(id))
+      ) {
+        return json({ error: 'invalid-request' }, 400)
+      }
+      // Một câu cho cả trang đơn: màn admin không được gọi theo từng đơn, mỗi lần gọi tốn một request DO.
+      rows = [...this.sql.exec<{ entityKey: string; updatedSeq: number; payload: string }>(
+        `SELECT entityKey, updatedSeq, payload FROM ledger WHERE tableName = 'orderLines' AND updatedSeq > ? AND json_extract(payload, '$.refs.orderId') IN (${orderIds.map(() => '?').join(', ')}) ORDER BY updatedSeq LIMIT ?`,
+        after,
+        ...orderIds,
+        limit,
+      )]
+    }
+
+    const page: AdminDataPage = {
+      rows: rows.map((row) => ({ entityKey: row.entityKey, updatedSeq: row.updatedSeq, ...parseAfterRefs(row.payload) })),
+      next: rows.length === limit ? (rows[rows.length - 1]?.updatedSeq ?? null) : null,
+    }
+    return json(page)
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -1316,6 +1497,7 @@ export class ShopDO extends DurableObject<Env> {
       return this.bootstrap(request)
     }
     if (!(await this.isInitialized())) return json({ error: 'shop-not-found' }, 404)
+    this.ensureAdminSchema()
 
     if (request.method === 'POST' && url.pathname === '/pair') return this.pair(request)
     if (request.method === 'POST' && url.pathname === '/pair-code') return this.createPairCode(request)
@@ -1325,6 +1507,9 @@ export class ShopDO extends DurableObject<Env> {
     if (request.method === 'POST' && url.pathname === '/events') return this.acceptEvent(request)
     if (request.method === 'POST' && url.pathname === '/seed') return this.activateDevice(request)
     if (request.method === 'GET' && url.pathname === '/oplog') return this.getOplog(request)
+    if (request.method === 'GET' && url.pathname === '/internal/admin/identity') return this.adminIdentity()
+    if (request.method === 'GET' && url.pathname === '/internal/admin/overview') return this.adminOverview(url)
+    if (request.method === 'GET' && url.pathname === '/internal/admin/data') return this.adminData(url)
 
     const revoke = url.pathname.match(/^\/devices\/([^/]+)\/revoke$/)
     if (request.method === 'POST' && revoke?.[1]) {

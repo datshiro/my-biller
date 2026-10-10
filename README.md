@@ -141,6 +141,8 @@ Sổ chung trên Worker giảm rủi ro mất riêng một máy nhưng **không 
 - Xoá dữ liệu duyệt web / gỡ app làm mất danh tính và token của máy; phải ghép lại để kéo sổ chung.
 - M1 không có tài khoản hay vai trò: mọi máy đã ghép ngang quyền, đều tạo mã ghép và thu hồi máy
   khác. Authentication và authorization người dùng thuộc milestone sau.
+- Máy chưa ghép gửi nhịp báo (heartbeat: tên quán, phiên bản, số đơn, số khách, tổng nợ; không có đơn hay khách) để người vận
+  hành thấy trong khu `/admin`. Chi tiết ở [`docs/dong-bo.md`](docs/dong-bo.md#ranh-giới-dữ-liệu).
 
 ## Ngoài phạm vi milestone M1
 
