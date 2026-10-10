@@ -61,11 +61,28 @@ nội bộ vì file này ghi nguyên text đọc từ DOM, bao gồm mã ghép d
 ## Trên GitHub Actions
 
 Workflow [`kiem-thu.yml`](../.github/workflows/kiem-thu.yml) chạy hai job độc lập trên mọi pull request
-và mọi push vào `main`. Gate code hiện có vẫn nằm riêng trong `Code quality and Playwright`; job
-`Robot live` chạy toàn bộ `npm run test:live` không lọc suite/tag và có timeout 20 phút.
+và mọi push vào `main`. Gate code hiện có vẫn nằm riêng trong `Code quality and Playwright`. Bộ Robot
+chạy tuần tự mất gần 30 phút, nên CI chia nó ra ba runner cô lập (`Robot shard (...)`), mỗi runner có
+Vite, Worker và cổng riêng, bên trong vẫn một tiến trình `robot`:
 
-Khi cùng một pull request hoặc ref có lượt mới, lượt cũ đang chạy bị huỷ. Nếu `Robot live` thất bại,
-workflow tải `robot/results/` lên artifact `robot-live-results` và giữ 7 ngày. Branch protection của
+| Shard | Chạy gì |
+| --- | --- |
+| `hai-may-a` | Ca có thẻ `hai-may` (Test Tags của `hai-may.robot`) và thẻ `shard-a` |
+| `hai-may-b` | Ca có thẻ `hai-may` nhưng **không** có `shard-a` — ca mới quên gắn thẻ vẫn chạy ở đây |
+| `con-lai` | Mọi ca còn lại trong `robot/tests` (suite mới tự vào), rồi `npm run test:live:recovery` |
+
+Cả ba đều chạy cả thư mục `robot/tests` và chỉ lọc theo thẻ, nên mọi ca rơi vào đúng một shard.
+
+Job `Robot live` đứng sau ba shard: đỏ khi bất kỳ shard nào đỏ hoặc bị huỷ, rồi chạy
+[`robot/kiem-du-ca.py`](../robot/kiem-du-ca.py) đối chiếu `output-*.xml` của các shard với mọi ca trong
+`robot/tests` và `robot/recovery` — thiếu một ca hay một ca chạy hai lần đều đỏ. Thẻ `shard-a` chỉ để cân
+hai nửa hai-may (mỗi ca dựng quán ghép mới trong `Test Setup`, nên thứ tự không quan trọng); nửa nào dài
+hơn nửa kia quá 20% thì chuyển thẻ theo thời gian từng ca trong artifact `robot-output-*`. Cục bộ
+`npm run test:live` vẫn chạy cả bộ như cũ.
+
+Khi cùng một pull request có lượt mới, lượt cũ đang chạy bị huỷ. Run push lên `main` nhóm theo SHA nên
+không huỷ hay chờ nhau, để tag phát hành luôn tìm được run thành công trên đúng commit. Nếu một shard thất bại,
+workflow tải `robot/results/` của shard đó lên artifact `robot-live-results-<shard>` và giữ 7 ngày. Branch protection của
 `main` hiện yêu cầu cả `Code quality and Playwright` lẫn `Robot live`; check pending hoặc fail đều chặn
 merge, kể cả với owner/admin. Workflow tạo ra các check, còn branch protection mới là lớp enforce.
 
