@@ -4,8 +4,8 @@ Bộ này lái **app thật trên Chrome thật**: bấm nút thật, tải file
 Nó không thay Vitest hay Playwright mà bổ sung một lớp đọc được cho người không đọc code —
 mỗi ca là một câu tiếng Việt mô tả hành vi, và kết quả ra file HTML xem được ngoài trình duyệt.
 Danh sách suite và số ca luôn sống trong `robot/tests/*.robot`; guide này chỉ giữ đường chạy và
-điểm vào để tìm coverage. Riêng `hai-may.robot` có 20 ca chạy hai Browser Context cùng trỏ vào một
-Durable Object cục bộ thật.
+điểm vào để tìm coverage. Riêng `hai-may.robot` chạy hai Browser Context cùng trỏ vào một Durable
+Object cục bộ thật.
 
 | Lớp | Chạy bằng | Trả lời câu hỏi |
 | --- | --- | --- |
@@ -67,17 +67,19 @@ Vite, Worker và cổng riêng, bên trong vẫn một tiến trình `robot`:
 
 | Shard | Chạy gì |
 | --- | --- |
-| `hai-may-a` | Ca có thẻ `hai-may` (Test Tags của `hai-may.robot`) và thẻ `shard-a` |
-| `hai-may-b` | Ca có thẻ `hai-may` nhưng **không** có `shard-a` — ca mới quên gắn thẻ vẫn chạy ở đây |
-| `con-lai` | Mọi ca còn lại trong `robot/tests` (suite mới tự vào), rồi `npm run test:live:recovery` |
+| `hai-may-a` | Mọi ca có thẻ `shard-a`: nửa ca của `hai-may.robot` và cả `admin.robot` (Test Tags) |
+| `hai-may-b` | Ca có thẻ `hai-may` (Test Tags của `hai-may.robot`) nhưng **không** có `shard-a` — ca mới quên gắn thẻ vẫn chạy ở đây |
+| `con-lai` | Mọi ca không có `hai-may` lẫn `shard-a` trong `robot/tests` (suite mới tự vào), rồi `npm run test:live:recovery` |
 
 Cả ba đều chạy cả thư mục `robot/tests` và chỉ lọc theo thẻ, nên mọi ca rơi vào đúng một shard.
 
 Job `Robot live` đứng sau ba shard: đỏ khi bất kỳ shard nào đỏ hoặc bị huỷ, rồi chạy
 [`robot/kiem-du-ca.py`](../robot/kiem-du-ca.py) đối chiếu `output-*.xml` của các shard với mọi ca trong
 `robot/tests` và `robot/recovery` — thiếu một ca hay một ca chạy hai lần đều đỏ. Thẻ `shard-a` chỉ để cân
-hai nửa hai-may (mỗi ca dựng quán ghép mới trong `Test Setup`, nên thứ tự không quan trọng); nửa nào dài
-hơn nửa kia quá 20% thì chuyển thẻ theo thời gian từng ca trong artifact `robot-output-*`. Cục bộ
+ba shard (mỗi ca dựng quán ghép mới trong `Test Setup`, nên thứ tự không quan trọng). Sau đó
+[`robot/thoi-gian-shard.py`](../robot/thoi-gian-shard.py) ghi bảng thời gian Robot từng shard vào summary
+của run và phát `::warning::` (không chặn) khi shard dài nhất hơn shard ngắn nhất quá 30%; khi đó chuyển
+thẻ `shard-a` theo thời gian từng ca trong artifact `robot-output-*`, đừng nâng timeout. Cục bộ
 `npm run test:live` vẫn chạy cả bộ như cũ.
 
 Khi cùng một pull request có lượt mới, lượt cũ đang chạy bị huỷ. Run push lên `main` nhóm theo SHA nên
@@ -170,6 +172,9 @@ một cú Click sẽ treo Chrome ở hộp "mở ứng dụng ngoài".
 
 Ca mới nằm trong suite của **màn mà người bán chạm vào**, không mở file mới cho mỗi thay đổi. Nếu tính
 năng thật sự sinh ra một màn mới thì mới thêm file, và cập nhật cây thư mục ở mục [Cấu trúc](#cấu-trúc).
+Suite mới tự vào shard `con-lai` trên CI; sau lượt push đầu tiên trên `main`, xem bảng "Thời gian Robot từng
+shard" trong summary của job `Robot live` — có cảnh báo lệch thì cân lại thẻ `shard-a`
+([Trên GitHub Actions](#trên-github-actions)).
 
 Suite mới bắt đầu bằng đúng khối này — `Test Setup` là chỗ mọi ca lấy bộ mẫu làm điểm xuất phát:
 

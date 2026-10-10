@@ -1,5 +1,5 @@
-# Hai cửa kiểm độc lập cho mọi push lên main và mọi pull request. Giữ ổn định tên hiển thị của hai job:
-# branch protection tham chiếu trực tiếp các status check này.
+# Kiểm cho mọi push lên main và mọi pull request. Branch protection tham chiếu trực tiếp hai status check
+# `Code quality and Playwright` và `Robot live`: giữ ổn định đúng từng chữ tên hiển thị của hai job đó.
 name: Kiểm thử
 
 on:
@@ -149,8 +149,9 @@ jobs:
 
   # Robot chạy tuần tự trên một runner mất ~30 phút, nên chia ra ba runner cô lập: mỗi runner có Vite,
   # Worker và cổng 5175/8787 riêng, trong runner vẫn một tiến trình `robot`. Ba phần chia `robot/tests`
-  # theo thẻ `hai-may` (Test Tags của hai-may.robot) và `shard-a`, nên mọi ca rơi vào đúng một phần: nửa
-  # hai-may-b lấy mọi ca hai-may KHÔNG có `shard-a`, ca mới quên gắn thẻ vẫn chạy; suite mới tự vào `con-lai`.
+  # chỉ theo thẻ `shard-a` và `hai-may` (Test Tags của hai-may.robot), nên mọi ca rơi vào đúng một phần:
+  # hai-may-a lấy mọi ca có `shard-a` (nửa hai-may và admin.robot), hai-may-b lấy ca hai-may còn lại nên ca
+  # mới quên gắn thẻ vẫn chạy, còn suite mới tự vào `con-lai`.
   robot-shard:
     name: Robot shard (${{ matrix.shard }})
     runs-on: ubuntu-latest
@@ -187,9 +188,9 @@ jobs:
           set -euo pipefail
           out=(--output "output-${SHARD}.xml")
           case "${SHARD}" in
-            hai-may-a) ./robot/run.sh "${out[@]}" -i hai-mayANDshard-a robot/tests ;;
+            hai-may-a) ./robot/run.sh "${out[@]}" -i shard-a robot/tests ;;
             hai-may-b) ./robot/run.sh "${out[@]}" -i hai-may -e shard-a robot/tests ;;
-            con-lai) ./robot/run.sh "${out[@]}" -e hai-may robot/tests ;;
+            con-lai) ./robot/run.sh "${out[@]}" -e hai-may -e shard-a robot/tests ;;
             *) echo "Shard lạ: ${SHARD}" >&2; exit 1 ;;
           esac
 
@@ -253,3 +254,9 @@ jobs:
         run: |
           shopt -s nullglob
           python robot/kiem-du-ca.py outputs/*.xml
+
+      # Chỉ cảnh báo, không chặn: shard dài nhất hơn shard ngắn nhất quá 30% thì cần cân lại thẻ `shard-a`.
+      - name: Thời gian từng shard
+        run: |
+          shopt -s nullglob
+          python robot/thoi-gian-shard.py outputs/*.xml
