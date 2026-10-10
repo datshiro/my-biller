@@ -79,7 +79,7 @@ test('một đơn sỉ trọn vòng: chỉ món có bảng giá xuống giá, ph
   await expect(cartSheet(page).getByText('48.000 đ')).toBeVisible()
 
   await pay(page)
-  await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
+  await page.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
   const rows = page.locator('.receipt-view table tbody tr')
@@ -154,7 +154,7 @@ test('giá gõ tay trùng đúng giá sỉ vẫn là hai dòng riêng, tắt S�
   await expect(cartSheet(page).getByText('100.000 đ')).toBeVisible()
 
   await pay(page)
-  await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
+  await page.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
   const rows = page.locator('.receipt-view table tbody tr')

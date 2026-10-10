@@ -1,9 +1,11 @@
 import { calcChange, suggestCashAmounts } from '@/domain/cash-suggestion'
-import { formatAmount, formatVnd } from '@/domain/money'
+import type { CartLine } from '@/domain/cart'
+import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import type { Payment } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { MoneyInput } from '@/ui/money-input'
 import { Sheet } from '@/ui/sheet'
+import { CartLinesSummary } from './cart-lines'
 
 export type PaymentChoice = Pick<Payment, 'amount' | 'method' | 'note'> | null
 
@@ -25,11 +27,20 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
 }
 
 /**
+ * Bước duy nhất tạo đơn: người bán thấy lại đủ các dòng, khách, giảm giá / phụ thu ngay trên nút xác nhận.
+ * Phần tóm tắt chỉ đọc — muốn sửa thì "Sửa đơn" về giỏ, để chỉ có một chỗ sửa dòng.
+ *
  * `method` và `given` do màn ngoài giữ, không phải state trong đây: ghi nợ phải đi chọn khách, mà
  * lúc đó sheet này bị gỡ khỏi cây. Nếu để state ở đây thì quay lại nó về mặc định "tiền mặt, đưa đủ"
  * và đơn nợ bị ghi thành đã thu đủ.
  */
 export function PaymentSheet({
+  lines,
+  count,
+  customerName,
+  subtotal,
+  discount,
+  surcharge,
   total,
   hasCustomer,
   method,
@@ -39,10 +50,17 @@ export function PaymentSheet({
   onGivenChange,
   onConfirm,
   onPickCustomer,
+  onEditOrder,
   onClose,
   submitting,
   error,
 }: {
+  lines: readonly CartLine[]
+  count: number
+  customerName: string
+  subtotal: number
+  discount: number
+  surcharge: number
   total: number
   hasCustomer: boolean
   method: PayMethod
@@ -53,6 +71,7 @@ export function PaymentSheet({
   onGivenChange: (given: number | null) => void
   onConfirm: (payment: PaymentChoice) => void
   onPickCustomer: () => void
+  onEditOrder: () => void
   onClose: () => void
   submitting: boolean
   error: string | null
@@ -67,7 +86,7 @@ export function PaymentSheet({
 
   return (
     <Sheet
-      title="Thu tiền"
+      title="Xác nhận & thu tiền"
       onClose={onClose}
       busy={submitting}
       footer={
@@ -79,13 +98,34 @@ export function PaymentSheet({
             </Button>
           ) : (
             <Button size="cta" disabled={submitting} onClick={confirm}>
-              {submitting ? 'Đang lưu…' : 'XONG & XUẤT PHIẾU'}
+              {submitting ? 'Đang lưu…' : `XÁC NHẬN TẠO ĐƠN · ${formatVnd(total)}`}
             </Button>
           )}
         </div>
       }
     >
       <div className="flex flex-col gap-4">
+        <section aria-label="Tóm tắt đơn">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="min-w-0 text-[13px] text-muted">
+              <span className="font-semibold text-ink">{customerName}</span> · {lines.length} dòng ·{' '}
+              {formatQty(count)} món
+            </p>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={onEditOrder}
+              className="min-h-11 shrink-0 px-2 font-semibold text-brand underline disabled:opacity-50"
+            >
+              Sửa đơn
+            </button>
+          </div>
+          {/* Cuộn riêng để đơn dài không đẩy ô Khách đưa và Tiền thối xuống dưới nếp gấp trên máy nhỏ. */}
+          <div className="max-h-[30dvh] overflow-y-auto">
+            <CartLinesSummary lines={lines} />
+          </div>
+        </section>
+
         <div role="group" aria-label="Hình thức thanh toán" className="flex gap-2">
           {METHODS.map((option) => (
             <button
@@ -105,7 +145,10 @@ export function PaymentSheet({
           ))}
         </div>
 
-        <div className="rounded-btn bg-surface p-4">
+        <div className="flex flex-col gap-1 rounded-btn bg-surface p-4">
+          {discount > 0 || surcharge > 0 ? <Row label="Tiền hàng" value={formatVnd(subtotal)} /> : null}
+          {discount > 0 ? <Row label="Giảm giá" value={`−${formatVnd(discount)}`} /> : null}
+          {surcharge > 0 ? <Row label="Phụ thu" value={`+${formatVnd(surcharge)}`} /> : null}
           <Row label="Tổng đơn" value={formatVnd(total)} strong />
         </div>
 
