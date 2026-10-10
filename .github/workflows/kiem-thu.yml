@@ -12,12 +12,14 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Chỉ huỷ run cũ của pull request; run push lên main phải chạy xong để tag phát hành tìm được run thành công trên đúng SHA.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   kiem-thu:
     name: Code quality and Playwright
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -136,10 +138,18 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon testDebugUnitTest
 
-  robot-live:
-    name: Robot live
+  # Robot chạy tuần tự trên một runner mất ~30 phút, nên chia ra ba runner cô lập: mỗi runner có Vite,
+  # Worker và cổng 5175/8787 riêng, trong runner vẫn một tiến trình `robot`. Hai nửa hai-may chia bằng thẻ
+  # `shard-a` — nửa sau lấy mọi ca KHÔNG có thẻ, nên ca mới quên gắn thẻ vẫn chạy. `con-lai` lấy mọi suite
+  # khác hai-may theo tên file, suite mới tự vào.
+  robot-shard:
+    name: Robot shard (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [hai-may-a, hai-may-b, con-lai]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -162,15 +172,72 @@ jobs:
         run: ./robot/install.sh --with-deps
 
       - name: Robot Framework live
-        run: npm run test:live
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          out=(--output "output-${SHARD}.xml")
+          case "${SHARD}" in
+            hai-may-a) ./robot/run.sh "${out[@]}" -i shard-a robot/tests/hai-may.robot ;;
+            hai-may-b) ./robot/run.sh "${out[@]}" -e shard-a robot/tests/hai-may.robot ;;
+            con-lai)
+              mapfile -t files < <(find robot/tests -maxdepth 1 -name '*.robot' ! -name hai-may.robot | LC_ALL=C sort)
+              ./robot/run.sh "${out[@]}" "${files[@]}" ;;
+            *) echo "Shard lạ: ${SHARD}" >&2; exit 1 ;;
+          esac
 
       - name: Robot Framework recovery artifact
-        run: npm run test:live:recovery
+        if: matrix.shard == 'con-lai'
+        run: |
+          rc=0
+          npm run test:live:recovery || rc=$?
+          mv robot/results/output.xml robot/results/output-recovery.xml || true
+          exit "${rc}"
+
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: robot-output-${{ matrix.shard }}
+          path: robot/results/output-*.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: robot-live-results
+          name: robot-live-results-${{ matrix.shard }}
           path: robot/results/
           if-no-files-found: ignore
           retention-days: 7
+
+  # Tên "Robot live" là status check mà branch protection và phat-hanh-production.yml tìm đúng từng chữ.
+  # `always()` vì job bị skip được tính là đạt; job này phải đỏ khi bất kỳ phần nào đỏ hay bị huỷ, và
+  # phải chứng minh mọi ca đã chạy đúng một lần.
+  robot-live:
+    name: Robot live
+    needs: robot-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mọi phần Robot đều đạt
+        run: test "${{ needs.robot-shard.result }}" = success
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - run: python -m pip install "$(grep '^robotframework==' robot/requirements.txt)"
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: robot-output-*
+          path: outputs
+          merge-multiple: true
+
+      - name: Mọi ca Robot chạy đúng một lần
+        run: python robot/kiem-du-ca.py outputs/*.xml

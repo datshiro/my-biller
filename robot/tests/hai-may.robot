@@ -118,6 +118,7 @@ Ba đơn tạo khi mất mạng lên sổ đúng một lần và phiếu vẫn t
 
 Hai máy mất mạng vẫn tạo mã phiếu khác nhau và hội tụ khi nối lại
     [Documentation]    Chữ máy phải chống đụng mã ngay tại chỗ, không mượn mạng hoặc đổi mã sau bán.
+    [Tags]    shard-a
     Mở Màn Trên Máy    ${MÁY_A_PAGE}    /
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /
     Chọn Máy A
@@ -178,6 +179,7 @@ Thu nợ ở máy A thì máy B không còn đòi lại
 
 Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
     [Documentation]    Lỗi cũ xoá tiền thật khi huỷ đơn; hai bản sao phải giữ phiếu và chỉ bỏ phân bổ.
+    [Tags]    shard-a
     Chọn Máy A
     Bán Nhanh    Phở bò
     ${orders}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
@@ -197,6 +199,7 @@ Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
 Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
     [Documentation]    Hai máy cùng mở khoản thu pending; quyết định hoàn tiền đã lên Worker phải là
     ...    terminal, nên lựa chọn “bỏ” từ bản sao offline cũ bị từ chối rồi hội tụ về refunded.
+    [Tags]    shard-a
     Chọn Máy A
     Bán Nhanh    Phở bò
     ${orders_a}=    Đọc Bảng    orders    ${MÁY_A_PAGE}
@@ -239,6 +242,7 @@ Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
 
 Đóng tab dẫn đầu thì tab còn lại tiếp quản và vẫn đẩy đơn
     [Documentation]    Lease không được mắc kẹt ở tab đã đóng; epoch mới phải tiếp tục đường ghi.
+    [Tags]    shard-a
     Chọn Máy A
     ${page_a2}=    New Page    ${BASE_URL}/
     Close Page    ${MÁY_A_PAGE}    context=ALL    browser=ALL
@@ -320,6 +324,7 @@ Máy đã ghép không lộ đường xoá, outbox và danh tính vẫn còn
 
 File sao lưu ở máy đã ghép không chứa token hay mã máy
     [Documentation]    Khóa đường rò chìa khóa qua file người bán có thể gửi bằng Zalo.
+    [Tags]    shard-a
     Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/sao-luu
     ${promise}=    Promise To Wait For Download
     Bấm Nút    SAO LƯU RA FILE
@@ -358,6 +363,7 @@ Máy bị thu hồi không ghi được vào sổ chung
 
 Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
     [Documentation]    Xóa bản sao đọc không được làm đổi tổng đã thu hay công nợ của máy B.
+    [Tags]    shard-a
     ${payments_trước}=    Đọc Bảng    payments    ${MÁY_B_PAGE}
     ${tổng_trước}=    Evaluate    sum(row['amount'] for row in $payments_trước)
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/sao-luu
@@ -373,6 +379,7 @@ Kéo lại từ đầu dựng đúng sổ tiền từ máy chủ
 
 Máy chủ từ chối sửa giá thì giá cũ trở lại trên cả hai máy
     [Documentation]    Event sửa phải mang ảnh trước; bị từ chối không được để giá ma trong bản sao A.
+    [Tags]    shard-a
     Chọn Máy A
     ${items}=    Đọc Bảng    items    ${MÁY_A_PAGE}
     ${tea}=    Evaluate    [row for row in $items if row['name'] == 'Trà đá'][0]
@@ -489,6 +496,7 @@ Màn Đối soát của hai máy nói cùng một con số
     ...    Timeout 15 giây làm mỗi lượt thử tự chờ 15 giây, 40 lượt là ~10 phút mới đỏ. (d) Phải đọc hết
     ...    máy A TRƯỚC khi Chọn Máy B: Mở Màn Trên Máy đổi page, đọc A sau đó là đọc B rồi so B với chính B.
     ...    Chờ trên đúng phần tử neo chứ không chờ chữ trần: dòng hướng dẫn cuối màn cũng in "✓ Khớp sổ chung".
+    [Tags]    shard-a
     Chọn Máy A
     Click    ${NAV_BAN}
     Chọn Món    Trà đá
@@ -525,6 +533,7 @@ Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
     ...    Go To): dev server không có service worker, tải trang cứng lúc offline là trang lỗi của Chrome.
     ...    Có mạng lại: hàng đợi xả, bấm KIỂM TRA LẠI thì về "✓ Khớp" — nhánh lỗi không tự hỏi lại, nút là
     ...    đường ra; bọc retry vì Vite dev tải lại trang khi nối lại được websocket HMR.
+    [Tags]    shard-a
     Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/doi-soat
     Chờ Thấy Chữ    TỔNG TOÀN SỔ
     Click    ${NAV_BAN}
@@ -565,7 +574,7 @@ Máy mất mạng vẫn thấy hàng đợi của mình trên màn Đối soát
 
 Nhập file món ở máy A thì máy B có đủ món, nhóm và giá
     [Documentation]    Luồng nhập CSV đi đúng đường outbox nên đồng bộ như nhập tay.
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     ${f}=    Set Variable    ${DOWNLOAD_DIR}/hai-may-nhap-mon.csv
     Create File    ${f}    Nhóm,Tên món,Giá bán\nTráng miệng,Bánh flan,15000\nNước,Trà đá,3500
     Chọn Máy A
@@ -649,7 +658,7 @@ Bán offline món trùng tên thì đơn vẫn còn trên cả hai máy và nố
     Length Should Be    ${thu_a}    ${{ len($thu_b_trước) }}
 
 Hai máy cùng nhập một món mới lúc mất mạng thì chỉ món trùng được nối, các dòng khác vẫn lên
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     [Documentation]    Nhập CSV cũng đi qua nhánh nối món giống hệt bán offline — không có lối
     ...    lái riêng nào bỏ qua luật tên trùng.
     Chọn Máy A
@@ -736,7 +745,7 @@ Máy chưa thấy món trùng mà bán lại thì sổ chung chặn, chỉ món 
 Nhập khách ở máy A thì máy B có khách mới và khách cập nhật, hàng đợi rỗng
     [Documentation]    Khách nhập qua CSV đi cùng outbox với món, nên máy B phải thấy cả khách mới lẫn phần
     ...    cập nhật đúng như nhập tay.
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     ${f}=    Set Variable    ${DOWNLOAD_DIR}/hai-may-nhap-khach.csv
     Create File    ${f}    Tên,Số điện thoại,Địa chỉ\nChị Lan,0977111222,8 Nguyễn Huệ\nAnh Hùng,0912345678,5 Hai Bà Trưng
     Chọn Máy A
@@ -815,7 +824,7 @@ Huỷ ghép máy B giữ nguyên sổ tiền, máy A thấy B đã rời và B s
     ...    Khôi phục trên máy vừa huỷ ghép không đưa sổ về đúng lúc sao lưu.
 
 Còn thay đổi chưa lên sổ chung thì không huỷ ghép được cho tới khi đồng bộ xong
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     [Documentation]    Bỏ hàng đợi khi huỷ ghép có thể bỏ nhầm thao tác đã lên sổ chung, nên nút huỷ ghép khoá
     ...    tới khi hàng đợi đẩy hết; thay đổi đó phải lên sổ chung trước khi máy rời.
     Chọn Máy B
@@ -888,7 +897,7 @@ Máy bị máy khác thu hồi dùng lại được như máy chưa ghép mà kh
     Wait For Elements State    css=button:has-text("Nhập từ file sao lưu")    visible
 
 Huỷ ghép khi mất mạng báo cần mạng và máy vẫn ghép
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     [Documentation]    Huỷ ghép cần mạng để máy kia biết; mất mạng thì báo rõ và máy vẫn ghép như cũ.
     Chọn Máy B
     # Mở màn trước khi mất mạng: Robot chạy trên Vite dev không có service worker, điều hướng lúc offline hỏng.
@@ -912,7 +921,7 @@ Huỷ ghép khi mất mạng báo cần mạng và máy vẫn ghép
     Chờ Thấy Chữ    Quầy B · chữ B
 
 Huỷ ghép máy cuối cùng của quán thì hộp xác nhận cảnh báo nhưng vẫn cho huỷ
-    [Tags]    -regression
+    [Tags]    -regression    shard-a
     [Documentation]    Máy hoạt động cuối cùng rời đi thì sổ chung không còn máy nào mở được: hộp xác nhận phải nói
     ...    điều đó khi chỉ còn một máy, im lặng khi còn máy khác, và mở hộp không được đổi gì trong sổ.
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
