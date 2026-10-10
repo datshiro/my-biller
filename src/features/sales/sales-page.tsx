@@ -8,6 +8,7 @@ import { ItemGrid } from './item-grid'
 import { LineEditSheet } from './line-edit-sheet'
 import { PaymentSheet, type PaymentChoice, type PayMethod } from './payment-sheet'
 import { useCart } from './use-cart'
+import { useSalesRank } from './use-sales-rank'
 import { buildPriceBook, listPriceBook } from '@/db/repositories/customer-prices'
 import { getCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
@@ -38,6 +39,7 @@ export function SalesPage() {
   const groups = useItemGroups()
   const deviceIdentity = useDeviceIdentity()
   const { cart, dispatch, reset, restored } = useCart()
+  const rank = useSalesRank()
 
   const [query, setQuery] = useState('')
   const [groupId, setGroupId] = useState<number | null>(null)
@@ -76,14 +78,21 @@ export function SalesPage() {
 
   const active = useMemo(() => (items ?? []).filter((item) => item.isActive === 1), [items])
 
+  const keyword = normalizeName(query)
+  /** Lưới "Tất cả" chờ thứ hạng thay vì vẽ theo tên rồi xếp lại — ô dưới ngón tay không được đổi món. */
+  const waitingRank = groupId === null && !keyword && rank === undefined
+
   const visible = useMemo(() => {
-    const keyword = normalizeName(query)
-    return active.filter(
+    const matched = active.filter(
       (item) =>
         (groupId === null || item.groupId === groupId) &&
         (!keyword || normalizeName(item.name).includes(keyword)),
     )
-  }, [active, groupId, query])
+    if (groupId !== null || keyword || !rank) return matched
+    const rankOf = (item: Item) => rank.get(item.id ?? -1) ?? rank.size
+    // `sort` ổn định nên món chưa bán giữ thứ tự tên của `listItems`.
+    return [...matched].sort((a, b) => rankOf(a) - rankOf(b))
+  }, [active, groupId, keyword, rank])
 
   const totals = cartTotals(cart)
   const count = cartCount(cart)
@@ -432,7 +441,7 @@ export function SalesPage() {
           </div>
         ) : null}
 
-        {items === undefined ? (
+        {items === undefined || (waitingRank && active.length > 0) ? (
           <ListSkeleton />
         ) : active.length === 0 ? (
           <EmptyState

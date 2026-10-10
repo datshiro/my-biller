@@ -1186,3 +1186,30 @@ Nâng Version Sổ Trên Máy
     ...    () => JSON.parse(localStorage.getItem('${KHOÁ_NHÁP_GIỎ}')).lines.map((line) => ({ name: line.name, qty: line.qty }))
     Length Should Be    ${dòng}    ${số_dòng}    Nháp giỏ chưa có đủ ${số_dòng} dòng.
     RETURN    ${dòng}
+
+*** Test Cases ***
+Món bán nhiều tiền nhất đứng đầu lưới Tất cả sau khi tải lại, chọn nhóm thì về thứ tự tên
+    [Documentation]    Thứ hạng bán chạy đọc một lần mỗi ngày cho mỗi lượt tải trang, nên phải tải lại trang mới thấy
+    ...    đơn vừa bán. Trà đá bán 2 ly (6.000) là món bán ít tiền; Phở bò đặc biệt bán 3 tô (165.000) lên đầu lưới
+    ...    Tất cả dù tên đứng sau Cà phê sữa và Cơm tấm sườn. Chọn nhóm Đồ ăn thì về thứ tự tên: Cơm tấm sườn trước.
+    Mở Màn    /
+    Chọn Món    Trà đá    2
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    Mở Màn    /
+    Chọn Món    Phở bò    3
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    165000
+    Should Be Equal As Integers    ${đơn}[paidAmount]    165000
+    ${đơn_hàng}=    Đọc Bảng    orders
+    Length Should Be    ${đơn_hàng}    4    Phải có hai đơn của bộ mẫu và hai đơn vừa bán.
+
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Phở bò đặc biệt    visible
+    Click    css=[role=group][aria-label="Nhóm"] >> css=button:has-text("Đồ ăn")
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+    ${ô_thứ_hai}=    Get Text    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=1
+    Should Contain    ${ô_thứ_hai}    Phở bò đặc biệt

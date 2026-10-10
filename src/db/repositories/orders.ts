@@ -133,7 +133,7 @@ export function getOrderPayments(orderId: number): Promise<Payment[]> {
  * lượt đọc của một kỳ hẹp. 1.500 là chỗ sai ít nhất cho cả bảng nhỏ lẫn bảng lớn — lệch nhiều nhất
  * khoảng 50ms ở dải 2–4 tháng của quán một năm tuổi.
  */
-const WIDE_QUERY = 1_500
+export const WIDE_QUERY = 1_500
 
 /** Dòng hàng của nhiều đơn trong một truy vấn. Báo cáo không được đọc `orderLines` từng đơn một. */
 export async function listOrderLinesOfOrders(orderIds: readonly number[]): Promise<OrderLine[]> {

@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SalesPage } from '../sales-page'
 import { clearCartDraft, loadCartDraft } from '../cart-draft-storage'
+import { resetSalesRankCache } from '../sales-rank'
 import { db } from '@/db/db'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
@@ -18,6 +19,14 @@ import { installTestDevice } from '@/test-fixtures'
  * Mặc định 0ms nên mọi ca khác chạy y như thật; chỉ ca đua mới nạp số vào map này.
  */
 const { chamTheoKhach } = vi.hoisted(() => ({ chamTheoKhach: new Map<number, number>() }))
+
+/**
+ * Đọc đơn cho thứ hạng bán chạy: `giuDocDon.cho` giữ lượt đọc lại đến khi ca gọi mở, `loi` làm lượt đọc hỏng.
+ * Mặc định không giữ, không hỏng nên mọi ca khác chạy như thật.
+ */
+const { giuDocDon } = vi.hoisted(() => ({
+  giuDocDon: { cho: null as Promise<void> | null, daDoc: false, loi: false },
+}))
 
 vi.mock('@/db/repositories/customer-prices', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/db/repositories/customer-prices')>()
@@ -32,11 +41,28 @@ vi.mock('@/db/repositories/customer-prices', async (importOriginal) => {
   }
 })
 
+vi.mock('@/db/repositories/orders', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/db/repositories/orders')>()
+  return {
+    ...actual,
+    listOrdersBetween: async (from: number, to: number) => {
+      giuDocDon.daDoc = true
+      if (giuDocDon.loi) throw new Error('Đọc đơn hỏng')
+      if (giuDocDon.cho) await giuDocDon.cho
+      return actual.listOrdersBetween(from, to)
+    },
+  }
+})
+
 afterEach(cleanup)
 
 beforeEach(async () => {
   localStorage.clear()
   chamTheoKhach.clear()
+  resetSalesRankCache()
+  giuDocDon.cho = null
+  giuDocDon.daDoc = false
+  giuDocDon.loi = false
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
   await installTestDevice()
@@ -1162,5 +1188,115 @@ describe('ô số lượng trong giỏ', () => {
 
     expect(await screen.findByRole('button', { name: /Xem đơn · 1 món/ })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Hoàn lại' })).toBeDefined()
+  })
+})
+
+describe('lưới Tất cả xếp theo bán chạy', () => {
+  /** Món "Phở bò" và "Trà đá" cùng nhóm, để một nhóm có hai món đủ so thứ tự tên với thứ hạng. */
+  const seedBanChay = async () => {
+    const nhom = await createGroup({ name: 'Món nước', sortOrder: 1 })
+    const pho = await createItem({ name: 'Phở bò', groupId: nhom, unit: 'tô', unitPrice: 55_000, costPrice: 30_000, isActive: 1 })
+    const tra = await createItem({ name: 'Trà đá', groupId: nhom, unit: 'ly', unitPrice: 3_000, costPrice: 500, isActive: 1 })
+    return { pho, tra }
+  }
+
+  /** Trà đá 30 ly = 90.000 đứng trước Phở bò 1 tô = 55.000 theo doanh thu; theo tên thì Phở đứng trước. */
+  const banTraTruocPho = async (pho: number, tra: number) => {
+    await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [
+        { itemId: tra, name: 'Trà đá', unit: 'ly', unitPrice: 3_000, costPrice: 500, qty: 30 },
+        { itemId: pho, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: 30_000, qty: 1 },
+      ],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { amount: 145_000, method: 'cash', note: '' },
+    })
+  }
+
+  const tenCacO = async () => {
+    const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
+    return within(grid)
+      .getAllByRole('button')
+      .filter((button) => button.textContent?.includes('Thêm mặt hàng') === false)
+      .map((button) => button.textContent ?? '')
+  }
+
+  it('món bán nhiều tiền nhất đứng đầu lưới Tất cả khi ô tìm trống', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    renderSales()
+
+    const cacO = await tenCacO()
+    expect(cacO[0]).toContain('Trà đá')
+    expect(cacO[1]).toContain('Phở bò')
+  })
+
+  it('khi chưa có thứ hạng thì lưới Tất cả là khung giữ chỗ, không có ô nào chạm được', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    let mo: () => void = () => undefined
+    giuDocDon.cho = new Promise<void>((resolve) => {
+      mo = resolve
+    })
+    renderSales()
+
+    await waitFor(() => expect(giuDocDon.daDoc).toBe(true))
+    await screen.findByRole('group', { name: 'Nhóm' })
+    expect(screen.queryByRole('group', { name: 'Mặt hàng' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Phở bò/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Trà đá/ })).toBeNull()
+
+    mo()
+    const cacO = await tenCacO()
+    expect(cacO[0]).toContain('Trà đá')
+  })
+
+  it('đọc thứ hạng lỗi thì lưới Tất cả về thứ tự tên và báo lỗi ra console', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    giuDocDon.loi = true
+    const loi = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    renderSales()
+
+    const cacO = await tenCacO()
+    expect(cacO[0]).toContain('Phở bò')
+    expect(cacO[1]).toContain('Trà đá')
+    expect(loi).toHaveBeenCalledWith('Không đọc được thứ hạng bán chạy:', expect.any(Error))
+    loi.mockRestore()
+  })
+
+  it('chọn nhóm thì lưới về thứ tự tên, không theo thứ hạng', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    renderSales()
+
+    expect((await tenCacO())[0]).toContain('Trà đá')
+    await userEvent.click(within(screen.getByRole('group', { name: 'Nhóm' })).getByRole('button', { name: 'Món nước' }))
+
+    const cacO = await tenCacO()
+    expect(cacO[0]).toContain('Phở bò')
+    expect(cacO[1]).toContain('Trà đá')
+  })
+
+  it('gõ tìm khi thứ hạng còn đang đọc thì lưới hiện ngay theo tên, không chờ', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    let mo: () => void = () => undefined
+    giuDocDon.cho = new Promise<void>((resolve) => {
+      mo = resolve
+    })
+    renderSales()
+
+    await waitFor(() => expect(giuDocDon.daDoc).toBe(true))
+    await userEvent.type(await screen.findByPlaceholderText(/Tìm món/), 'Phở')
+
+    const cacO = await tenCacO()
+    expect(cacO).toHaveLength(1)
+    expect(cacO[0]).toContain('Phở bò')
+    mo()
   })
 })
