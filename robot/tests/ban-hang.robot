@@ -1186,3 +1186,36 @@ Nâng Version Sổ Trên Máy
     ...    () => JSON.parse(localStorage.getItem('${KHOÁ_NHÁP_GIỎ}')).lines.map((line) => ({ name: line.name, qty: line.qty }))
     Length Should Be    ${dòng}    ${số_dòng}    Nháp giỏ chưa có đủ ${số_dòng} dòng.
     RETURN    ${dòng}
+
+*** Test Cases ***
+Thứ hạng bán chạy giữ trong ca: quay lại trong app thì lưới không xếp lại, tải lại trang mới xếp theo đơn mới
+    [Documentation]    Mốc của bộ mẫu: không có đơn mới thì Cơm tấm sườn (135.000) đứng đầu lưới Tất cả, Phở bò đặc biệt
+    ...    (110.000) thứ hai. Thứ hạng đọc một lần cho mỗi lượt tải trang. Bán thêm một Phở bò đặc biệt (55.000) thì
+    ...    Phở lên 165.000 và vượt Cơm tấm, nhưng quay lại màn bán bằng nút "Quay lại" của phiếu rồi tab "Bán" (điều
+    ...    hướng trong app, không tải lại trang) vẫn phải thấy Cơm tấm đầu lưới. Chỉ sau khi tải lại trang Phở mới lên đầu.
+    ...    Ca bắt đầu ở màn Thêm sau khi nạp mẫu và vào màn Bán bằng tab, để nút "Quay lại" về đúng tài liệu cũ:
+    ...    nếu lượt quay lại có tải lại trang thì thứ hạng đọc lại và ca không kiểm được gì.
+    ...    Chọn nhóm Đồ ăn thì về thứ tự tên: Cơm tấm sườn trước Phở bò đặc biệt.
+    Click    css=nav >> css=a[href="/"]
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Click    css=button[aria-label="Quay lại"]
+    Wait For Elements State    css=nav >> css=a[href="/"]    visible
+    Click    css=nav >> css=a[href="/"]
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Phở bò đặc biệt    visible
+    Click    css=[role=group][aria-label="Nhóm"] >> css=button:has-text("Đồ ăn")
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+    ${ô_thứ_hai}=    Get Text    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=1
+    Should Contain    ${ô_thứ_hai}    Phở bò đặc biệt
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    55000
+    Should Be Equal As Integers    ${đơn}[paidAmount]    55000
+    ${đơn_hàng}=    Đọc Bảng    orders
+    Length Should Be    ${đơn_hàng}    3    Phải có hai đơn của bộ mẫu và một đơn vừa bán.
