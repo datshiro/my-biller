@@ -44,8 +44,8 @@ export function LabelView({
     <>
       {/* MANG VỀ chung hàng với tên quán, không thêm hàng: đầu tem cao thêm là thân tem hẹp lại và một
           ly ghi chú dài có thể sang thêm tem, khác số tem của cùng đơn đó nếu bán tại chỗ. Quán chưa đặt
-          tên (chỉ lần chạy đầu) thì hàng này sinh riêng cho MANG VỀ — chấp nhận, vì nhét vào hàng mã đơn
-          vốn `break-all` cũng có thể gãy dòng, mà lại ở hàng không được cắt. */}
+          tên thì hàng này sinh riêng cho MANG VỀ — chấp nhận, vì nhét vào hàng mã đơn vốn `break-all`
+          cũng có thể gãy dòng, mà lại ở hàng không được cắt. */}
       {shop.name || takeaway ? (
         <p className="flex gap-1 font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
           <span className="min-w-0 flex-1 truncate">{shop.name}</span>
