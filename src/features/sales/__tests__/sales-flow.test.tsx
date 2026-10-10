@@ -25,7 +25,7 @@ const { chamTheoKhach } = vi.hoisted(() => ({ chamTheoKhach: new Map<number, num
  * Mặc định không giữ, không hỏng nên mọi ca khác chạy như thật.
  */
 const { giuDocDon } = vi.hoisted(() => ({
-  giuDocDon: { cho: null as Promise<void> | null, daDoc: false, loi: false },
+  giuDocDon: { cho: null as Promise<void> | null, daDoc: false, loi: false, soLanDoc: 0 },
 }))
 
 vi.mock('@/db/repositories/customer-prices', async (importOriginal) => {
@@ -47,6 +47,7 @@ vi.mock('@/db/repositories/orders', async (importOriginal) => {
     ...actual,
     listOrdersBetween: async (from: number, to: number) => {
       giuDocDon.daDoc = true
+      giuDocDon.soLanDoc += 1
       if (giuDocDon.loi) throw new Error('Đọc đơn hỏng')
       if (giuDocDon.cho) await giuDocDon.cho
       return actual.listOrdersBetween(from, to)
@@ -63,6 +64,7 @@ beforeEach(async () => {
   giuDocDon.cho = null
   giuDocDon.daDoc = false
   giuDocDon.loi = false
+  giuDocDon.soLanDoc = 0
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
   await installTestDevice()
@@ -1245,6 +1247,13 @@ describe('lưới Tất cả xếp theo bán chạy', () => {
     renderSales()
 
     await waitFor(() => expect(giuDocDon.daDoc).toBe(true))
+    // Gõ tìm không chờ thứ hạng nên lưới hiện ngay: đó là bằng chứng món đã nạp xong, không phải khung giữ chỗ
+    // chỉ vì danh sách còn trống. Xoá ô tìm rồi mới khẳng định lưới biến mất vì đang chờ thứ hạng.
+    const oTim = await screen.findByPlaceholderText(/Tìm món/)
+    await userEvent.type(oTim, 'Phở')
+    expect(await tenCacO()).toHaveLength(1)
+    await userEvent.clear(oTim)
+
     await screen.findByRole('group', { name: 'Nhóm' })
     expect(screen.queryByRole('group', { name: 'Mặt hàng' })).toBeNull()
     expect(screen.queryByRole('button', { name: /Phở bò/ })).toBeNull()
@@ -1253,6 +1262,31 @@ describe('lưới Tất cả xếp theo bán chạy', () => {
     mo()
     const cacO = await tenCacO()
     expect(cacO[0]).toContain('Trà đá')
+  })
+
+  it('quay lại màn bán trong ngày thì lưới giữ thứ hạng đã nhớ, không đọc lại sổ', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    const { unmount } = renderSales()
+    expect((await tenCacO())[0]).toContain('Trà đá')
+    const soLanTruoc = giuDocDon.soLanDoc
+    unmount()
+
+    // Sau khi rời màn, một đơn làm Phở bò vượt hẳn Trà đá. Đọc lại thì Phở lên đầu; giữ cache thì không.
+    await createOrder({
+      customerId: null,
+      customerName: 'Khách lẻ',
+      lines: [{ itemId: pho, name: 'Phở bò', unit: 'tô', unitPrice: 55_000, costPrice: 30_000, qty: 4 }],
+      discount: 0,
+      surcharge: 0,
+      soldAt: Date.now(),
+      note: '',
+      payment: { amount: 220_000, method: 'cash', note: '' },
+    })
+    renderSales()
+
+    expect((await tenCacO())[0]).toContain('Trà đá')
+    expect(giuDocDon.soLanDoc).toBe(soLanTruoc)
   })
 
   it('đọc thứ hạng lỗi thì lưới Tất cả về thứ tự tên và báo lỗi ra console', async () => {
@@ -1297,6 +1331,9 @@ describe('lưới Tất cả xếp theo bán chạy', () => {
     const cacO = await tenCacO()
     expect(cacO).toHaveLength(1)
     expect(cacO[0]).toContain('Phở bò')
+
     mo()
+    await userEvent.clear(screen.getByPlaceholderText(/Tìm món/))
+    expect((await tenCacO())[0]).toContain('Trà đá')
   })
 })

@@ -6,12 +6,20 @@ import { createItem } from '@/db/repositories/items'
 import { createOrder, voidOrder, WIDE_QUERY } from '@/db/repositories/orders'
 import { installTestDevice, testGid } from '@/test-fixtures'
 
-const { lineQuery } = vi.hoisted(() => ({ lineQuery: vi.fn<(orderCount: number) => void>() }))
+const { lineQuery, docDon } = vi.hoisted(() => ({
+  lineQuery: vi.fn<(orderCount: number) => void>(),
+  docDon: { loi: false, soLanDoc: 0 },
+}))
 
 vi.mock('@/db/repositories/orders', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/db/repositories/orders')>()
   return {
     ...actual,
+    listOrdersBetween: (from: number, to: number) => {
+      docDon.soLanDoc += 1
+      if (docDon.loi) return Promise.reject(new Error('Đọc đơn hỏng'))
+      return actual.listOrdersBetween(from, to)
+    },
     listOrderLinesOfOrders: (orderIds: readonly number[]) => {
       lineQuery(orderIds.length)
       return actual.listOrderLinesOfOrders(orderIds)
@@ -27,6 +35,8 @@ const BAY_GIO = new Date(2026, 9, 11, 10).getTime()
 beforeEach(async () => {
   resetSalesRankCache()
   lineQuery.mockClear()
+  docDon.loi = false
+  docDon.soLanDoc = 0
   await db.open()
   await Promise.all(db.tables.map((table) => table.clear()))
   await installTestDevice()
@@ -103,6 +113,25 @@ describe('thứ hạng bán chạy', () => {
     expect(ngayMai).not.toBe(sangNay)
     expect(ngayMai.get(pho)).toBe(0)
     expect(ngayMai.get(tra)).toBe(1)
+  })
+
+  it('đọc hỏng thì trả thứ hạng rỗng, báo lỗi, và lượt sau cùng ngày không đọc lại', async () => {
+    const pho = await taoMon('Phở bò', 55_000)
+    await banDon([[pho, 'Phở bò', 55_000, 1]], BAY_GIO - MOT_GIO)
+    docDon.loi = true
+    const loi = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const hong = await loadSalesRank(BAY_GIO)
+
+    expect(hong.size).toBe(0)
+    expect(loi).toHaveBeenCalledWith('Không đọc được thứ hạng bán chạy:', expect.any(Error))
+    loi.mockRestore()
+
+    // Sổ đọc được trở lại trong ngày vẫn không đổi thứ hạng: lưới không được xếp lại giữa ca.
+    docDon.loi = false
+    const lanSau = await loadSalesRank(BAY_GIO + MOT_GIO)
+    expect(lanSau).toBe(hong)
+    expect(docDon.soLanDoc).toBe(1)
   })
 
   it('từ 1.500 đơn trở lên không đi nhánh quét cả bảng: hỏi dòng hàng dưới ngưỡng', async () => {
