@@ -34,3 +34,6 @@ docs/wireframes/
 *.jks
 *.keystore
 android/keystore.properties
+
+# phiếu Grab bắt được: chứa tên và số điện thoại khách, không đưa vào git
+captures/
