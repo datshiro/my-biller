@@ -58,6 +58,12 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   trường (`preserveItemCatalog`, `preserveItemGroupMenu`), nên máy 2.19.0 sửa giá món topping hay đổi tên nhóm không
   làm mất chúng. Món topping `isActive: 1` bán riêng được như món thường; `isActive: 0` chỉ bán kèm, app cũ tự ẩn khỏi
   lưới vì lọc theo `isActive`.
+- Ghim món: `items.pinned` (0/1). **Không `.default` và không điền lúc đọc**: thiếu khoá là "không biết", UI coi như không
+  ghim. Bỏ ghim ghi `0` tường minh; sửa món chưa từng ghim không ghi khoá. Worker giữ giá trị đang lưu khi payload thiếu
+  khoá (`preserveItemCatalog`, cùng vòng với `kind`/`optionGroupGids`), gộp sao lưu giữ của phía có (`keepCatalogFields`).
+  Không index nên không bump Dexie. Máy bản chưa biết trường kéo món về sẽ bỏ khoá, và không lượt nào kéo lại khi máy lên
+  bản mới, nên **không được có bản phát hành nào có `version(6)` mà thiếu `pinned`** — ra cùng bản với nhóm lựa chọn,
+  hoặc thêm một version kéo lại. Worker lên trước Pages/APK, không rollback Worker về bản chưa biết trường.
 - Bảng `optionGroups` (nhóm lựa chọn: `kind: 'choice'` với `choices`, hoặc `kind: 'topping'` với
   `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
   bộ khi gặp bảng lạ, nên bảng này đi luồng danh mục riêng (mục "Luồng danh mục" bên dưới). Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
