@@ -61,6 +61,27 @@ def thanh_v4_co_menu_cu(van_ban, ten_nhom):
     return json.dumps(ban, ensure_ascii=False, indent=2)
 
 
+def thanh_file_may_cu_sua_gia(van_ban, ten_mon, gia):
+    """File như máy bản 2.19.0 xuất sau khi sửa giá `ten_mon`: `version` 4, chưa có bảng nhóm lựa chọn, món không có
+    `kind`/`optionGroupGids`/`pinned` (bản cũ bỏ khoá lạ khi đọc), món vừa sửa có `updatedAt` mới hơn bản trên máy."""
+    import json
+
+    ban = json.loads(van_ban)
+    data = ban["data"]
+    data.pop("optionGroups", None)
+    for group in data["itemGroups"]:
+        group.pop("optionGroupGids", None)
+    for item in data["items"]:
+        for khoa in ("kind", "optionGroupGids", "pinned"):
+            item.pop(khoa, None)
+        if item["name"] == ten_mon:
+            item["unitPrice"] = int(gia)
+            item["updatedAt"] += 60_000
+    ban["version"] = 4
+    ban["appVersion"] = "2.19.0"
+    return json.dumps(ban, ensure_ascii=False, indent=2)
+
+
 def thanh_v1(van_ban):
     """Biến một file sao lưu v4 thành đúng hình dạng file v1 của bản cũ: không gid, không bảng giá riêng,
     khoản thu chưa có allocatedOrderId, mã đơn chưa có chữ máy (PBH-YYMMDD-NNN)."""

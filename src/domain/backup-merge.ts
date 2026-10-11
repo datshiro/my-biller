@@ -175,10 +175,10 @@ function keepServiceMode(
 }
 
 /**
- * File của bản 2.19.0 không có `kind`/`optionGroupGids`: món topping mà máy sửa giá trên bản cũ thắng bằng `updatedAt`
- * mới hơn với hàng thiếu hai trường. Hàng thắng mà thiếu trường thì "không biết", không phải "xoá" — lấy của phía kia.
+ * File của bản 2.19.0 không có `kind`/`optionGroupGids`/`pinned`: món topping (hay món đã ghim) mà máy sửa giá trên bản
+ * cũ thắng bằng `updatedAt` mới hơn với hàng thiếu các trường đó. Hàng thắng mà thiếu trường thì "không biết", không phải "xoá" — lấy của phía kia.
  */
-function keepCatalogFields<R extends { gid: string; kind?: unknown; optionGroupGids?: unknown }>(
+function keepCatalogFields<R extends { gid: string; kind?: unknown; optionGroupGids?: unknown; pinned?: unknown }>(
   rows: R[],
   local: readonly R[],
   file: readonly R[],
@@ -190,8 +190,9 @@ function keepCatalogFields<R extends { gid: string; kind?: unknown; optionGroupG
       const other = side.get(row.gid)
       filled.kind ??= other?.kind
       filled.optionGroupGids ??= other?.optionGroupGids
+      filled.pinned ??= other?.pinned
     }
-    for (const field of ['kind', 'optionGroupGids'] as const) {
+    for (const field of ['kind', 'optionGroupGids', 'pinned'] as const) {
       if (filled[field] === undefined) delete filled[field]
     }
     return filled

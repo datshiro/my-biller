@@ -1246,6 +1246,33 @@ Menu cũ do máy 2.19.0 cài trước khi có máy bản mới được di trú 
     Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trân châu")    ==    0
     Máy Cũ Không Bị Từ Chối Event Nào
 
+Máy bản 2.19.0 sửa giá món đã ghim thì máy mới vẫn thấy ghim và món vẫn ở ô đầu
+    [Documentation]    Bản 2.19.0 không biết `pinned`: nó bỏ khoá khi đọc rồi đẩy lên cả hàng thiếu khoá. Worker phải
+    ...    giữ ghim đã lưu (thiếu khoá là "không biết", không phải bỏ ghim). Kiểm bằng bản cũ thật, đối chiếu IndexedDB
+    ...    hai máy mới: giá mới tới nơi mà `pinned` vẫn là 1.
+    Chọn Máy A
+    ${món}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${trà}=    Evaluate    next(m for m in $món if m['name'] == 'Trà đá')
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /them/mat-hang/${trà}[id]
+    Bấm Nút    Ghim lên đầu màn bán
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Ghép Máy Cũ
+
+    Mở Màn Máy Cũ    /them/mat-hang
+    Click    css=button:has-text("Trà đá")
+    Điền Ô    Giá bán *    7000
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${MÁY_CŨ_URL}/them/mat-hang
+    Máy Cũ Không Bị Từ Chối Event Nào
+
+    Wait Until Keyword Succeeds    80x    500ms    Giá Mặt Hàng Phải Là    Trà đá    7000    ${MÁY_A_PAGE}
+    Món Phải Có Ghim    ${trà}[gid]    1    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Giá Mặt Hàng Phải Là    Trà đá    7000    ${MÁY_B_PAGE}
+    Món Phải Có Ghim    ${trà}[gid]    1    ${MÁY_B_PAGE}
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /
+    Ô Đầu Lưới Bán Phải Là    Trà đá
+
 *** Keywords ***
 Trân Châu Phải Là Một Món Topping Đang Bán
     [Arguments]    ${page}

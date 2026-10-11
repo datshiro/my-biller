@@ -304,6 +304,32 @@ Gắn nhóm lựa chọn thẳng vào món ở form món; trùng nhãn với nh�
     ${thạch}=    Evaluate    [m['kind'] for m in $món if m['name'] == 'Thạch']
     Should Be Equal    ${thạch}    ${{ ['topping'] }}
 
+Ghim món thì món lên ô đầu màn bán; bỏ ghim thì sổ ghi pinned 0 và món về chỗ cũ
+    [Documentation]    Bỏ ghim phải ghi `pinned: 0` tường minh chứ không xoá khoá: thiếu khoá là "không biết", Worker
+    ...    và gộp sao lưu sẽ giữ lại ghim cũ. Món đích là món không đứng đầu lưới, để thấy ghim thật sự đẩy nó lên.
+    Mở Màn    /
+    ${đầu_trước}=    Tên Ô Đầu Lưới Bán
+    ${món}=    Đọc Bảng    items
+    ${đích}=    Evaluate    [m for m in $món if m['isActive'] == 1 and m['name'] != $đầu_trước][0]
+
+    Mở Màn    /them/mat-hang/${đích}[id]
+    Bấm Nút    Ghim lên đầu màn bán
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Món Phải Có Ghim    ${đích}[gid]    1
+    Mở Màn    /
+    Ô Đầu Lưới Bán Phải Là    ${đích}[name]
+    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=[aria-label="Đã ghim"]    ==    1
+
+    Mở Màn    /them/mat-hang/${đích}[id]
+    Bấm Nút    Ghim lên đầu màn bán
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Món Phải Có Ghim    ${đích}[gid]    0
+    Mở Màn    /
+    Ô Đầu Lưới Bán Phải Là    ${đầu_trước}
+    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=[aria-label="Đã ghim"]    ==    0
+
 Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có topping, món ngoài nhóm thì không
     Cài Thực Đơn Đồ Uống
     Mở Màn    /

@@ -262,6 +262,32 @@ Gộp: bản mới hơn thắng, bản cũ hơn thua
     Xác Nhận Gộp
     Giá Món Phải Là    ${trà}[gid]    4000
 
+Gộp file xuất từ máy bản cũ không gỡ ghim của món máy đã ghim
+    [Documentation]    File bản 2.19.0 không có `pinned`. Món máy cũ sửa giá thắng bằng `updatedAt` mới hơn, nhưng hàng
+    ...    thắng thiếu khoá là "không biết" chứ không phải bỏ ghim: giá lấy của file, ghim giữ của máy.
+    ${món}=    Đọc Bảng    items
+    ${trà}=    Evaluate    next(i for i in $món if i['name'] == 'Trà đá')
+    Mở Màn    /them/mat-hang/${trà}[id]
+    Bấm Nút    Ghim lên đầu màn bán
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Món Phải Có Ghim    ${trà}[gid]    1
+
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${văn_bản}=    Get File    ${f}
+    ${nội_dung}=    Thanh File May Cu Sua Gia    ${văn_bản}    Trà đá    6000
+    ${cũ}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-may-cu-sua-gia.json
+    Create File    ${cũ}    ${nội_dung}
+
+    Mở Xem Trước Gộp    ${cũ}
+    Bấm Gộp Qua Cửa File An Toàn
+    Xác Nhận Gộp
+    Giá Món Phải Là    ${trà}[gid]    6000
+    Món Phải Có Ghim    ${trà}[gid]    1
+    Mở Màn    /
+    Ô Đầu Lưới Bán Phải Là    Trà đá
+
 Gộp: Thêm riêng khoản thu của đơn đã huỷ trên máy không để khoản thu trừ vào đơn huỷ
     [Documentation]    Lỗi cũ: recalcAll duyệt payments bằng each(async …) không chờ lần sửa, nên dòng cuối trừ vào
     ...    đơn đã huỷ không được bỏ phân bổ khi chạy trong khoá nhập. Bán có thu tiền cho Anh Hùng, sao lưu, huỷ

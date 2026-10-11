@@ -138,6 +138,9 @@ export const ItemSchema = z.object({
   // nhóm topping — app cũ lọc lưới theo `isActive` nên tự ẩn nó mà không cần trường riêng.
   kind: ItemKindSchema.optional(),
   optionGroupGids: OptionGroupGids.optional(),
+  // Không `.default` và không điền lúc đọc: máy 2.19.0 ghi lại hàng thiếu khoá này, và "thiếu" phải còn là "không biết"
+  // để Worker/gộp sao lưu giữ ghim đã lưu. Thiếu khoá = không ghim; bỏ ghim ghi `0` tường minh.
+  pinned: Flag.optional(),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })

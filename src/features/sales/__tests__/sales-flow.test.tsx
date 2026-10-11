@@ -11,7 +11,7 @@ import { db } from '@/db/db'
 import { migrateLocalCatalog } from '@/db/catalog-migration'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
-import { createGroup, createItem } from '@/db/repositories/items'
+import { createGroup, createItem, updateItem } from '@/db/repositories/items'
 import { createOptionGroup } from '@/db/repositories/option-groups'
 import { createOrder, getOrderLines } from '@/db/repositories/orders'
 import { installTestDevice } from '@/test-fixtures'
@@ -1240,6 +1240,19 @@ describe('lưới Tất cả xếp theo bán chạy', () => {
     const cacO = await tenCacO()
     expect(cacO[0]).toContain('Trà đá')
     expect(cacO[1]).toContain('Phở bò')
+  })
+
+  it('món ghim đứng trước món bán chạy và có dấu ghim trên ô', async () => {
+    const { pho, tra } = await seedBanChay()
+    await banTraTruocPho(pho, tra)
+    await updateItem(pho, { pinned: 1 })
+    renderSales()
+
+    const cacO = await tenCacO()
+    expect(cacO[0]).toContain('Phở bò')
+    expect(cacO[1]).toContain('Trà đá')
+    const grid = screen.getByRole('group', { name: 'Mặt hàng' })
+    expect(within(grid).getAllByRole('img', { name: 'Đã ghim' })).toHaveLength(1)
   })
 
   it('khi chưa có thứ hạng thì lưới Tất cả là khung giữ chỗ, không có ô nào chạm được', async () => {
