@@ -3,6 +3,8 @@ Documentation       Màn Bán hàng — luồng kiếm ra tiền của app. Ki�
 ...                 liên quan tới số tiền, vì giao diện hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
 Resource            ../resources/app.resource
 Resource            ../resources/sales.resource
+Resource            ../resources/sao-luu.resource
+Library             ../libraries/so_no.py
 Suite Setup         Mở Trình Duyệt Cho Suite
 Suite Teardown      Đóng Trình Duyệt Cuối Suite
 Test Setup          Mở Phiên Có Dữ Liệu Mẫu
@@ -1287,7 +1289,115 @@ APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu t
     Should Be Equal As Integers    ${dòng_thu}[0][amount]    ${đơn}[total]    Số tiền trong dòng thu không khớp tổng đơn.
 
 
+Topping bán riêng lên lưới và vào sổ thành một dòng, topping chỉ bán kèm không lên lưới
+    [Documentation]    Món topping `isActive` 1 là món thường trên lưới: chạm là vào giỏ, đơn ghi một dòng trỏ
+    ...    đúng món topping nên báo cáo bán chạy đếm được. Topping `isActive` 0 chỉ bán kèm qua nhóm topping.
+    Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trân châu")    visible
+    ${ô_pudding}=    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Pudding")
+    Should Be Equal As Integers    ${ô_pudding}    0    Topping chỉ bán kèm hiện ra trên lưới bán.
+    Chọn Món    Trân châu
+    Chờ Thấy Chữ    Xem đơn · 1 món
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${món}=    Đọc Bảng    items
+    ${trân_châu}=    Evaluate    next(m for m in $món if m['name'] == 'Trân châu')
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [(d['itemId'], d['name'], d['unitPrice'], d['qty'], d['amount'], d['toppings']) for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Should Be Equal    ${của_đơn}    ${{ [($trân_châu['id'], 'Trân châu', 5000, 1, 5000, [])] }}
+    ...    Topping bán riêng không xuống sổ thành một dòng trỏ món topping.
+    Should Be Equal As Integers    ${đơn}[total]    5000
+
+Cà phê sữa kèm trân châu x2: nhóm bắt buộc khoá nút THÊM, Đường mặc định 100% đổi sang 50%, sổ đủ tiền topping
+    [Documentation]    Nhóm lựa chọn dùng chung gắn vào món: Size bắt buộc chưa chọn thì THÊM khoá và chân sheet nói
+    ...    thiếu nhóm nào; Đường có mặc định 100% chọn sẵn. Tiền topping đối chiếu thẳng `orderLines`:
+    ...    (20.000 + 5.000 × 2) × 1 = 30.000, topping mang giá lúc bán.
+    Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    ${mặc_định}=    Chip Đang Chọn    100%
+    Should Be Equal    ${mặc_định}    true    Lựa chọn mặc định không được chọn sẵn.
+    Wait For Elements State    ${SHEET} >> css=button:has-text("THÊM")    disabled
+    Chờ Thấy Chữ    Chưa chọn: Size
+    Chọn Chip    M
+    Chọn Chip    50%
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Wait For Elements State    ${SHEET} >> css=button:has-text("THÊM · 30.000")    enabled
+    Bấm Thêm Vào Đơn
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    ${ly}=    Set Variable    ${của_đơn}[0]
+    Should Be Equal As Integers    ${ly}[unitPrice]    20000    `unitPrice` phải là giá ly, không gồm topping.
+    Should Be Equal As Integers    ${ly}[amount]    30000    Thành tiền xuống sổ không gồm đúng tiền topping.
+    Should Be Equal    ${{ sorted($ly['options']) }}    ${{ ['50%', 'M'] }}    Lựa chọn trên dòng không đúng.
+    ${topping}=    Evaluate    [(t['name'], t['unitPrice'], t['qty']) for t in $ly['toppings']]
+    Should Be Equal    ${topping}    ${{ [('Trân châu', 5000, 2)] }}    Topping không xuống sổ kèm giá lúc bán.
+    Should Be Equal As Integers    ${đơn}[total]    30000    Tổng đơn lệch tổng các dòng.
+
+Ghi chú nhanh chọn được hai mục, mục thứ ba bị khoá, cả hai xuống sổ
+    [Documentation]    Nhóm chọn-nhiều (tối đa 2) là ghi chú nhanh: chạm là thêm đúng mục đó, đủ số thì mục mới khoá.
+    ...    Nhãn nằm trong `options` của dòng như mọi lựa chọn khác.
+    Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Chọn Chip    L
+    Chọn Chip    Ít ngọt
+    Chọn Chip    Mang ống hút
+    Wait For Elements State    css=button[aria-pressed]:text-is("Không nắp")    disabled
+    ${ít_ngọt}=    Chip Đang Chọn    Ít ngọt
+    Should Be Equal    ${ít_ngọt}    true    Chọn mục thứ hai gỡ mất mục thứ nhất.
+    Bấm Thêm Vào Đơn
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${lựa_chọn}=    Evaluate    [sorted(d['options']) for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Should Be Equal    ${lựa_chọn}    ${{ [sorted(['L', '100%', 'Ít ngọt', 'Mang ống hút'])] }}
+    Should Be Equal As Integers    ${đơn}[total]    20000
+
+Món không gắn nhóm lựa chọn vẫn một chạm vào giỏ và vẫn có Đá chung / Đá riêng
+    [Documentation]    "Đá chung / Đá riêng" là hằng có sẵn cho mọi món, không phải nhóm dữ liệu: món chỉ có hằng
+    ...    này không mở sheet khi chạm, nhưng sửa dòng vẫn chọn được và nhãn xuống sổ.
+    Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Chờ Thấy Chữ    Xem đơn · 1 món
+    Sửa Dòng    Phở bò đặc biệt
+    Chọn Chip    Đá riêng
+    Click    ${SHEET} >> css=button:text-is("XONG")
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${lựa_chọn}=    Evaluate    [d['options'] for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Should Be Equal    ${lựa_chọn}    ${{ [['Đá riêng']] }}
+
+
 *** Keywords ***
+Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    [Documentation]    Màn cài nhóm lựa chọn chưa có, nên dựng danh mục kiểu mới bằng đường Ghi đè file thật:
+    ...    sao lưu sổ mẫu, thêm hai món topping và bốn nhóm gắn vào Cà phê sữa, rồi khôi phục.
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${văn_bản}=    Get File    ${f}
+    ${nội_dung}=    Them Nhom Lua Chon    ${văn_bản}    Cà phê sữa
+    ${v5}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-nhom-lua-chon.json
+    Create File    ${v5}    ${nội_dung}
+    Nhập File Sao Lưu    ${v5}
+    ${nhóm_lc}=    Đọc Bảng    optionGroups
+    Length Should Be    ${nhóm_lc}    4    Khôi phục chưa ghi đủ nhóm lựa chọn.
+
 Nâng Version Sổ Trên Máy
     [Documentation]    Mở IndexedDB của app ở version cao hơn — như một bản app mới hơn trên cùng máy — để app
     ...    hiện màn chặn "Cần cập nhật app".

@@ -214,6 +214,15 @@ Cài Thực Đơn Đồ Uống
     Điền Ô    Giá topping 2    3000
     Click    css=[role=dialog] >> css=button:text-is("LƯU")
     Wait Until Keyword Succeeds    20x    250ms    Nhóm Đồ Uống Phải Có Thực Đơn
+    # Màn bán chỉ đọc nhóm lựa chọn. Sheet này còn ghi menu kiểu cũ (màn cài nhóm lựa chọn chưa có): máy chưa ghép
+    # chuyển nó khi mở lại app, máy đã ghép nhận bản Worker chuyển qua lượt kéo. Chờ đủ hai nhóm rồi mới bán.
+    Mở Màn    /
+    Wait Until Keyword Succeeds    80x    500ms    Nhóm Đồ Uống Phải Có Nhóm Lựa Chọn
+
+Nhóm Đồ Uống Phải Có Nhóm Lựa Chọn
+    ${nhóm_lc}=    Đọc Bảng    optionGroups
+    ${tên}=    Evaluate    sorted(g['name'] for g in $nhóm_lc)
+    Should Be Equal    ${tên}    ${{ ['Topping Đồ uống', 'Đường'] }}
 
 Nhóm Đồ Uống Phải Có Thực Đơn
     ${nhóm}=    Đọc Bảng    itemGroups

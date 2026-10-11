@@ -1,28 +1,165 @@
-import type { LineTopping, LegacyOptionGroup, ToppingMenuItem } from './schema'
+import { catalogNameKey } from '@shared/catalog-migration'
+import type { Item, ItemGroup, LineTopping, LegacyOptionGroup, OptionGroupRow, ToppingMenuItem } from './schema'
 
 /**
  * Nhóm tuỳ chọn có sẵn cho MỌI món, không phải một hàng thực đơn phải seed và đồng bộ cho từng nhóm món.
  * Hai nhãn đá loại trừ nhau: một ly không thể vừa đá chung vừa đá riêng, muốn cả hai kiểu thì đó là hai dòng.
  */
-export const ICE_OPTION_GROUP: LegacyOptionGroup = { name: 'Đá', choices: ['Đá chung', 'Đá riêng'] }
-
-export const optionGroupsFor = (menu: { optionGroups: readonly LegacyOptionGroup[] } | undefined): LegacyOptionGroup[] => [
-  ICE_OPTION_GROUP,
-  ...(menu?.optionGroups ?? []),
-]
+export const ICE_OPTION_GROUP: LegacyOptionGroup = {
+  name: 'Đá',
+  choices: ['Đá chung', 'Đá riêng'],
+}
 
 /**
- * Bật/tắt một lựa chọn: bấm lựa chọn khác trong cùng nhóm thì THAY, bấm lại lựa chọn đang chọn thì gỡ.
- * Nhãn của nhóm khác giữ nguyên thứ tự.
+ * Một nhóm lựa chọn như màn bán thấy: đã bỏ phần trỏ vào chỗ trống, topping đã mang tên và giá bán kèm.
+ * `maxSelect` `null` là không giới hạn — chỉ nhóm topping có; nhóm tuỳ chọn thiếu số là chọn-một.
  */
-export function toggleOption(options: readonly string[], group: LegacyOptionGroup, choice: string): string[] {
-  const others = options.filter((option) => !group.choices.includes(option))
-  return options.includes(choice) ? others : [...others, choice]
+export type SaleOptionGroup = {
+  gid: string
+  name: string
+  required: boolean
+  maxSelect: number | null
+} & (
+  { kind: 'choice'; choices: string[]; defaultChoice: string | null } | { kind: 'topping'; toppings: ToppingMenuItem[] }
+)
+
+export type SaleChoiceGroup = Extract<SaleOptionGroup, { kind: 'choice' }>
+export type SaleToppingGroup = Extract<SaleOptionGroup, { kind: 'topping' }>
+
+const ICE_SALE_GROUP: SaleChoiceGroup = {
+  gid: 'ice',
+  name: ICE_OPTION_GROUP.name,
+  kind: 'choice',
+  choices: ICE_OPTION_GROUP.choices,
+  required: false,
+  maxSelect: 1,
+  defaultChoice: null,
+}
+
+type Catalog = {
+  optionGroups: readonly OptionGroupRow[]
+  /** Mọi món, kể cả món topping chỉ bán kèm (`isActive: 0`) — giá và tên topping lấy từ đây. */
+  items: readonly Pick<Item, 'gid' | 'name' | 'unitPrice' | 'kind'>[]
+}
+
+/** Nhóm đang bật trong `gids`, xếp theo `sortOrder` chủ quán đặt; hoà thì theo thứ tự gắn. */
+function activeRows(gids: readonly string[], byGid: ReadonlyMap<string, OptionGroupRow>): OptionGroupRow[] {
+  return gids
+    .map((gid, index) => ({ row: byGid.get(gid), index }))
+    .filter((entry): entry is { row: OptionGroupRow; index: number } => entry.row?.isActive === 1)
+    .sort((a, b) => a.row.sortOrder - b.row.sortOrder || a.index - b.index)
+    .map((entry) => entry.row)
+}
+
+/**
+ * Nhóm lựa chọn chủ quán gắn cho món, không gồm hằng Đá: nhóm gắn thẳng vào món trước, rồi nhóm gắn vào nhóm món
+ * (bỏ gid đã có), mỗi khối theo `sortOrder`. Nhóm tắt hay đã mất bị bỏ; topping trỏ món đã xoá hay không còn là món
+ * topping cũng bị bỏ. Hai topping trùng tên thì cái đứng trước giữ chỗ: dòng đơn khoá topping theo tên, và khối nhóm
+ * món theo đúng luật phép chiếu cho máy cũ (`projectLegacyMenu`) nên máy cũ và máy mới bán một topping cùng một giá.
+ */
+export function attachedOptionGroups(
+  item: Pick<Item, 'optionGroupGids'> | undefined,
+  group: Pick<ItemGroup, 'optionGroupGids'> | undefined,
+  catalog: Catalog,
+): SaleOptionGroup[] {
+  return optionGroupLookup(catalog)(item, group)
+}
+
+/** `attachedOptionGroups` với bảng tra dựng một lần cho cả danh mục — màn bán tra cho từng món trên lưới. */
+export function optionGroupLookup(
+  catalog: Catalog,
+): (
+  item: Pick<Item, 'optionGroupGids'> | undefined,
+  group: Pick<ItemGroup, 'optionGroupGids'> | undefined,
+) => SaleOptionGroup[] {
+  const byGid = new Map(catalog.optionGroups.map((row) => [row.gid, row]))
+  const itemByGid = new Map(catalog.items.map((row) => [row.gid, row]))
+  return (item, group) => {
+    const own = item?.optionGroupGids ?? []
+    const rows = [
+      ...activeRows(own, byGid),
+      ...activeRows((group?.optionGroupGids ?? []).filter((gid) => !own.includes(gid)), byGid),
+    ]
+
+    const seenToppings = new Set<string>()
+    return rows.flatMap((row): SaleOptionGroup[] => {
+      const base = { gid: row.gid, name: row.name, required: row.required === 1 }
+      if (row.kind === 'choice') {
+        return [
+          { ...base, kind: 'choice', choices: row.choices, maxSelect: row.maxSelect ?? 1, defaultChoice: row.defaultChoice },
+        ]
+      }
+      const toppings = row.toppings.flatMap((entry): ToppingMenuItem[] => {
+        const topping = itemByGid.get(entry.itemGid)
+        const name = topping?.name.trim()
+        if (!topping || topping.kind !== 'topping' || !name || seenToppings.has(catalogNameKey(name))) return []
+        seenToppings.add(catalogNameKey(name))
+        return [{ name, price: entry.price ?? topping.unitPrice }]
+      })
+      return toppings.length > 0 ? [{ ...base, kind: 'topping', toppings, maxSelect: row.maxSelect }] : []
+    })
+  }
+}
+
+/** Mọi nhóm của sheet: hằng Đá luôn đứng đầu, kể cả món chưa phân nhóm hay nhóm món không gắn gì. */
+export const optionGroupsFor = (...args: Parameters<typeof attachedOptionGroups>): SaleOptionGroup[] =>
+  withIce(attachedOptionGroups(...args))
+
+export const withIce = (attached: readonly SaleOptionGroup[]): SaleOptionGroup[] => [ICE_SALE_GROUP, ...attached]
+
+/**
+ * Món có nhóm lựa chọn riêng thì chạm vào là mở sheet hỏi. Hằng Đá không tính: tính nó thì món nào chạm vào cũng
+ * bật sheet, và Trà đá mất đường một chạm là vào đơn.
+ */
+export const hasOptions = (groups: readonly SaleOptionGroup[]): boolean =>
+  groups.some((group) => group !== ICE_SALE_GROUP)
+
+/** Lựa chọn mặc định của các nhóm, điền sẵn khi mở sheet THÊM. */
+export const defaultOptions = (groups: readonly SaleOptionGroup[]): string[] =>
+  groups.flatMap((group) => (group.kind === 'choice' && group.defaultChoice !== null ? [group.defaultChoice] : []))
+
+/** Nhóm bắt buộc mà dòng chưa chọn gì trong đó. */
+export function isGroupMissing(
+  group: SaleOptionGroup,
+  options: readonly string[],
+  toppings: readonly LineTopping[],
+): boolean {
+  if (!group.required) return false
+  return group.kind === 'choice'
+    ? !group.choices.some((choice) => options.includes(choice))
+    : !group.toppings.some((item) => toppings.some((topping) => topping.name === item.name))
+}
+
+/** Số mục đang chọn trong nhóm: nhãn với nhóm tuỳ chọn, số loại topping (không phải số phần) với nhóm topping. */
+export const selectedCount = (
+  group: SaleOptionGroup,
+  options: readonly string[],
+  toppings: readonly LineTopping[],
+): number =>
+  group.kind === 'choice'
+    ? group.choices.filter((choice) => options.includes(choice)).length
+    : group.toppings.filter((item) => toppings.some((topping) => topping.name === item.name)).length
+
+/**
+ * Bật/tắt một lựa chọn. Nhóm chọn-một: bấm lựa chọn khác thì THAY, bấm lại lựa chọn đang chọn thì gỡ. Nhóm chọn-nhiều
+ * (ghi chú nhanh): bấm là thêm hay gỡ đúng mục đó; đủ `maxSelect` rồi thì bấm mục mới không làm gì. Nhãn của nhóm
+ * khác giữ nguyên thứ tự.
+ */
+export function toggleOption(
+  options: readonly string[],
+  group: Pick<SaleChoiceGroup, 'choices'> & { maxSelect?: number | null },
+  choice: string,
+): string[] {
+  if (options.includes(choice)) return options.filter((option) => option !== choice)
+  const max = group.maxSelect ?? 1
+  if (max <= 1) return [...options.filter((option) => !group.choices.includes(option)), choice]
+  const chosen = group.choices.filter((option) => options.includes(option)).length
+  return chosen >= max ? [...options] : [...options, choice]
 }
 
 /** Nhãn đã chọn mà thực đơn không còn nhóm nào chứa (nhóm bị xoá, hoặc đơn cũ). Vẫn phải gỡ được. */
-export const orphanOptions = (options: readonly string[], groups: readonly LegacyOptionGroup[]): string[] =>
-  options.filter((option) => !groups.some((group) => group.choices.includes(option)))
+export const orphanOptions = (options: readonly string[], groups: readonly SaleOptionGroup[]): string[] =>
+  options.filter((option) => !groups.some((group) => group.kind === 'choice' && group.choices.includes(option)))
 
 /**
  * Đặt số phần của một topping trên dòng; 0 là gỡ. Topping đã có trên dòng giữ NGUYÊN giá lúc chọn: sửa giá
@@ -44,14 +181,6 @@ export const toppingLabel = (topping: Pick<LineTopping, 'name' | 'qty'>): string
 
 /** Tiền của một topping cho MỘT ly (giá lúc bán × số phần) — con số hiện cạnh tên topping trên phiếu. */
 export const toppingAmount = (topping: Pick<LineTopping, 'unitPrice' | 'qty'>): number => topping.unitPrice * topping.qty
-
-/**
- * Nhóm món có thực đơn RIÊNG (tuỳ chọn hay topping do chủ quán cài). Nhóm Đá có sẵn cho mọi món nên không
- * tính: tính nó thì món nào chạm vào cũng bật sheet hỏi, và Trà đá mất đường một chạm là vào đơn.
- */
-export const hasOwnMenu = (
-  menu: { optionGroups: readonly LegacyOptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined,
-): boolean => (menu?.optionGroups.length ?? 0) > 0 || (menu?.toppingMenu.length ?? 0) > 0
 
 /**
  * Cụm ghi chú ngăn bằng "dấu phẩy + khoảng trắng", không phải dấu phẩy trần: dấu phẩy trần là dấu thập phân

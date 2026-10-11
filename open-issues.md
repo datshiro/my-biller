@@ -549,3 +549,26 @@
   bán, cũng không có nút tắt. Ghi chú hiện chỉ nằm ở `docs/dong-bo.md` và `README.md`.
 - Mitigation: mặc định chỉ ghi trong docs (quyết định của #49). Nếu chủ app muốn, thêm một dòng ở Cài đặt hoặc một nút
   tắt nhịp báo; cả hai là quyết định sản phẩm.
+
+### ISSUE-039 — Sheet menu kiểu cũ trên máy chưa ghép không tới màn bán sau khi di trú
+- State: promoted (phase 7 của #87 xoá sheet này và thay bằng màn cài nhóm lựa chọn)
+- Severity: medium
+- Raised by: #87 phase 6 (màn bán đọc nhóm lựa chọn) / Date: 2026-10-11 / Related task: #87 phase 7
+- Description: Từ phase 6 màn bán chỉ đọc `optionGroups`. Sheet "Tuỳ chọn & topping" của nhóm món vẫn ghi
+  `optionGroups`/`toppingMenu` kiểu cũ. Máy đã ghép không sao vì Worker dịch sửa đổi đó sang mô hình mới. Máy chưa
+  ghép thì chỉ di trú một lần, lúc mở app và với nhóm chưa có `optionGroupGids`, nên sửa menu sau đó không tới màn
+  bán.
+- Mitigation: phase 6 và 7 phát hành cùng một bản (`plans/…/plan.md`), nên trạng thái này không tới tay người dùng.
+  Robot dựng menu qua sheet cũ rồi mở lại app để chạy di trú (`Cài Thực Đơn Đồ Uống`). Nếu phase 7 trượt khỏi bản
+  phát hành thì phải dịch tại máy hoặc chặn phát hành.
+
+### ISSUE-040 — Nhãn lựa chọn trùng nhau giữa hai nhóm gắn cùng một món
+- State: promoted (form nhóm lựa chọn ở phase 7 của #87 phải chặn)
+- Severity: medium
+- Raised by: #87 phase 6 / Date: 2026-10-11 / Related task: #87 phase 7
+- Description: Dòng đơn chỉ lưu nhãn phẳng trong `options`. Hai nhóm cùng có nhãn "Ít" (ví dụ Đường và Mức đá) thì
+  chọn ở nhóm này làm chip nhóm kia sáng theo, và bấm nhóm kia gỡ mất lựa chọn. Nhóm bắt buộc cũng bị tính là đã
+  chọn nhờ nhãn của nhóm kia. Sheet cũ đã chặn trùng với hằng Đá.
+- Mitigation: phase 7 chặn nhãn trùng giữa các nhóm gắn cùng món và với `ICE_OPTION_GROUP`, cả lúc lưu nhóm lẫn lúc
+  gắn nhóm vào món hay nhóm món. Các mẫu Đường /
+  Mức đá / Ghi chú nhanh đã chọn nhãn không trùng nhau.

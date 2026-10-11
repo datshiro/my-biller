@@ -1151,6 +1151,48 @@ Máy bản 2.19.0 bán topping từ menu Worker chiếu ra, thêm topping đư�
     Máy Cũ Không Bị Từ Chối Event Nào
     Wait Until Keyword Succeeds    80x    500ms    Dòng Topping Trên Máy A Phải Có    Trân châu    6000    26000
 
+Máy bản 2.19.0 mất mạng tạo món trùng tên topping chỉ bán kèm thì topping thành bán riêng, không sinh món trùng
+    [Documentation]    Bản 2.19.0 tự chặn tên trùng với món nó đã có, nên món trùng chỉ lên tới Worker khi máy cũ chưa kéo
+    ...    về món topping: máy cũ mất mạng, máy mới cài menu (Worker di trú, sinh "Trân châu" chỉ bán kèm), máy cũ tạo
+    ...    "Trân châu" rồi có mạng lại. Luật máy cũ ở Worker: bật topping đó thành bán riêng rồi trả `item-name-taken`, bản
+    ...    cũ nối món vừa tạo vào topping sẵn có. Kiểm bằng bản 2.19.0 thật: không event nào bị từ chối, sổ có đúng một
+    ...    "Trân châu" là món topping đang bán, cả hai máy thấy nó trên lưới, và đơn máy cũ bán nó lên sổ thành một dòng
+    ...    trỏ đúng món topping — đối chiếu IndexedDB máy A.
+    Ghép Máy Cũ
+    Mở Màn Máy Cũ    /them/mat-hang/moi
+    Set Offline    ${True}
+
+    Chọn Máy A
+    Cài Thực Đơn Đồ Uống
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    optionGroups    2    ${MÁY_A_PAGE}
+
+    Chọn Máy Cũ
+    Điền Ô    Tên mặt hàng *    Trân châu
+    Điền Ô    Giá bán *    8000
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${MÁY_CŨ_URL}/them/mat-hang
+    Set Offline    ${False}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_CŨ_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Trân Châu Phải Là Một Món Topping Đang Bán    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Trân Châu Phải Là Một Món Đang Bán Trên Máy Cũ
+
+    Mở Màn Máy Cũ    /
+    Chọn Món    Trân châu
+    Máy Cũ Chốt Đơn
+    # Câu báo duy nhất là lời nối món của bản cũ khi nhận `item-name-taken`, không phải event bị từ chối.
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_CŨ_PAGE}
+    ${state}=    Đọc Bảng    deviceState    ${MÁY_CŨ_PAGE}
+    ${báo}=    Evaluate    [row.get('message') for row in $state if row.get('key') == 'notice']
+    Length Should Be    ${báo}    1    Máy cũ phải nhận đúng một câu báo nối món: ${báo}
+    Should Contain    ${báo}[0]    Máy này đã nối sang món có sẵn; giá bán hiện tại của món là 5.000 đ.
+    ${món_a}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${id_a}=    Evaluate    next(m['id'] for m in $món_a if m['name'] == 'Trân châu')
+    Wait Until Keyword Succeeds    80x    500ms    Dòng Trân Châu Bán Riêng Trên Máy A Phải Trỏ Món    ${id_a}
+
+    Chọn Máy A
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trân châu")    visible
+
 Máy bản 2.19.0 xoá topping đang dùng hay sửa menu quá giới hạn thì không bị từ chối, máy mới thấy cảnh báo
     [Documentation]    Sổ chung không được từ chối event của máy cũ: bản cũ cuộn ngược cả các đơn làm sau event bị từ
     ...    chối. Xoá món đang là topping thành ghi lại bản đang lưu (món quay về máy cũ); tên topping dài quá giới hạn
@@ -1207,6 +1249,23 @@ Menu cũ do máy 2.19.0 cài trước khi có máy bản mới được di trú 
     Máy Cũ Không Bị Từ Chối Event Nào
 
 *** Keywords ***
+Trân Châu Phải Là Một Món Topping Đang Bán
+    [Arguments]    ${page}
+    ${món}=    Đọc Bảng    items    ${page}
+    ${khớp}=    Evaluate    [(m.get('kind'), m['isActive'], m['unitPrice']) for m in $món if m['name'] == 'Trân châu']
+    Should Be Equal    ${khớp}    ${{ [('topping', 1, 5000)] }}    Sổ phải có đúng một Trân châu là món topping đang bán.
+
+Trân Châu Phải Là Một Món Đang Bán Trên Máy Cũ
+    ${món}=    Đọc Bảng    items    ${MÁY_CŨ_PAGE}
+    ${khớp}=    Evaluate    [m['isActive'] for m in $món if m['name'] == 'Trân châu']
+    Should Be Equal    ${khớp}    ${{ [1] }}    Máy cũ phải có đúng một Trân châu đang bán.
+
+Dòng Trân Châu Bán Riêng Trên Máy A Phải Trỏ Món
+    [Arguments]    ${item_id}
+    ${dòng}=    Đọc Bảng    orderLines    ${MÁY_A_PAGE}
+    ${khớp}=    Evaluate    [(d['itemId'], d['unitPrice'], d['qty'], d['amount'], d['toppings']) for d in $dòng if d['name'] == 'Trân châu']
+    Should Be Equal    ${khớp}    ${{ [(${item_id}, 5000, 1, 5000, [])] }}    Đơn máy cũ bán Trân châu chưa lên sổ đúng món topping.
+
 Dòng Topping Trên Máy A Phải Có
     [Documentation]    Đơn máy cũ bán đã lên sổ chung và về máy A: một dòng cà phê sữa kèm đúng một phần topping với
     ...    giá lúc bán và thành tiền đúng. Đọc IndexedDB của máy A, không tin con số trên màn máy cũ.

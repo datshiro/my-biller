@@ -11,11 +11,11 @@ import { useCart } from './use-cart'
 import { buildPriceBook, listPriceBook } from '@/db/repositories/customer-prices'
 import { getCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
-import { useItemGroups, useItems } from '@/features/items/use-items'
+import { useItemGroups, useItems, useOptionGroups } from '@/features/items/use-items'
 import { BackupBanner } from '@/features/settings/backup-banner'
 import { useDeviceIdentity } from '@/features/settings/use-settings'
 import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
-import { hasOwnMenu } from '@/domain/line-extras'
+import { defaultOptions, hasOptions, isGroupMissing, optionGroupLookup, withIce } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import { normalizeName, readOrderText } from '@/domain/order-draft/parse-order-text'
 import { resolveUnitPrice, type PriceBook, type PriceMode } from '@/domain/wholesale-price'
@@ -31,11 +31,14 @@ import { AdjustSheet } from './adjust-sheet'
 type OpenSheet = 'none' | 'cart' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
 
 const KHONG_CO_GIA_RIENG: PriceBook = new Map()
+/** Nhóm của món không còn trong danh mục (dòng nháp cũ, món đã xoá): chỉ còn hằng Đá. */
+const CHI_CO_DA = withIce([])
 
 export function SalesPage() {
   const navigate = useNavigate()
   const items = useItems()
   const groups = useItemGroups()
+  const optionGroups = useOptionGroups()
   const deviceIdentity = useDeviceIdentity()
   const { cart, dispatch, reset, restored } = useCart()
 
@@ -181,11 +184,26 @@ export function SalesPage() {
     void applyMode(mode, customerId)
   }
 
-  const menuOf = (groupId: number | null | undefined) => groups?.find((group) => group.id === groupId)
+  /** Nhóm lựa chọn của từng món, dựng một lần mỗi khi danh mục đổi thay vì tra lại trong từng ô lưới. */
+  const optionsByItem = useMemo(() => {
+    const lookup = optionGroupLookup({ optionGroups: optionGroups ?? [], items: items ?? [] })
+    const groupById = new Map((groups ?? []).map((group) => [group.id, group]))
+    return new Map(
+      (items ?? []).map((item) => [
+        item.id,
+        withIce(lookup(item, item.groupId === null ? undefined : groupById.get(item.groupId))),
+      ]),
+    )
+  }, [items, groups, optionGroups])
+  const optionsOf = (itemId: number | null | undefined) => optionsByItem.get(itemId ?? undefined) ?? CHI_CO_DA
+  const itemHasOptions = (item: Item) => hasOptions(optionsOf(item.id))
+  /** Nhóm bắt buộc mà lựa chọn mặc định chưa lấp — món đó phải qua sheet, không vào giỏ thẳng được. */
+  const needsChoice = (itemId: number | null) =>
+    optionsOf(itemId).filter((group) => isGroupMissing(group, defaultOptions(optionsOf(itemId)), []))
 
   const addItem = (item: Item) => {
     setQuery('')
-    if (hasOwnMenu(menuOf(item.groupId))) {
+    if (itemHasOptions(item)) {
       setAdding(item)
       return
     }
@@ -210,23 +228,40 @@ export function SalesPage() {
         ? []
         : [{ id: item.id, name: item.name, unit: item.unit, unitPrice: item.unitPrice, costPrice: item.costPrice }],
     )
-    const { lines, rejected } = readOrderText(query, candidates)
+    const read = readOrderText(query, candidates)
+    const { rejected } = read
+    // Gõ nhanh không mở sheet nên không chọn được nhóm bắt buộc: cụm đó ở lại trong ô, người bán chạm món để chọn.
+    const held = read.lines.filter((line) => needsChoice(line.itemId).length > 0)
+    const lines = read.lines.filter((line) => !held.includes(line))
 
     // Báo TRƯỚC khi thoát sớm: không đọc được cụm nào là hỏng nặng hơn đọc được một nửa, im lặng ở
     // nhánh nặng hơn là ngược đời. Chỉ ĐẶT notice của mình, không `setNotice(null)` để dọn —
     // banner đang đứng có thể là cảnh báo giỏ mang giá lẻ trong khi công tắc là SỈ (`applyMode`),
     // và nuốt nó đi là để đơn chốt ở giá sai không dấu vết.
-    if (rejected.length > 0) {
+    if (held.length > 0) {
+      const first = held[0]
+      const missing = first ? needsChoice(first.itemId).map((group) => group.name).join(', ') : ''
+      setNotice({ text: `${first?.name} cần chọn ${missing} — chạm món trên lưới để chọn.` })
+    } else if (rejected.length > 0) {
       setNotice({
         text: `Chưa đọc được ${rejected.length === 1 ? 'phần' : `${rejected.length} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.`,
       })
     }
-    if (lines.length === 0) return
+    // Phần đã thêm được rời ô; phần đọc không được hay còn phải chọn thì ở lại, không bị xoá trắng không dấu vết.
+    const keep = [...held.map((line) => `${formatQty(line.qty)} ${line.name}`), ...rejected].join(', ')
+    if (lines.length === 0) {
+      if (held.length > 0) setQuery(keep)
+      return
+    }
 
-    for (const line of lines) dispatch({ type: 'addLine', line, book })
+    // Gõ nhanh không mở sheet, nhưng vẫn mang lựa chọn mặc định: thiếu nó thì ly gõ và ly chạm lưới thành hai dòng
+    // chỉ khác một nhãn mặc định.
+    for (const line of lines) {
+      dispatch({ type: 'addLine', line: { ...line, options: defaultOptions(optionsOf(line.itemId)) }, book })
+    }
     // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
     // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
-    setQuery(rejected.join(', '))
+    setQuery(keep)
   }
 
   // Nhánh lỗi của `run` không đụng tới giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
@@ -434,7 +469,8 @@ export function SalesPage() {
           </div>
         ) : null}
 
-        {items === undefined ? (
+        {/* Chờ đủ ba nguồn: món về trước nhóm lựa chọn thì chạm lúc đó là bỏ qua sheet, mặc định và nhóm bắt buộc. */}
+        {items === undefined || groups === undefined || optionGroups === undefined ? (
           <ListSkeleton />
         ) : active.length === 0 ? (
           <EmptyState
@@ -455,7 +491,7 @@ export function SalesPage() {
             items={visible}
             qtyOf={qtyOf}
             priceOf={priceOf}
-            hasMenu={(item) => hasOwnMenu(menuOf(item.groupId))}
+            hasMenu={itemHasOptions}
             onPick={addItem}
             onAdd={() => void navigate('/them/mat-hang/moi')}
           />
@@ -593,7 +629,7 @@ export function SalesPage() {
       {editing ? (
         <LineEditSheet
           line={editing}
-          menu={menuOf(items?.find((item) => item.id === editing.itemId)?.groupId)}
+          groups={optionsOf(editing.itemId)}
           subtitle={`Dòng ${cart.lines.findIndex((line) => line.key === editing.key) + 1} trong đơn`}
           onApply={({ qty, unitPrice, options, toppings, note }) => {
             // `updateLine` với qty 0 cũng gỡ dòng, nhưng lặng lẽ. Đẩy nhánh đó qua cùng handler với ô
@@ -625,12 +661,12 @@ export function SalesPage() {
             priceSource: 'catalog',
             costPrice: adding.costPrice,
             qty: 1,
-            options: [],
+            options: defaultOptions(optionsOf(adding.id)),
             toppings: [],
             note: '',
           }}
           subtitle={`${formatAmount(priceOf(adding))}${adding.unit ? ` / ${adding.unit}` : ''}`}
-          menu={menuOf(adding.groupId)}
+          groups={optionsOf(adding.id)}
           onApply={({ qty, options, toppings, note }) => {
             // Đi qua `addLine` để giá vẫn resolve theo chế độ Lẻ / SỈ đang chốt, như đường chạm món thường.
             // Đơn giá không sửa được ở đây: sheet thêm không có ô đơn giá.

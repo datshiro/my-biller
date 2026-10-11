@@ -262,7 +262,10 @@ const optionGroupFields = {
   gid: Gid,
   name: z.string().trim().min(1).max(OPTION_LABEL_MAX),
   required: Flag,
-  /** `null` hoặc 1 là chọn-một; lớn hơn 1 là chọn-nhiều (ghi chú nhanh). */
+  /**
+   * Nhóm tuỳ chọn: `null` hoặc 1 là chọn-một, lớn hơn 1 là chọn-nhiều (ghi chú nhanh). Nhóm topping: `null` là không
+   * giới hạn, có số là tối đa bấy nhiêu LOẠI topping (số phần mỗi loại không tính).
+   */
   maxSelect: z.number().int().min(1).max(OPTION_GROUP_ITEMS_MAX).nullable(),
   defaultChoice: z.string().nullable(),
   sortOrder: z.number().int(),

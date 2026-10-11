@@ -1,17 +1,20 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CartLine } from '@/domain/cart'
 import {
   hasNotePhrase,
-  optionGroupsFor,
+  isGroupMissing,
   orphanOptions,
   recentNotePhrases,
+  selectedCount,
   setToppingQty,
   toggleNotePhrase,
   toggleOption,
+  type SaleChoiceGroup,
+  type SaleOptionGroup,
 } from '@/domain/line-extras'
 import { formatAmount, parseQtyInput, formatQty } from '@/domain/money'
 import { calcLineAmount, calcUnitPriceWithToppings } from '@/domain/order-total'
-import type { LineTopping, LegacyOptionGroup, ToppingMenuItem } from '@/domain/schema'
+import type { LineTopping, ToppingMenuItem } from '@/domain/schema'
 import { listRecentLineNotes } from '@/db/repositories/orders'
 import { Button } from '@/ui/button'
 import { SelectChip } from '@/ui/chip'
@@ -65,6 +68,14 @@ function ToppingRow({
   )
 }
 
+/** Nhãn phụ cạnh tên nhóm: người bán biết nhóm nào phải chọn và chọn được mấy cái trước khi chạm. */
+function groupHint(group: SaleOptionGroup): string {
+  const parts = group.required ? ['bắt buộc'] : []
+  if (group.kind === 'choice' && (group.maxSelect ?? 1) > 1) parts.push(`chọn tối đa ${group.maxSelect}`)
+  if (group.kind === 'topping' && group.maxSelect !== null) parts.push(`tối đa ${group.maxSelect} loại`)
+  return parts.join(' · ')
+}
+
 /** Nguồn của đơn giá đang hiện, để người bán biết bấm "Đổi giá" là đổi cái gì. Ngắn để vừa một dòng ở 320px. */
 const priceOrigin = (line: CartLine) => {
   if (line.priceSource === 'manual') return 'giá riêng'
@@ -78,7 +89,7 @@ const priceOrigin = (line: CartLine) => {
  */
 export function LineEditSheet({
   line,
-  menu,
+  groups,
   mode = 'edit',
   subtitle,
   onApply,
@@ -86,8 +97,8 @@ export function LineEditSheet({
   onClose,
 }: {
   line: CartLine
-  /** Thực đơn tuỳ chọn và topping của nhóm món chứa món này; `undefined` là món chưa phân nhóm. */
-  menu: { optionGroups: readonly LegacyOptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined
+  /** Nhóm lựa chọn của món (`optionGroupsFor`), hằng Đá đứng đầu. Lựa chọn mặc định do chỗ gọi điền sẵn vào `line`. */
+  groups: readonly SaleOptionGroup[]
   mode?: 'add' | 'edit'
   subtitle?: string
   onApply: (patch: {
@@ -113,6 +124,7 @@ export function LineEditSheet({
   const [toppings, setToppings] = useState(line.toppings)
   const [note, setNote] = useState(line.note)
   const [recentNotes, setRecentNotes] = useState<string[]>([])
+  const groupRefs = useRef(new Map<string, HTMLElement>())
 
   useEffect(() => {
     let alive = true
@@ -128,23 +140,38 @@ export function LineEditSheet({
   }, [])
 
   const qty = parseQtyInput(qtyText)
-  const invalid = qty === null || unitPrice === null || (adding && qty <= 0)
-  const groups = optionGroupsFor(menu)
+  // Nhóm bắt buộc chặn cả THÊM lẫn XONG; số lượng 0 là "bỏ món" nên không bị chặn.
+  const missing = groups.filter((group) => isGroupMissing(group, options, toppings))
+  const invalid = qty === null || unitPrice === null || (adding && qty <= 0) || (qty > 0 && missing.length > 0)
   const recent = recentNotePhrases(
     recentNotes,
     NOTE_CHIPS,
-    groups.flatMap((group) => group.choices),
+    groups.flatMap((group) => (group.kind === 'choice' ? group.choices : [])),
     NOTE_CHIP_MAX_LENGTH,
   )
   const stray = orphanOptions(options, groups)
-  const toppingMenu = menu?.toppingMenu ?? []
+  const toppingMenu = groups.flatMap((group) => (group.kind === 'topping' ? group.toppings : []))
   // Topping tính theo ly nên chỉ THÊM được khi số ly nguyên. Số lượng lẻ có thể đã gõ ở ô trong giỏ trên một
   // dòng có sẵn topping: những topping đó vẫn phải hiện và gỡ được, không được âm thầm bị bỏ khi bấm XONG
   // — bỏ là đổi tiền của dòng mà người bán không hay biết.
   const wholeCups = qty !== null && Number.isInteger(qty)
   const toppingNames = new Set(toppingMenu.map((item) => item.name))
   const strayToppings = toppings.filter((topping) => !toppingNames.has(topping.name))
-  const shownToppings = wholeCups ? toppingMenu : toppingMenu.filter((item) => toppings.some((t) => t.name === item.name))
+  const shownToppingsOf = (menu: readonly ToppingMenuItem[]) =>
+    wholeCups ? menu : menu.filter((item) => toppings.some((t) => t.name === item.name))
+
+  /**
+   * Chọn xong một nhóm bắt buộc chọn-một thì đưa người bán tới nhóm bắt buộc kế còn trống — sheet dài hơn màn thì nhóm
+   * đó đang nằm khuất dưới. Không còn nhóm nào trống thì đứng yên: nút THÊM đã mở khoá.
+   */
+  const chooseOption = (group: SaleChoiceGroup, choice: string) => {
+    const next = toggleOption(options, group, choice)
+    setOptions(next)
+    if (!group.required || (group.maxSelect ?? 1) > 1 || !next.includes(choice)) return
+    const after = groups.slice(groups.indexOf(group) + 1)
+    const target = after.find((candidate) => isGroupMissing(candidate, next, toppings))
+    if (target) groupRefs.current.get(target.gid)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  }
 
   // Làm tròn sau phép cộng: 1,3 − 1 ra 0,30000000000000004, ô sẽ báo "không đọc được" cho số người bán không gõ.
   const bump = (delta: number) =>
@@ -163,31 +190,38 @@ export function LineEditSheet({
       title={line.name}
       onClose={onClose}
       footer={
-        adding ? (
-          <div className="flex items-center gap-2">
-            <button type="button" aria-label="Bớt một" disabled={(qty ?? 1) <= 1} onClick={() => bump(-1)} className={STEPPER}>
-              −
-            </button>
-            <span aria-label="Số lượng" className="w-8 shrink-0 text-center text-[17px] font-bold tabular-nums">
-              {qtyText}
-            </span>
-            <button type="button" aria-label="Thêm một" onClick={() => bump(1)} className={STEPPER}>
-              +
-            </button>
-            <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
-              THÊM{amount !== null ? ` · ${formatAmount(amount)}` : ''}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button variant="danger" className="shrink-0" onClick={onRemove}>
-              Bỏ món
-            </Button>
-            <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
-              XONG
-            </Button>
-          </div>
-        )
+        <div className="flex flex-col gap-2">
+          {qty !== null && qty > 0 && missing.length > 0 ? (
+            <p role="status" className="text-[13px] font-semibold text-danger">
+              Chưa chọn: {missing.map((group) => group.name).join(', ')}
+            </p>
+          ) : null}
+          {adding ? (
+            <div className="flex items-center gap-2">
+              <button type="button" aria-label="Bớt một" disabled={(qty ?? 1) <= 1} onClick={() => bump(-1)} className={STEPPER}>
+                −
+              </button>
+              <span aria-label="Số lượng" className="w-8 shrink-0 text-center text-[17px] font-bold tabular-nums">
+                {qtyText}
+              </span>
+              <button type="button" aria-label="Thêm một" onClick={() => bump(1)} className={STEPPER}>
+                +
+              </button>
+              <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
+                THÊM{amount !== null ? ` · ${formatAmount(amount)}` : ''}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button variant="danger" className="shrink-0" onClick={onRemove}>
+                Bỏ món
+              </Button>
+              <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
+                XONG
+              </Button>
+            </div>
+          )}
+        </div>
       }
     >
       <div className="flex flex-col gap-4">
@@ -231,22 +265,62 @@ export function LineEditSheet({
 
         {/* Không có state thứ hai ngoài `options`/`toppings`: nhãn chip nằm thẳng trên dòng, không ghi
             ngầm vào ô ghi chú. */}
-        {groups.map((group) => (
-          <div key={group.name} className="flex flex-col gap-1.5">
-            <span className="label-xs text-muted">{group.name}</span>
-            <div className="flex gap-2 overflow-x-auto">
-              {group.choices.map((choice) => (
-                <SelectChip
-                  key={choice}
-                  selected={options.includes(choice)}
-                  onClick={() => setOptions(toggleOption(options, group, choice))}
-                >
-                  {choice}
-                </SelectChip>
-              ))}
+        {groups.map((group) => {
+          const hint = groupHint(group)
+          const unmet = missing.includes(group)
+          const full = group.maxSelect !== null && selectedCount(group, options, toppings) >= group.maxSelect
+          return (
+            <div
+              key={group.gid}
+              ref={(element) => {
+                if (element) groupRefs.current.set(group.gid, element)
+                else groupRefs.current.delete(group.gid)
+              }}
+              role="group"
+              aria-label={group.name}
+              className="flex flex-col gap-1.5"
+            >
+              <span className="label-xs text-muted">
+                {group.name}
+                {hint ? <span className={unmet ? 'text-danger' : undefined}> · {hint}</span> : null}
+              </span>
+              {group.kind === 'choice' ? (
+                <div className="flex gap-2 overflow-x-auto">
+                  {group.choices.map((choice) => {
+                    const selected = options.includes(choice)
+                    return (
+                      <SelectChip
+                        key={choice}
+                        selected={selected}
+                        // Chọn-một luôn bấm được (bấm là thay); chọn-nhiều đủ số thì chỉ còn gỡ được.
+                        disabled={!selected && (group.maxSelect ?? 1) > 1 && full}
+                        onClick={() => chooseOption(group, choice)}
+                      >
+                        {choice}
+                      </SelectChip>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {shownToppingsOf(group.toppings).map((item) => {
+                    const chosen = toppings.find((topping) => topping.name === item.name)
+                    return (
+                      <ToppingRow
+                        key={item.name}
+                        item={item}
+                        // Đủ số loại thì chỉ tăng thêm phần cho topping đã chọn, không thêm loại mới.
+                        canAdd={wholeCups && (chosen !== undefined || !full)}
+                        chosen={chosen}
+                        onChange={(next) => setToppings(setToppingQty(toppings, item, next))}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
         {stray.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto">
             {stray.map((option) => (
@@ -257,27 +331,27 @@ export function LineEditSheet({
           </div>
         ) : null}
 
-        {shownToppings.length > 0 || strayToppings.length > 0 ? (
+        {strayToppings.length > 0 ? (
           <div className="flex flex-col gap-2">
             <span className="label-xs text-muted">Topping</span>
-            {!wholeCups ? (
-              <span className="text-[13px] text-muted">Số lượng lẻ: chỉ bớt được topping, không thêm.</span>
-            ) : null}
-            {[...shownToppings, ...strayToppings.map((t) => ({ name: t.name, price: t.unitPrice }))].map((item) => (
+            {strayToppings.map((topping) => (
               <ToppingRow
-                key={item.name}
-                item={item}
+                key={topping.name}
+                item={{ name: topping.name, price: topping.unitPrice }}
                 canAdd={wholeCups}
-                chosen={toppings.find((topping) => topping.name === item.name)}
-                onChange={(next) => setToppings(setToppingQty(toppings, item, next))}
+                chosen={topping}
+                onChange={(next) => setToppings(setToppingQty(toppings, { name: topping.name, price: topping.unitPrice }, next))}
               />
             ))}
-            {toppings.length > 0 && unitPrice !== null ? (
-              <span className="money text-[13px] text-muted">
-                Mỗi ly: {formatAmount(calcUnitPriceWithToppings({ unitPrice, toppings }))}
-              </span>
-            ) : null}
           </div>
+        ) : null}
+        {!wholeCups && toppings.length > 0 ? (
+          <span className="text-[13px] text-muted">Số lượng lẻ: chỉ bớt được topping, không thêm.</span>
+        ) : null}
+        {toppings.length > 0 && unitPrice !== null ? (
+          <span className="money text-[13px] text-muted">
+            Mỗi ly: {formatAmount(calcUnitPriceWithToppings({ unitPrice, toppings }))}
+          </span>
         ) : null}
 
         <div className="flex flex-col gap-1.5">
