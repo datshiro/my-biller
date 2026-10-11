@@ -1215,6 +1215,96 @@ Bấm − ở số lượng 1 cũng bỏ món VÀ cũng có đường hoàn lạ
     ...    Đếm dòng thôi thì hoàn lại SAI số lượng vẫn xanh.
     Should Be Equal As Numbers    ${theo_tên}[Trà đá]    1
 
+Gõ số lượng 2 thành 5 rồi rời ô thì Hoàn lại đưa về 2, sổ ghi 2
+    [Documentation]    Ô số lượng phát `setQty` theo từng phím; hoàn tác chụp số lúc vào ô và dựng lúc rời ô.
+    ...    Đối chiếu sổ: giao diện hiện 2 mà sổ ghi 5 là kiểu hỏng tệ nhất.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    2
+    Keyboard Key    press    Tab
+    Gõ Số Lượng    Phở bò đặc biệt    5
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã đổi Phở bò đặc biệt từ 2 thành 5
+
+    Bấm Nút    Hoàn lại
+    Không Được Thấy Chữ    Đã đổi Phở bò đặc biệt từ 2 thành 5
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    2    Hoàn lại không đưa số lượng về số trước khi gõ.
+
+Gõ 2 thành 5 rồi chạm thêm một tô thì không còn Hoàn lại, sổ giữ đủ 6 tô
+    [Documentation]    Khoá dòng không mang số lượng, nên chạm thêm sau khi gõ cộng vào CÙNG dòng. Hoàn lại
+    ...    theo khoá sẽ đưa 6 về 2 — xoá luôn tô vừa chạm. Hoàn lại chỉ chạy khi dòng còn y hệt lúc sửa.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Gõ Số Lượng    Phở bò đặc biệt    2
+    Keyboard Key    press    Tab
+    Gõ Số Lượng    Phở bò đặc biệt    5
+    Keyboard Key    press    Tab
+    Chờ Thấy Chữ    Đã đổi Phở bò đặc biệt từ 2 thành 5
+
+    Chọn Món    Phở bò
+    Chờ Thấy Chữ    Xem đơn · 6 món
+    Không Được Thấy Chữ    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    6    Tô chạm sau khi gõ số lượng bị mất.
+
+Đổi Đường trong sheet sửa rồi Hoàn lại thì đơn ghi lựa chọn cũ
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Chọn Chip    Ít đường
+    Bấm Thêm Vào Đơn
+    Sửa Dòng    Cà phê sữa (Ít đường)
+    Chọn Chip    Không đường
+    Bấm Nút    XONG
+    Chờ Thấy Chữ    Đã sửa Cà phê sữa
+
+    Bấm Nút    Hoàn lại
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal    ${của_đơn}[0][options]    ${{ ['Ít đường'] }}    Hoàn lại không đưa lựa chọn về như cũ.
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    1
+    Should Be Equal As Integers    ${của_đơn}[0][amount]    20000
+
+Sửa dòng làm gộp vào dòng khác thì không có Hoàn lại, sổ giữ đủ số lượng hai dòng
+    [Documentation]    Sửa làm khoá trùng một dòng khác thì hai dòng gộp làm một. Đưa dòng gộp về trạng thái
+    ...    cũ là xoá mất số lượng của dòng bị gộp, nên sửa kiểu này không dựng hoàn tác.
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Sửa Dòng    Phở bò đặc biệt
+    Điền Ô    Ghi chú    ít hành
+    Bấm Nút    XONG
+    Chọn Món    Phở bò
+    Bấm Nút    Đã hiểu
+    Sửa Dòng    Phở bò đặc biệt (ít hành)
+    Điền Ô    Ghi chú    ${EMPTY}
+    Bấm Nút    XONG
+    Chờ Thấy Chữ    Xem đơn · 2 món
+    Không Được Thấy Chữ    Hoàn lại
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    [d for d in $dòng if d['orderId'] == ${đơn}[id]]
+    Length Should Be    ${của_đơn}    1
+    Should Be Equal As Numbers    ${của_đơn}[0][qty]    2    Dòng gộp mất số lượng của dòng bị gộp.
+    Should Be Equal    ${của_đơn}[0][note]    ${EMPTY}
+
 Gõ cả ô toàn thứ không đọc được thì phải báo, không im lặng tuyệt đối
     [Documentation]    Nhánh hỏng NẶNG hơn (không đọc được cụm nào) trước đây im hơn nhánh hỏng nhẹ
     ...    (đọc được một nửa) — bấm Enter không gì xảy ra, người bán bấm lại, vẫn không gì.

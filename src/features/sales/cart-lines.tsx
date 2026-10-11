@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { calcLineAmount, calcUnitPriceWithToppings } from '@/domain/order-total'
 import { toppingLabel } from '@/domain/line-extras'
 import { formatAmount, formatQty, parseQtyInput } from '@/domain/money'
@@ -55,22 +55,28 @@ function StepperButton({ label, onClick }: { label: string; onClick: () => void 
 function QtyInput({
   line,
   onSetQty,
+  onCommitted,
   onUnreadable,
 }: {
   line: CartLine
   onSetQty: (key: string, qty: number) => void
+  /** Rời ô với số khác lúc vào ô — chỗ dựng Hoàn lại, vì `onSetQty` chạy theo từng phím. */
+  onCommitted: (key: string, qtyAtFocus: number) => void
   onUnreadable: (name: string, restored: number) => void
 }) {
   const [text, setText] = useState(() => formatQty(line.qty))
-  const qtyAtFocus = useRef(line.qty)
+  const [qtyAtFocus, setQtyAtFocus] = useState(line.qty)
 
   // Cùng bẫy với `MoneyInput` (src/ui/money-input.tsx:64-71): ô giữ chuỗi đang gõ riêng, nên khi
   // `qty` bị đổi từ BÊN NGOÀI (nút ±, sheet sửa dòng) phải vẽ lại chuỗi đó. Chỉ so với giá trị
   // CHÍNH ô này vừa phát ra — so thẳng với `line.qty` thì gõ dở "0," bị vẽ đè giữa chừng.
   const [lastEmitted, setLastEmitted] = useState(line.qty)
+  // Mốc hoàn tác cũng dời theo: trên iOS chạm ± không làm ô mất focus, và tính lần ± đó vào hoàn tác của lần gõ
+  // là Hoàn lại xoá luôn ly vừa chạm.
   if (line.qty !== lastEmitted) {
     setLastEmitted(line.qty)
     setText(formatQty(line.qty))
+    setQtyAtFocus(line.qty)
   }
 
   const emit = (qty: number) => {
@@ -85,9 +91,7 @@ function QtyInput({
       enterKeyHint="done"
       aria-label={`Số lượng ${nhãnDòng(line)}`}
       value={text}
-      onFocus={() => {
-        qtyAtFocus.current = line.qty
-      }}
+      onFocus={() => setQtyAtFocus(line.qty)}
       onChange={(event) => {
         const raw = event.currentTarget.value
         setText(raw)
@@ -109,13 +113,14 @@ function QtyInput({
           // "1.000" đi qua "1.0" rồi "1.00" — cả hai ĐỌC ĐƯỢC là 1 — nên tới lúc blur giỏ đã mang số
           // sai rồi. Vẽ lại từ `line.qty` chỉ đóng dấu cái sai đó; phải trả về số lúc vào ô, và phải
           // nói ra, vì người bán đang tin là mình vừa đặt một nghìn ly.
-          const restored = qtyAtFocus.current
+          const restored = qtyAtFocus
           emit(restored)
           setText(formatQty(restored))
           onUnreadable(line.name, restored)
           return
         }
         setText(formatQty(line.qty))
+        if (line.qty !== qtyAtFocus) onCommitted(line.key, qtyAtFocus)
       }}
       // Bàn phím `decimal` trên iOS không có phím Enter, nên `blur` mới là đường commit chính;
       // Enter chỉ là lối tắt cho bàn phím đầy đủ.
@@ -132,12 +137,14 @@ export function CartLines({
   onBump,
   onEdit,
   onSetQty,
+  onQtyCommitted,
   onUnreadableQty,
 }: {
   lines: readonly CartLine[]
   onBump: (key: string, delta: number) => void
   onEdit: (line: CartLine) => void
   onSetQty: (key: string, qty: number) => void
+  onQtyCommitted: (key: string, qtyAtFocus: number) => void
   onUnreadableQty: (name: string, restored: number) => void
 }) {
   return (
@@ -157,7 +164,7 @@ export function CartLines({
 
           <div className="flex items-center gap-2">
             <StepperButton label="−" onClick={() => onBump(line.key, -1)} />
-            <QtyInput line={line} onSetQty={onSetQty} onUnreadable={onUnreadableQty} />
+            <QtyInput line={line} onSetQty={onSetQty} onCommitted={onQtyCommitted} onUnreadable={onUnreadableQty} />
             <StepperButton label="+" onClick={() => onBump(line.key, 1)} />
 
             <span className="money flex-1 text-right text-[15px] font-bold">
