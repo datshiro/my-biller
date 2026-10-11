@@ -41,6 +41,26 @@ def dinh_dang_vnd(so_tien):
     return f"{int(so_tien):,}".replace(",", ".") + " đ"
 
 
+def thanh_v4_co_menu_cu(van_ban, ten_nhom):
+    """File sao lưu như bản 2.19.0 xuất: `version` 4, chưa có bảng nhóm lựa chọn, nhóm món `ten_nhom` giữ thực đơn
+    tuỳ chọn và topping kiểu cũ ngay trong nó, không có `optionGroupGids`."""
+    import json
+
+    ban = json.loads(van_ban)
+    data = ban["data"]
+    data.pop("optionGroups", None)
+    for group in data["itemGroups"]:
+        group.pop("optionGroupGids", None)
+        if group["name"] == ten_nhom:
+            group["optionGroups"] = [{"name": "Đường", "choices": ["Ít đường", "Không đường"]}]
+            group["toppingMenu"] = [{"name": "Trân châu", "price": 5000}, {"name": "Thạch", "price": 4000}]
+    for item in data["items"]:
+        item.pop("kind", None)
+        item.pop("optionGroupGids", None)
+    ban["version"] = 4
+    return json.dumps(ban, ensure_ascii=False, indent=2)
+
+
 def thanh_v1(van_ban):
     """Biến một file sao lưu v4 thành đúng hình dạng file v1 của bản cũ: không gid, không bảng giá riêng,
     khoản thu chưa có allocatedOrderId, mã đơn chưa có chữ máy (PBH-YYMMDD-NNN)."""

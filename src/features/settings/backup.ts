@@ -14,6 +14,7 @@ import {
   type BackupCounts,
 } from '@/domain/backup'
 import type { BackupData, BackupFile } from '@/domain/schema'
+import { migrateBackupData } from '@/domain/catalog-migration'
 import { getDeviceConnection } from '@/db/repositories/device-state'
 import { getLedgerOverview } from '@/db/doi-soat-snapshot'
 import {
@@ -169,9 +170,11 @@ export async function readBackupFile(file: File): Promise<BackupFile> {
 export async function applyBackup(data: BackupData): Promise<RestoreReport | null> {
   // Không kiểm "đã ghép" ở đây: chốt chặn nằm trong khoá ghi và ném `RestoreBlockedError` có lý do, để màn
   // dịch sang lời giải thích. Kiểm trước khoá vừa thừa vừa che mất lý do đó.
-  await replaceAllDataAndRecalculate(data)
+  // File v1–v4 chưa có mô hình mới: di trú trước khi ghi để kỳ vọng tính trên đúng sổ sẽ nằm trong máy.
+  const migrated = migrateBackupData(data, Date.now())
+  await replaceAllDataAndRecalculate(migrated)
   // Đọc sau khi khoá đóng; kỳ vọng tính thuần từ file, không đọc lại DB.
-  return reportAfterWrite(expectedAfterReplace(data))
+  return reportAfterWrite(expectedAfterReplace(migrated))
 }
 
 /** Số bản ghi đang có trên máy — cho xem trước Ghi đè ("Đang có trên máy: …"). */

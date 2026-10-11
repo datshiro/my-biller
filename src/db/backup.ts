@@ -11,6 +11,7 @@ import {
 } from '@/domain/backup-merge'
 import { expectedAfterReplace, type DerivedLedger } from '@/domain/backup-report'
 import { BackupFileSchema, type BackupData, type BackupFile } from '@/domain/schema'
+import { migrateBackupData } from '@/domain/catalog-migration'
 
 /** Các bảng thuộc cuốn sổ. Trạng thái riêng của máy tuyệt đối không đi theo sao lưu/phục hồi. */
 const ledgerTables = () => [
@@ -239,10 +240,12 @@ export async function mergeAllDataAndRecalculate(
       throw new MergeReviewError(`Sổ trên máy đang có chỗ hỏng: ${outcome.blocked} — lần này chỉ Ghi đè được.`)
     }
 
-    await replaceLedger(outcome.merged)
+    // Gộp với file v1–v4 có thể mang về nhóm món còn menu cũ chưa di trú.
+    const merged = migrateBackupData(outcome.merged, Date.now())
+    await replaceLedger(merged)
     await recalcAll()
     // Cùng luật với `replaceLedger`: dòng giá mồ côi bị bỏ khi ghi, nên bản kỳ vọng cũng bỏ — không thì báo LỆCH giả.
-    return { expected: expectedAfterReplace(outcome.merged), summary: outcome.summary }
+    return { expected: expectedAfterReplace(merged), summary: outcome.summary }
   })
 }
 

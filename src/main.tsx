@@ -10,6 +10,7 @@ import { RECOVERY_MODE } from './app/runtime-mode'
 import { startUnpairedHeartbeat } from './app/unpaired-heartbeat'
 import './styles/index.css'
 import { startSyncRunner } from './db/sync/runner'
+import { migrateLocalCatalog } from './db/catalog-migration'
 import { isNativeApp } from './features/printer/printer-sink'
 
 const rootEl = document.getElementById('root')
@@ -38,6 +39,7 @@ createRoot(rootEl).render(
 )
 
 if (!RECOVERY_MODE && !isAdminPath(location.pathname)) {
+  void migrateLocalCatalog().catch((error: unknown) => console.error('catalog-migration-failed', error))
   startSyncRunner()
   startUnpairedHeartbeat()
 }

@@ -137,6 +137,28 @@ không đẩy từng event qua pusher.
   Màn admin đọc bảng danh mục bằng `table=optionGroups` (con trỏ trang là seq danh mục); màn Đối soát đếm thêm dòng
   "Nhóm lựa chọn", còn số `#` trên neo vẫn là seq sổ chính.
 
+## Di trú menu cũ
+
+- Thực đơn kiểu cũ (`optionGroups`/`toppingMenu` nằm trong nhóm món) được chuyển sang món topping và nhóm lựa chọn bởi
+  **một** hàm thuần dùng chung, `planCatalogMigration` (`shared/catalog-migration.ts`). Chỉ nhóm món có menu cũ và
+  **thiếu hẳn** trường `optionGroupGids` mới đủ điều kiện; `[]` là chủ quán chủ ý gỡ hết nên không bao giờ bị gắn lại.
+  Mỗi tên topping (khoá `itemNameKey`, chuẩn hoá NFC riêng trong di trú — luật `item-name-taken` của máy cũ không đổi)
+  thành đúng một món: món sẵn có cùng tên chỉ được đặt
+  `kind: 'topping'`, giữ `isActive` và giá; chưa có thì tạo món chỉ bán kèm (`isActive: 0`, giá phổ biến nhất, hoà lấy
+  thấp). Mỗi nhóm món được một nhóm `topping` ("Topping <tên nhóm>", giá riêng khi khác giá món) và một nhóm `choice`
+  cho mỗi nhóm tuỳ chọn cũ. Nhóm "Đá chung / Đá riêng" là hằng, không di trú. Gid tất định (UUID v5 trên gid thực thể
+  và tên), nên chạy lại không sinh trùng; dòng đích đã có không bao giờ bị ghi đè. Dữ liệu cũ vượt giới hạn schema mới
+  bị cắt bớt, không làm hỏng lượt chạy. Trường menu cũ giữ nguyên cho máy bản cũ.
+- **Quán đã ghép:** Worker là người ghi duy nhất. Lần đầu một máy bản mới chạm sổ (kéo sổ chính có `caps=catalog-v2`,
+  đẩy có cap `catalog-v2`, hoặc gọi `/catalog/*`), DO di trú cả sổ trong một transaction, ghi event thường vào hai luồng
+  (món và nhóm món vào sổ chính, nhóm lựa chọn vào luồng danh mục) rồi đặt mốc `catalogMigratedAt` trong bảng
+  `catalogMeta`. Sau mốc, DO quét lại sau mỗi event `itemGroups` được nhận (kể cả từ máy cũ) và sau mỗi lần nạp sổ.
+  Event tự sinh đi qua cùng cửa kiểm với ảnh sổ; hỏng thì huỷ cả lượt và ghi log, không bao giờ làm hỏng event của máy
+  vừa đẩy. Máy đã ghép không tự di trú.
+- **Máy chưa ghép:** client chạy cùng hàm lúc khởi động (`migrateLocalCatalog`, transaction thường, không qua outbox)
+  và trên sổ sắp ghi khi khôi phục hoặc gộp file sao lưu (`migrateBackupData`), để báo cáo đối chiếu tính trên đúng sổ
+  đã di trú. Ghép làm máy nạp sổ thì ảnh sổ mang sẵn kết quả, Worker quét lại không ra gì.
+
 ## Ghép máy và nạp sổ ban đầu
 
 - Mỗi lần `POST /pair` được chấp nhận đều tạo một reservation pending trong 2 phút, kể cả máy không

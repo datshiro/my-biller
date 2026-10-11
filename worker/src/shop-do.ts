@@ -18,6 +18,12 @@ import {
   safeParseCatalogPayload,
   type CatalogEvent,
 } from '../../shared/catalog-events'
+import {
+  isEmptyCatalogMigrationPlan,
+  planCatalogMigration,
+  type MigrationGroup,
+  type MigrationItem,
+} from '../../shared/catalog-migration'
 
 const INITIALIZED_KEY = 'initialized'
 const PAIR_TTL_MS = 5 * 60 * 1000
@@ -72,6 +78,7 @@ const LOCAL_FOREIGN_KEYS = new Set(Object.values(REFERENCE_FIELDS).flat())
 const SETTINGS_KEYS = new Set(['shop', 'app'])
 /** Máy khai báo khả năng này hiểu luồng danh mục; luật mới về nhóm lựa chọn chỉ từ chối máy đó, không bao giờ máy cũ. */
 const CATALOG_V2 = 'catalog-v2'
+const CATALOG_MIGRATED_KEY = 'catalogMigratedAt'
 
 const CATALOG_SCHEMA = `
   CREATE TABLE IF NOT EXISTS catalogOplog (
@@ -90,6 +97,10 @@ const CATALOG_SCHEMA = `
     payload TEXT NOT NULL,
     updatedSeq INTEGER NOT NULL,
     PRIMARY KEY (tableName, entityKey)
+  );
+  CREATE TABLE IF NOT EXISTS catalogMeta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   );
 `
 
@@ -1242,6 +1253,145 @@ export class ShopDO extends DurableObject<Env> {
     return null
   }
 
+  private catalogMigrated(): boolean {
+    return first(this.sql.exec('SELECT key FROM catalogMeta WHERE key = ? LIMIT 1', CATALOG_MIGRATED_KEY)) !== undefined
+  }
+
+  private ledgerRows(table: 'itemGroups' | 'items'): { after: Record<string, unknown>; refs: Record<string, string | null> }[] {
+    return [...this.sql.exec<LedgerRow>('SELECT payload FROM ledger WHERE tableName = ? ORDER BY updatedSeq ASC', table)].map(
+      (row) => JSON.parse(row.payload) as { after: Record<string, unknown>; refs: Record<string, string | null> },
+    )
+  }
+
+  /**
+   * Event tự sinh đi cùng cửa kiểm với ảnh sổ nạp: một payload máy không parse nổi là mọi máy kẹt kéo mãi mãi, nên
+   * thà ném để huỷ cả lượt di trú (mốc chưa đặt, lần sau thử lại) còn hơn ghi vào oplog.
+   */
+  private checkedSynthesizedEvent(event: SyncEvent): SyncEvent {
+    const referenced = this.canonicalizeReferences(event)
+    if ('problem' in referenced) throw new Error(referenced.problem)
+    const checked = this.validateEventPayloads(referenced.event)
+    if ('problem' in checked) throw new Error(checked.problem)
+    const identityProblem = this.identityProblem(checked.event)
+    if (identityProblem) throw new Error(identityProblem)
+    return checked.event
+  }
+
+  /**
+   * Chuyển thực đơn kiểu cũ của mọi nhóm món đủ điều kiện sang mô hình mới, bằng event thường của hai luồng — máy nào
+   * kéo cũng nhận như một thay đổi bình thường. DO là người ghi duy nhất của quán đã ghép nên không có đua giữa các máy.
+   */
+  private migrateLegacyMenus(deviceId: string, serverAt: number): { seq: number | null; catalogSeq: number | null } {
+    const groups = this.ledgerRows('itemGroups')
+    const items = this.ledgerRows('items')
+    const optionGroups = [...this.sql.exec<LedgerRow>("SELECT payload FROM catalogLedger WHERE tableName = 'optionGroups'")].map(
+      (row) => (JSON.parse(row.payload) as { after: { gid: string; sortOrder: number } }).after,
+    )
+    const plan = planCatalogMigration({
+      groups: groups.map((row) => row.after as MigrationGroup),
+      items: items.map((row) => row.after as MigrationItem),
+      optionGroups,
+      now: serverAt,
+    })
+    if (isEmptyCatalogMigrationPlan(plan)) return { seq: null, catalogSeq: null }
+
+    const txId = crypto.randomUUID()
+    let txOrder = 0
+    let seq: number | null = null
+    let catalogSeq: number | null = null
+    const append = (
+      table: 'items' | 'itemGroups',
+      operation: 'create' | 'put',
+      before: Record<string, unknown> | null,
+      after: Record<string, unknown>,
+      refs: Record<string, string | null>,
+    ) => {
+      const entityKey = String(after.gid)
+      seq = this.appendEvent(
+        this.checkedSynthesizedEvent({
+          eventId: crypto.randomUUID(),
+          txId,
+          txOrder: txOrder++,
+          table,
+          entityKey,
+          entityGid: entityKey,
+          operation,
+          before,
+          after,
+          refs,
+        }),
+        deviceId,
+        serverAt,
+      )
+    }
+
+    for (const item of plan.createItems) append('items', 'create', null, item, { groupId: null })
+    // Sửa hàng đã lưu: hàng cũ lệch schema hiện tại thì bỏ riêng hàng đó, không để một dòng hỏng chặn di trú cả sổ.
+    const putStored = (
+      table: 'items' | 'itemGroups',
+      stored: { after: Record<string, unknown>; refs: Record<string, string | null> },
+      after: Record<string, unknown>,
+    ) => {
+      try {
+        append(table, 'put', stored.after, after, stored.refs)
+      } catch (error) {
+        console.error('catalog-migration-skipped', table, String(stored.after.gid), error)
+      }
+    }
+    const itemsByGid = new Map(items.map((row) => [row.after.gid, row]))
+    for (const gid of plan.markToppings) {
+      const stored = itemsByGid.get(gid)
+      if (stored) putStored('items', stored, { ...stored.after, kind: 'topping', updatedAt: serverAt })
+    }
+    for (const group of plan.createOptionGroups) {
+      const validated = this.validateCatalogEvent({
+        eventId: crypto.randomUUID(),
+        txId,
+        txOrder: txOrder++,
+        table: 'optionGroups',
+        entityKey: group.gid,
+        entityGid: group.gid,
+        operation: 'create',
+        before: null,
+        after: group,
+        refs: {},
+      })
+      if ('problem' in validated) throw new Error(validated.problem)
+      catalogSeq = this.appendCatalogEvent(validated.event, deviceId, serverAt)
+    }
+    const groupsByGid = new Map(groups.map((row) => [row.after.gid, row]))
+    for (const { groupGid, optionGroupGids } of plan.attach) {
+      const stored = groupsByGid.get(groupGid)
+      if (stored) putStored('itemGroups', stored, { ...stored.after, optionGroupGids, updatedAt: serverAt })
+    }
+    return { seq, catalogSeq }
+  }
+
+  /**
+   * `lazy`: lần đầu một máy bản mới chạm sổ — di trú cả sổ rồi đặt mốc. Không lazy: sau mốc, chạy lại cho nhóm mang
+   * thực đơn cũ mới tới (máy cũ tạo nhóm, nạp sổ). Transaction riêng, nuốt lỗi: di trú hỏng không được làm hỏng
+   * event của máy vừa đẩy — máy cũ gặp lỗi sẽ thử lại mãi và kẹt cả hàng đợi đơn phía sau.
+   */
+  private runCatalogMigration(deviceId: string, lazy: boolean): void {
+    try {
+      const appended = this.ctx.storage.transactionSync(() => {
+        if (this.catalogMigrated() === lazy) return null
+        const admission = first(this.sql.exec<{ expectedRows: number }>('SELECT expectedRows FROM ledgerAdmission LIMIT 1'))
+        if (admission && admission.expectedRows > 0) return null
+        const now = Date.now()
+        const result = this.migrateLegacyMenus(deviceId, now)
+        if (lazy) this.sql.exec('INSERT INTO catalogMeta (key, value) VALUES (?, ?)', CATALOG_MIGRATED_KEY, String(now))
+        return result
+      })
+      for (const socket of this.ctx.getWebSockets()) {
+        if (appended?.seq) socket.send(JSON.stringify({ type: 'oplog', seq: appended.seq }))
+        if (appended?.catalogSeq) socket.send(JSON.stringify({ type: 'catalog', seq: appended.catalogSeq }))
+      }
+    } catch (error) {
+      console.error('catalog-migration-failed', error)
+    }
+  }
+
   private async acceptEvent(request: Request): Promise<Response> {
     const [tokenHash, body] = await Promise.all([this.requestTokenHash(request), readJson(request)])
     if (!tokenHash) return json({ error: 'unauthorized', message: 'Máy này chưa ghép hoặc đã bị thu hồi.' }, 401)
@@ -1249,11 +1399,15 @@ export class ShopDO extends DurableObject<Env> {
     const epoch = typeof body?.epoch === 'number' && Number.isInteger(body.epoch) ? body.epoch : 0
     const caps = Array.isArray(body?.caps) ? (body.caps as unknown[]) : []
     if (!parsed.success || epoch <= 0) return json({ error: 'invalid-request' }, 400)
+    if (caps.includes(CATALOG_V2)) {
+      const device = this.activeDeviceByTokenHash(tokenHash)
+      if (device) this.runCatalogMigration(device.id, true)
+    }
 
     const serverAt = Date.now()
     const proposed = this.stampServerTime(parsed.data, serverAt)
     const result = this.ctx.storage.transactionSync<
-      | { ok: true; seq: number; notifySeq: number; duplicate: boolean }
+      | { ok: true; seq: number; notifySeq: number; duplicate: boolean; deviceId?: string }
       | {
           ok: false
           error: 'unauthorized' | 'stale-leader' | 'business-rejected' | 'seed-in-progress'
@@ -1372,7 +1526,7 @@ export class ShopDO extends DurableObject<Env> {
             this.refreshOrderFromPayments(orderGid, canonical.event, device.id, serverAt) ?? notifySeq
         }
       }
-      return { ok: true, seq, notifySeq, duplicate: false }
+      return { ok: true, seq, notifySeq, duplicate: false, deviceId: device.id }
     })
 
     if (!result.ok) {
@@ -1387,6 +1541,9 @@ export class ShopDO extends DurableObject<Env> {
       for (const socket of this.ctx.getWebSockets()) {
         socket.send(JSON.stringify({ type: 'oplog', seq: result.notifySeq }))
       }
+    }
+    if (result.deviceId && proposed.table === 'itemGroups' && proposed.operation !== 'delete') {
+      this.runCatalogMigration(result.deviceId, false)
     }
     return json({ seq: result.seq, duplicate: result.duplicate }, result.duplicate ? 200 : 201)
   }
@@ -1441,6 +1598,8 @@ export class ShopDO extends DurableObject<Env> {
     const parsed = CatalogEventSchema.safeParse(body?.event)
     const epoch = typeof body?.epoch === 'number' && Number.isInteger(body.epoch) ? body.epoch : 0
     if (!parsed.success || epoch <= 0) return json({ error: 'invalid-request' }, 400)
+    const migrating = this.activeDeviceByTokenHash(tokenHash)
+    if (migrating) this.runCatalogMigration(migrating.id, true)
 
     const serverAt = Date.now()
     const result = this.ctx.storage.transactionSync<
@@ -1503,6 +1662,7 @@ export class ShopDO extends DurableObject<Env> {
     if (!device) return json({ error: 'unauthorized', message: 'Máy này chưa ghép hoặc đã bị thu hồi.' }, 401)
     const since = nonNegativeInteger(new URL(request.url).searchParams.get('since') ?? '0')
     if (since === null) return json({ error: 'invalid-request' }, 400)
+    this.runCatalogMigration(device.id, true)
     const rows = [...this.sql.exec<{ payload: string }>(
       'SELECT payload FROM catalogOplog WHERE seq > ? ORDER BY seq ASC LIMIT 500',
       since,
@@ -1529,7 +1689,7 @@ export class ShopDO extends DurableObject<Env> {
     const now = Date.now()
     try {
       const result = this.ctx.storage.transactionSync<
-        | { ok: true; lastSeq: number }
+        | { ok: true; lastSeq: number; deviceId: string }
         | { ok: false; error: 'unauthorized' | 'merge-required' | 'seed-incomplete'; message: string }
       >(() => {
         this.expireLedgerAdmission(now)
@@ -1546,7 +1706,7 @@ export class ShopDO extends DurableObject<Env> {
         if (!admission) {
           const lastSeq =
             Number(first(this.sql.exec<{ seq: number }>('SELECT MAX(seq) AS seq FROM oplog'))?.seq) || 0
-          return { ok: true, lastSeq }
+          return { ok: true, lastSeq, deviceId: device.id }
         }
         const seedRows = parsed.length + catalog.length
         if (seedRows !== admission.expectedRows) {
@@ -1626,7 +1786,7 @@ export class ShopDO extends DurableObject<Env> {
         }
         this.sql.exec('UPDATE pairCodes SET usedAt = ? WHERE codeHash = ?', now, admission.codeHash)
         this.sql.exec('DELETE FROM ledgerAdmission WHERE deviceId = ?', device.id)
-        return { ok: true, lastSeq }
+        return { ok: true, lastSeq, deviceId: device.id }
       })
 
       if (!result.ok) {
@@ -1638,6 +1798,9 @@ export class ShopDO extends DurableObject<Env> {
       for (const socket of this.ctx.getWebSockets()) {
         socket.send(JSON.stringify({ type: 'oplog', seq: result.lastSeq }))
       }
+      // Máy cũ nạp sổ có thực đơn kiểu cũ sau khi quán đã di trú. `lastSeq` trả về vẫn là của ảnh sổ: event di trú
+      // tới máy này ở lượt kéo kế tiếp như mọi event khác.
+      this.runCatalogMigration(result.deviceId, false)
       return json({ activated: true, lastSeq: result.lastSeq }, 201)
     } catch (caught) {
       if (caught instanceof SeedRejected) {
@@ -1661,6 +1824,7 @@ export class ShopDO extends DurableObject<Env> {
     const since = Number(url.searchParams.get('since') ?? 0)
     if (!Number.isInteger(since) || since < 0) return json({ error: 'invalid-request' }, 400)
     this.recordPullProgress(device.id, since)
+    if (url.searchParams.get('caps')?.split(',').includes(CATALOG_V2)) this.runCatalogMigration(device.id, true)
     const rows = [...this.sql.exec<{ seq: number; payload: string }>(
       'SELECT seq, payload FROM oplog WHERE seq > ? ORDER BY seq ASC LIMIT 500',
       since,

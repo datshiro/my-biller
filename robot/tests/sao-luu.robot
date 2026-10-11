@@ -437,6 +437,48 @@ Gộp cùng file hai lần không đổi sổ
     ${lần_hai}=    Sổ Chín Bảng
     Dictionaries Should Be Equal    ${lần_hai}    ${lần_một}
 
+Khôi phục file v4 có menu topping cũ thì máy chưa ghép tự chuyển sang món topping và nhóm lựa chọn
+    [Documentation]    File của bản 2.19.0 giữ tuỳ chọn và topping ngay trong nhóm món. Sau Ghi đè, máy chưa ghép
+    ...    phải di trú: mỗi topping thành đúng một món chỉ bán kèm (`isActive` 0, khỏi lưới bán), nhóm món gắn nhóm
+    ...    lựa chọn mới, trường cũ còn nguyên cho máy bản cũ. Mở lại app (di trú lúc khởi động) không sinh thêm gì.
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${v4}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-v4-menu-cu.json
+    ${văn_bản}=    Get File    ${f}
+    ${nội_dung}=    Thanh V4 Co Menu Cu    ${văn_bản}    Đồ uống
+    Create File    ${v4}    ${nội_dung}
+    Nhập File Sao Lưu    ${v4}
+
+    ${món}=    Đọc Bảng    items
+    ${topping}=    Evaluate    [m for m in $món if m.get('kind') == 'topping']
+    ${tên}=    Evaluate    sorted((m['name'], m['unitPrice'], m['isActive']) for m in $topping)
+    ${mong_đợi}=    Evaluate    [('Thạch', 4000, 0), ('Trân châu', 5000, 0)]
+    Should Be Equal    ${tên}    ${mong_đợi}    Topping trong file không thành đúng một món chỉ bán kèm mỗi tên.
+    ${nhóm_lc}=    Đọc Bảng    optionGroups
+    ${loại}=    Evaluate    sorted((g['kind'], g['name']) for g in $nhóm_lc)
+    ${mong_đợi_nhóm}=    Evaluate    [('choice', 'Đường'), ('topping', 'Topping Đồ uống')]
+    Should Be Equal    ${loại}    ${mong_đợi_nhóm}    Nhóm lựa chọn sau di trú không đúng.
+    ${nhóm_món}=    Đọc Bảng    itemGroups
+    ${đồ_uống}=    Evaluate    next(g for g in $nhóm_món if g['name'] == 'Đồ uống')
+    ${gid_nhóm_lc}=    Evaluate    sorted(g['gid'] for g in $nhóm_lc)
+    ${đã_gắn}=    Evaluate    sorted($đồ_uống['optionGroupGids'])
+    Should Be Equal    ${đã_gắn}    ${gid_nhóm_lc}    Nhóm món chưa gắn đúng nhóm lựa chọn vừa tạo.
+    Length Should Be    ${đồ_uống}[toppingMenu]    2    Trường topping cũ bị xoá — máy bản cũ sẽ mất menu.
+    ${đồ_ăn}=    Evaluate    next(g for g in $nhóm_món if g['name'] == 'Đồ ăn')
+    Dictionary Should Not Contain Key    ${đồ_ăn}    optionGroupGids    Nhóm không có menu cũ cũng bị gắn nhóm lựa chọn.
+
+    Mở Màn    /
+    Chờ Thấy Chữ    Trà đá
+    ${ô_trân_châu}=    Get Element Count    css=main button:has-text("Trân châu")
+    Should Be Equal As Integers    ${ô_trân_châu}    0    Topping chỉ bán kèm hiện ra trên lưới bán.
+
+    Reload
+    Chờ Thấy Chữ    Trà đá
+    ${món_lại}=    Đọc Bảng    items
+    ${nhóm_lc_lại}=    Đọc Bảng    optionGroups
+    Length Should Be    ${món_lại}    ${{len($món)}}    Mở lại app sinh thêm món.
+    Length Should Be    ${nhóm_lc_lại}    2    Mở lại app sinh thêm nhóm lựa chọn.
+
 File v1 cũ: Gộp phải cảnh báo nhân đôi trước, và không chết vì mã đơn không chữ
     [Documentation]    File v1/v2 không có mã toàn cục và mã đơn chưa có chữ máy (PBH-YYMMDD-NNN). Gộp vào sổ đã có
     ...    chính dữ liệu đó phải qua cửa cảnh báo nhân đôi; Huỷ thì không ghi gì; Vẫn gộp thì không lỗi, số

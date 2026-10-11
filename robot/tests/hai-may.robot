@@ -1069,6 +1069,42 @@ Nhóm lựa chọn tạo ở máy A tới máy B qua luồng danh mục, sổ ch
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/doi-soat
     Wait For Elements State    xpath=//span[normalize-space()="Nhóm lựa chọn"]/following-sibling::span[normalize-space()="1"]    visible
 
+Menu topping cũ cài trên máy đã ghép thành đúng một món topping mỗi tên trên cả hai máy, máy cũ vẫn giữ menu
+    [Tags]    -regression
+    [Documentation]    Sổ chung có đúng một người ghi di trú là Worker: máy đã ghép không tự di trú. Cài thực đơn kiểu
+    ...    cũ trên A (màn cài nhóm mới chưa có) thì Worker chuyển nó ngay: mỗi topping thành đúng một món chỉ
+    ...    bán kèm (`isActive` 0), nhóm Đồ uống gắn nhóm lựa chọn, và trường cũ còn nguyên cho máy bản cũ. Hai máy phải
+    ...    giống hệt nhau từng gid. Việc máy đã ghép không tự di trú được khoá bằng ca Vitest riêng (gid tất định nên
+    ...    ca này không phân biệt được).
+    Chọn Máy A
+    Cài Thực Đơn Đồ Uống
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    optionGroups    2    ${MÁY_B_PAGE}
+    Hai Bảng Phải Hội Tụ    optionGroups
+    Hai Bảng Phải Hội Tụ    items
+    Hai Bảng Phải Hội Tụ    itemGroups
+
+    FOR    ${page}    IN    ${MÁY_A_PAGE}    ${MÁY_B_PAGE}
+        ${món}=    Đọc Bảng    items    ${page}
+        ${topping}=    Evaluate    sorted((m['name'], m['unitPrice'], m['isActive']) for m in $món if m.get('kind') == 'topping')
+        Should Be Equal    ${topping}    ${{ [('Thạch', 3000, 0), ('Trân châu', 5000, 0)] }}
+        ...    Mỗi topping phải thành đúng một món chỉ bán kèm.
+        ${nhóm_lc}=    Đọc Bảng    optionGroups    ${page}
+        ${loại}=    Evaluate    sorted((g['kind'], g['name']) for g in $nhóm_lc)
+        Should Be Equal    ${loại}    ${{ [('choice', 'Đường'), ('topping', 'Topping Đồ uống')] }}
+        ${nhóm}=    Đọc Bảng    itemGroups    ${page}
+        ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
+        Should Be Equal    ${{ sorted($đồ_uống['optionGroupGids']) }}    ${{ sorted(g['gid'] for g in $nhóm_lc) }}
+        ...    Nhóm Đồ uống chưa gắn đúng nhóm lựa chọn Worker vừa tạo.
+        Length Should Be    ${đồ_uống}[toppingMenu]    2    Trường topping cũ bị xoá — máy bản cũ sẽ mất menu.
+    END
+
+    # Đơn vẫn bán và lên sổ chung như thường sau di trú.
+    Chọn Máy B
+    Bán Nhanh    Phở bò
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Hai Bảng Phải Hội Tụ    orders
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
