@@ -55,6 +55,8 @@ const CartSchema = z.object({
   surcharge: z.number().int().nonnegative(),
   note: z.string(),
   priceMode: z.enum(['retail', 'wholesale']).default('retail'),
+  // Nháp chỉ nằm trong máy này, không đồng bộ — mặc định ở đây không đè được đơn nào của máy khác.
+  serviceMode: z.enum(['dine-in', 'takeaway']).default('dine-in'),
 })
 
 export function saveCartDraft(cart: Cart): void {

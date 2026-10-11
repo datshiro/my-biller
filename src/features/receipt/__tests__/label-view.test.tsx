@@ -83,3 +83,30 @@ describe('LabelView', () => {
     expect(container.querySelectorAll('[data-label] > p')).toHaveLength(3)
   })
 })
+
+describe('LabelView: Mang về', () => {
+  const mangVe = { ...order, serviceMode: 'takeaway' } as Order
+
+  it('MANG VỀ nằm chung hàng tên quán: đầu tem không thêm hàng nên thân tem giữ nguyên chỗ, số tem không đổi', () => {
+    const taiCho = tem(render(<LabelView {...base} />).container)
+    const mangVeNode = tem(render(<LabelView {...base} order={mangVe} />).container)
+    const shopRow = mangVeNode.firstElementChild as HTMLElement
+
+    expect(shopRow.textContent).toBe('Quán NhỏMANG VỀ')
+    expect(mangVeNode.children).toHaveLength(taiCho.children.length)
+    expect(mangVeNode.querySelector('[data-label-body]')?.textContent).not.toContain('MANG VỀ')
+  })
+
+  it('mọi trang của ly nhiều tem đều có MANG VỀ', () => {
+    const page2 = tem(render(<LabelView {...base} order={mangVe} page={2} pageCount={2} />).container)
+    expect(page2.textContent).toContain('MANG VỀ')
+  })
+
+  it('quán chưa đặt tên vẫn in MANG VỀ; đơn tại chỗ không in', () => {
+    const noName = tem(render(<LabelView {...base} shop={DEFAULT_SHOP} order={mangVe} />).container)
+    const taiCho = tem(render(<LabelView {...base} order={{ ...order, serviceMode: 'dine-in' } as Order} />).container)
+
+    expect(noName.textContent).toContain('MANG VỀ')
+    expect(taiCho.textContent).not.toContain('MANG VỀ')
+  })
+})

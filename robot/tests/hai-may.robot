@@ -196,6 +196,54 @@ Huỷ đơn ở máy A giữ phiếu thu trên cả hai máy
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_A_PAGE}
     Phiếu Của Đơn Phải Chưa Phân Bổ    ${order}[gid]    ${MÁY_B_PAGE}
 
+Máy bản 2.19.0 thu nợ đơn Mang về thì sổ chung và máy kia vẫn giữ Mang về, phiếu vẫn in MANG VỀ
+    [Documentation]    Máy 2.19.0 không biết `serviceMode`: đọc đơn rồi ghi lại hàng thiếu trường, và đẩy event `put`
+    ...    của đơn thiếu trường đó khi thu tiền. Chưa có khung chạy app bản 2.19.0 thật, nên ca dựng đúng cái
+    ...    nó gửi: máy B ngoại tuyến thu nợ, rồi gỡ `serviceMode` khỏi hàng đơn của B và khỏi event đơn còn
+    ...    chờ trong outbox trước khi nối mạng. Worker dựng `put` từ bản đã lưu nên event phát lại phải còn
+    ...    `takeaway`. Bằng chứng chính là máy A (và phiếu của nó); dòng kiểm ở máy B chỉ cho thấy code mới trên B
+    ...    nhận lại cờ từ event phát lại, không phải hành vi của máy 2.19.0 thật. Đối chiếu cờ và tiền bằng `Đọc Bảng`.
+    Chọn Máy A
+    Mở Màn    /
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Click    ${CHIP_MANG_VỀ}
+    Chọn Hình Thức Trả    Bán nợ
+    Click    ${NÚT_CHỌN_KHÁCH_NỢ}
+    Chọn Khách Trong Sheet    Anh Hùng
+    Get Attribute    ${CHIP_MANG_VỀ}    aria-pressed    ==    true
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal    ${đơn}[serviceMode]    takeaway
+    Should Be Equal    ${đơn}[status]    unpaid
+    Hai Bảng Phải Hội Tụ    orders
+
+    Chọn Máy B
+    ${orders_b}=    Đọc Bảng    orders    ${MÁY_B_PAGE}
+    ${nợ}=    Evaluate    sum(o['total'] - o['paidAmount'] for o in $orders_b if o['customerName'] == 'Anh Hùng' and o['status'] != 'void')
+    Should Be True    ${nợ} >= 55000
+    Mở Sheet Thu Nợ Hai Máy    Anh Hùng
+    Set Offline    ${True}
+    Điền Ô    Thu bao nhiêu    ${nợ}
+    Bấm Nút Thu Hai Máy
+    ${gỡ}=    Gỡ Mang Về Như Máy Bản Cũ    ${đơn}[gid]
+    Should Be True    ${gỡ} >= 1    Thu nợ không sinh event đơn nào trong outbox — ca không đo gì.
+    Set Offline    ${False}
+
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Hai Bảng Phải Hội Tụ    payments
+    Hai Bảng Phải Hội Tụ    orders
+    FOR    ${page}    IN    ${MÁY_A_PAGE}    ${MÁY_B_PAGE}
+        ${orders}=    Đọc Bảng    orders    ${page}
+        ${của_gid}=    Evaluate    [o for o in $orders if o['gid'] == $đơn['gid']][0]
+        Should Be Equal    ${của_gid.get('serviceMode')}    takeaway    Event máy cũ làm mất cờ Mang về.
+        Should Be Equal    ${của_gid}[status]    paid
+        Should Be Equal As Integers    ${của_gid}[paidAmount]    ${của_gid}[total]
+    END
+
+    Mở Màn Trên Máy    ${MÁY_A_PAGE}    /don/${đơn}[id]/phieu
+    Chờ Thấy Chữ    MANG VỀ
+
 Thiết bị cũ không ghi đè khoản thu đã hoàn ở thiết bị khác
     [Documentation]    Hai máy cùng mở khoản thu pending; quyết định hoàn tiền đã lên Worker phải là
     ...    terminal, nên lựa chọn “bỏ” từ bản sao offline cũ bị từ chối rồi hội tụ về refunded.
@@ -992,6 +1040,48 @@ Mở Sheet Thu Nợ Hai Máy
 Bấm Nút Thu Hai Máy
     Click    css=[role=dialog][aria-label^="Thu nợ"] >> css=button:has-text("THU ")
     Wait For Elements State    css=[role=dialog][aria-label^="Thu nợ"]    detached
+
+Gỡ Mang Về Như Máy Bản Cũ
+    [Documentation]    Làm hàng đơn và các event đơn còn chờ trong outbox của trang hiện tại giống hệt thứ máy
+    ...    2.19.0 có: không có khoá `serviceMode`. Ghi thẳng IndexedDB nên không sinh event mới. Trả về số event
+    ...    đã sửa.
+    [Arguments]    ${gid}
+    ${số}=    Evaluate JavaScript    ${None}
+    ...    async (gid) => {
+    ...        const db = await new Promise((resolve, reject) => {
+    ...            const request = indexedDB.open('my-biller')
+    ...            request.onsuccess = () => resolve(request.result)
+    ...            request.onerror = () => reject(request.error)
+    ...        })
+    ...        let edited = 0
+    ...        await new Promise((resolve, reject) => {
+    ...            const tx = db.transaction(['outbox', 'orders'], 'readwrite')
+    ...            const outbox = tx.objectStore('outbox')
+    ...            outbox.getAll().onsuccess = (event) => {
+    ...                for (const row of event.target.result) {
+    ...                    if (row.table !== 'orders' || row.entityGid !== gid) continue
+    ...                    if (row.after) delete row.after.serviceMode
+    ...                    if (row.before) delete row.before.serviceMode
+    ...                    outbox.put(row)
+    ...                    edited++
+    ...                }
+    ...            }
+    ...            const orders = tx.objectStore('orders')
+    ...            orders.getAll().onsuccess = (event) => {
+    ...                const row = event.target.result.find((order) => order.gid === gid)
+    ...                if (!row) return reject(new Error('Không thấy đơn ' + gid))
+    ...                delete row.serviceMode
+    ...                orders.put(row)
+    ...            }
+    ...            tx.oncomplete = () => resolve()
+    ...            tx.onerror = () => reject(tx.error)
+    ...            tx.onabort = () => reject(tx.error)
+    ...        })
+    ...        db.close()
+    ...        return edited
+    ...    }
+    ...    arg=${gid}
+    RETURN    ${số}
 
 Đơn Theo Gid Phải Có Trạng Thái
     [Arguments]    ${gid}    ${trạng_thái}    ${page}

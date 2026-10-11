@@ -723,3 +723,40 @@ describe('previewMerge — cảnh báo chỉ khi thật sự xảy ra', () => {
     expect(differs.fileSameAsDevice[device.payments[2]!.gid]).toBe(false)
   })
 })
+
+describe('mergeByGid — Tại chỗ / Mang về', () => {
+  it('file của máy 2.19.0 mới hơn nhưng thiếu cờ thì giữ Mang về của máy, các trường khác vẫn lấy từ file', () => {
+    const device = { ...emptyLedger(), customers: [mk.customer(1, 3)], orders: [mk.order(1, 10, 50_000, { serviceMode: 'takeaway' })] }
+    const file = {
+      ...emptyLedger(),
+      customers: [mk.customer(1, 3)],
+      orders: [mk.order(1, 10, 50_000, { note: 'thu thêm ở máy cũ', updatedAt: 5 })],
+    }
+
+    const order = merged(mergeByGid(device, file, {}, 'A')).merged.orders[0]
+
+    expect(order).toMatchObject({ serviceMode: 'takeaway', note: 'thu thêm ở máy cũ', updatedAt: 5 })
+  })
+
+  it('máy giữ hàng thiếu cờ (nhận đơn lúc còn chạy 2.19.0) thì lấy cờ từ file', () => {
+    const device = { ...emptyLedger(), customers: [mk.customer(1, 3)], orders: [mk.order(1, 10, 50_000, { updatedAt: 5 })] }
+    const file = { ...emptyLedger(), customers: [mk.customer(1, 3)], orders: [mk.order(1, 10, 50_000, { serviceMode: 'takeaway' })] }
+
+    const order = merged(mergeByGid(device, file, {}, 'A')).merged.orders[0]
+
+    expect(order).toMatchObject({ serviceMode: 'takeaway', updatedAt: 5 })
+  })
+
+  it('đơn chỉ có trong file giữ đúng cờ của file, thiếu thì vẫn thiếu', () => {
+    const file = {
+      ...emptyLedger(),
+      customers: [mk.customer(1, 3)],
+      orders: [mk.order(1, 10, 50_000, { serviceMode: 'takeaway' }), mk.order(2, 11, 20_000)],
+    }
+
+    const orders = merged(mergeByGid(emptyLedger(), file, {}, 'A')).merged.orders
+
+    expect(orders.find((o) => o.gid === g(10))?.serviceMode).toBe('takeaway')
+    expect(orders.find((o) => o.gid === g(11))).not.toHaveProperty('serviceMode')
+  })
+})

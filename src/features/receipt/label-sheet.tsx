@@ -80,11 +80,11 @@ export function LabelSheet({
   onNodes: (nodes: HTMLElement[]) => void
 }) {
   const blocks = useMemo(() => lineBlocks(line), [line])
-  const sample = [shop.name, order.code, line.name, ...blocks.map((block) => block.text), '0123456789/:· tr'].join(' ')
+  const sample = [shop.name, order.code, 'MANG VỀ', line.name, ...blocks.map((block) => block.text), '0123456789/:· tr'].join(' ')
   const fontsReady = useLabelFontsReady(sample)
   const cornerLogo = Boolean(shop.logo) && shop.labelWatermark.enabled && shop.labelWatermark.position === 'corner'
   // Mọi thứ làm đổi chỗ chữ trên tem đều nằm trong khoá: đổi thì chia lại từ đầu.
-  const key = JSON.stringify([blocks, size, shop.name, order.code, line.name, count, cornerLogo, fontsReady])
+  const key = JSON.stringify([blocks, size, shop.name, order.code, order.serviceMode, line.name, count, cornerLogo, fontsReady])
   const [measured, setMeasured] = useState<{ key: string; pages: LabelBlock[][] } | null>(null)
   const pages = measured?.key === key ? measured.pages : null
   const probeRef = useRef<HTMLDivElement>(null)

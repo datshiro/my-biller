@@ -39,11 +39,17 @@ export function LabelView({
   const padding = labelPadding(size)
   const paddingLeft = labelPaddingLeft(size)
 
+  const takeaway = order.serviceMode === 'takeaway'
   const head = (
     <>
-      {shop.name ? (
-        <p className="truncate font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
-          {shop.name}
+      {/* MANG VỀ chung hàng với tên quán, không thêm hàng: đầu tem cao thêm là thân tem hẹp lại và một
+          ly ghi chú dài có thể sang thêm tem, khác số tem của cùng đơn đó nếu bán tại chỗ. Quán chưa đặt
+          tên thì hàng này sinh riêng cho MANG VỀ — chấp nhận, vì nhét vào hàng mã đơn vốn `break-all`
+          cũng có thể gãy dòng, mà lại ở hàng không được cắt. */}
+      {shop.name || takeaway ? (
+        <p className="flex gap-1 font-bold uppercase" style={{ fontSize: unit * 0.75 }}>
+          <span className="min-w-0 flex-1 truncate">{shop.name}</span>
+          {takeaway ? <span className="shrink-0">MANG VỀ</span> : null}
         </p>
       ) : null}
       {/* Không `truncate` mã đơn: nó là thứ khớp ly với đơn, cắt đuôi "…A001" là tem vô dụng. */}
