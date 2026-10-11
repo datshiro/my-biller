@@ -62,6 +62,12 @@ export type CartAction =
    * giá-gõ-tay sẽ bị bảng giá sỉ đè mất giá riêng. Hoàn lại mà đổi tiền thì không phải hoàn lại.
    */
   | { type: 'restoreLine'; line: CartLine }
+  /**
+   * Đưa một dòng vừa sửa (sheet sửa dòng, gõ ô số lượng) về `previous`. Chỉ chạy khi giỏ còn một dòng GIỐNG HỆT
+   * `after`: khoá dòng không mang `qty`, nên gõ 2→5 rồi chạm thêm 1 vẫn cùng khoá — so khoá thôi là hoàn lại xoá
+   * mất ly vừa chạm. Không làm gì khi `previous.key` trùng một dòng khác: thay vào là hai dòng chung khoá.
+   */
+  | { type: 'revertLine'; after: CartLine; previous: CartLine }
   /** Đổi giá **cả giỏ** một lượt. Payload cố ý không mang danh mục — xem `retailPrice`. */
   | { type: 'applyPriceMode'; mode: PriceMode; book: PriceBook }
   | { type: 'setQty'; key: string; qty: number }
@@ -151,6 +157,25 @@ function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const merged = { ...existing, qty: existing.qty + incoming.qty }
   return lines.map((line, index) => (index === at ? merged : line))
 }
+
+/** Mọi trường của dòng, kể cả thứ tự tuỳ chọn và topping mà khoá dòng đã sắp lại. */
+const lineFields = (line: CartLine) =>
+  JSON.stringify([
+    line.key,
+    line.itemId,
+    line.name,
+    line.unit,
+    line.unitPrice,
+    line.retailPrice,
+    line.priceSource,
+    line.costPrice,
+    line.qty,
+    line.options,
+    line.toppings.map((t) => [t.name, t.unitPrice, t.qty]),
+    line.note,
+  ])
+
+export const sameLine = (a: CartLine, b: CartLine): boolean => lineFields(a) === lineFields(b)
 
 const mapLine = (lines: CartLine[], key: string, change: (line: CartLine) => CartLine) =>
   lines.map((line) => (line.key === key ? change(line) : line))
@@ -251,6 +276,15 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       // lại món 3 lần, rồi bấm Hoàn lại theo quán tính ⇒ đơn ghi 6 tô.
       if (cart.lines.some((line) => line.key === action.line.key)) return cart
       return { ...cart, lines: upsert(cart.lines, action.line) }
+
+    case 'revertLine': {
+      const { after, previous } = action
+      if (previous.qty <= 0) return cart
+      const at = cart.lines.findIndex((line) => sameLine(line, after))
+      if (at === -1) return cart
+      if (cart.lines.some((line, index) => index !== at && line.key === previous.key)) return cart
+      return { ...cart, lines: cart.lines.map((line, index) => (index === at ? previous : line)) }
+    }
 
     case 'addLine': {
       const { line, book } = action

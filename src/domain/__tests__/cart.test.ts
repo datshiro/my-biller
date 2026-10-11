@@ -886,3 +886,94 @@ describe('thêm ly khác tuỳ chọn từ một dòng có sẵn', () => {
     expect(chép(cart, { key: 'không-có', options: ['Đường 50%'] })).toBe(cart)
   })
 })
+
+describe('hoàn lại dòng vừa sửa', () => {
+  const cafe = () => item({ id: 2, name: 'Cà phê sữa', unit: 'ly', unitPrice: 20_000 })
+  const dòngĐầu = (cart: Cart) => cart.lines[0] as CartLine
+  const sửa = (cart: Cart, key: string, patch: { options?: string[]; qty?: number } = {}) =>
+    cartReducer(cart, {
+      type: 'updateLine',
+      key,
+      qty: patch.qty ?? 1,
+      unitPrice: 20_000,
+      options: patch.options ?? [],
+      toppings: [],
+      note: '',
+    })
+
+  it('gõ số lượng 2→5 rồi hoàn lại thì về 2', () => {
+    const có2 = run([{ type: 'addItem', item: item(), qty: 2, book: RONG }])
+    const previous = dòngĐầu(có2)
+    const có5 = run([{ type: 'setQty', key: previous.key, qty: 5 }], có2)
+
+    const hoànLại = run([{ type: 'revertLine', after: dòngĐầu(có5), previous }], có5)
+    expect(hoànLại.lines).toEqual([previous])
+  })
+
+  it('gõ 2→5 rồi chạm lưới thêm 1: hoàn lại không làm gì, không xoá ly vừa chạm', () => {
+    // Khoá dòng không mang `qty`: so khoá thôi thì hoàn lại đưa 6 về 2, mất cả ly chạm sau.
+    const có2 = run([{ type: 'addItem', item: item(), qty: 2, book: RONG }])
+    const previous = dòngĐầu(có2)
+    const có5 = run([{ type: 'setQty', key: previous.key, qty: 5 }], có2)
+    const có6 = run([{ type: 'addItem', item: item(), book: RONG }], có5)
+    expect(dòngĐầu(có6).key).toBe(previous.key)
+
+    const hoànLại = cartReducer(có6, { type: 'revertLine', after: dòngĐầu(có5), previous })
+    expect(hoànLại).toBe(có6)
+    expect(dòngĐầu(hoànLại).qty).toBe(6)
+  })
+
+  it('sửa tuỳ chọn rồi hoàn lại thì về lựa chọn cũ, giữ đúng vị trí dòng', () => {
+    const giỏ = run([
+      { type: 'addItem', item: item(), book: RONG },
+      { type: 'addItem', item: cafe(), qty: 2, book: RONG },
+      { type: 'addItem', item: item({ id: 3, name: 'Trà đá', unitPrice: 3_000 }), book: RONG },
+    ])
+    const trước = sửa(giỏ, giỏ.lines[1]?.key ?? '', { options: ['Ít đường'], qty: 2 })
+    const previous = trước.lines[1] as CartLine
+    const sau = sửa(trước, previous.key, { options: ['Không đường'], qty: 2 })
+    const after = sau.lines[1] as CartLine
+    expect(after.options).toEqual(['Không đường'])
+
+    const hoànLại = run([{ type: 'revertLine', after, previous }], sau)
+    expect(hoànLại.lines.map((line) => line.name)).toEqual(['Phở bò', 'Cà phê sữa', 'Trà đá'])
+    expect(hoànLại.lines[1]).toEqual(previous)
+  })
+
+  it('sửa làm gộp dòng: đưa dòng gộp về trạng thái cũ không được, số lượng dòng bị gộp còn nguyên', () => {
+    const có2 = run([{ type: 'addItem', item: cafe(), qty: 2, book: RONG }])
+    const một = sửa(có2, dòngĐầu(có2).key, { options: ['Ít đường'], qty: 2 })
+    const hai = run([{ type: 'addItem', item: cafe(), book: RONG }], một)
+    expect(hai.lines).toHaveLength(2)
+    const trơn = hai.lines[1] as CartLine
+
+    // Ly trơn sửa thành Ít đường thì trùng khoá dòng 2 ly đầu: gộp còn một dòng 3 ly.
+    const gộp = sửa(hai, trơn.key, { options: ['Ít đường'], qty: 1 })
+    expect(gộp.lines).toHaveLength(1)
+    expect(dòngĐầu(gộp).qty).toBe(3)
+
+    const after = { ...trơn, options: ['Ít đường'], key: dòngĐầu(gộp).key }
+    const hoànLại = cartReducer(gộp, { type: 'revertLine', after, previous: trơn })
+    expect(hoànLại).toBe(gộp)
+  })
+
+  it('previous.key trùng một dòng khác đang có thì không làm gì, không đẻ hai dòng chung khoá', () => {
+    const giỏ = run([{ type: 'addItem', item: cafe(), book: RONG }])
+    const previous = dòngĐầu(giỏ)
+    const sau = sửa(giỏ, previous.key, { options: ['Ít đường'] })
+    const after = dòngĐầu(sau)
+    // Thêm lại một ly trơn: giờ khoá cũ của dòng vừa sửa đã có chủ.
+    const cóLyTrơn = run([{ type: 'addItem', item: cafe(), book: RONG }], sau)
+    expect(cóLyTrơn.lines).toHaveLength(2)
+
+    const hoànLại = cartReducer(cóLyTrơn, { type: 'revertLine', after, previous })
+    expect(hoànLại).toBe(cóLyTrơn)
+  })
+
+  it('restoreLine của banner bỏ món vẫn đặt lại dòng như cũ', () => {
+    const giỏ = run([{ type: 'addItem', item: item(), qty: 3, book: RONG }])
+    const dòng = dòngĐầu(giỏ)
+    const đãBỏ = run([{ type: 'setQty', key: dòng.key, qty: 0 }], giỏ)
+    expect(run([{ type: 'restoreLine', line: dòng }], đãBỏ).lines).toEqual([dòng])
+  })
+})
