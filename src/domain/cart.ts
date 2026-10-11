@@ -39,7 +39,10 @@ export type Cart = {
   surcharge: number
   note: string
   priceMode: PriceMode
+  serviceMode: ServiceMode
 }
+
+export type ServiceMode = 'dine-in' | 'takeaway'
 
 export type CartAction =
   /** `book` bắt buộc, **không có giá trị mặc định**: quên truyền là typecheck đỏ, không phải âm thầm bán giá lẻ. */
@@ -80,6 +83,7 @@ export type CartAction =
   | { type: 'setDiscount'; discount: number }
   | { type: 'setSurcharge'; surcharge: number }
   | { type: 'setNote'; note: string }
+  | { type: 'setServiceMode'; serviceMode: ServiceMode }
   | { type: 'restore'; cart: Cart }
   | { type: 'clear' }
 
@@ -93,6 +97,7 @@ export const emptyCart = (): Cart => ({
   surcharge: 0,
   note: '',
   priceMode: 'retail',
+  serviceMode: 'dine-in',
 })
 
 /**
@@ -326,6 +331,9 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
 
     case 'setNote':
       return { ...cart, note: action.note }
+
+    case 'setServiceMode':
+      return { ...cart, serviceMode: action.serviceMode }
 
     case 'restore':
       // Tính lại khoá: nháp do bản build cũ ghi mang khoá thiếu `#priceSource`, giữ nguyên thì lần chạm

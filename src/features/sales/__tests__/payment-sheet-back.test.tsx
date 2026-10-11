@@ -17,6 +17,8 @@ function renderPaymentSheet({ submitting, onClose }: { submitting: boolean; onCl
       surcharge={0}
       total={55_000}
       hasCustomer={false}
+      serviceMode="dine-in"
+      onServiceModeChange={() => {}}
       method="cash"
       given={55_000}
       onMethodChange={() => {}}

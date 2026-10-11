@@ -1078,3 +1078,45 @@ describe('tên món trùng', () => {
     expect(response.status).toBe(201)
   })
 })
+
+describe('Tại chỗ / Mang về trên đơn', () => {
+  async function createTakeaway() {
+    const customerGid = crypto.randomUUID()
+    const orderGid = crypto.randomUUID()
+    expect((await push(event('customers', customerGid, customerRow(customerGid)))).status).toBe(201)
+    const order = orderRow(orderGid, customerGid)
+    const after = { ...order.after, serviceMode: 'takeaway' }
+    expect((await push(event('orders', orderGid, after, order.refs))).status).toBe(201)
+    return { orderGid, after, refs: order.refs }
+  }
+
+  const lastOrder = async () => (await pullAll()).filter((entry) => entry.table === 'orders').at(-1)
+
+  it('create mang Mang về được lưu và phát lại nguyên', async () => {
+    await createTakeaway()
+
+    expect((await lastOrder())?.after).toMatchObject({ serviceMode: 'takeaway' })
+  })
+
+  it('put của máy 2.19.0 thiếu trường không làm mất cờ ở event phát lại', async () => {
+    const { orderGid, after, refs } = await createTakeaway()
+    const oldDeviceRow: Record<string, unknown> = { ...after }
+    delete oldDeviceRow.serviceMode
+
+    const put = await push(
+      event('orders', orderGid, { ...oldDeviceRow, note: 'thu thêm ở máy cũ', updatedAt: 2 }, refs, 'put', oldDeviceRow),
+    )
+
+    expect(put.status).toBe(201)
+    expect((await lastOrder())?.after).toMatchObject({ serviceMode: 'takeaway', note: 'thu thêm ở máy cũ' })
+  })
+
+  it('put đổi cờ sau khi tạo thì bị bỏ: cờ bất biến', async () => {
+    const { orderGid, after, refs } = await createTakeaway()
+
+    const put = await push(event('orders', orderGid, { ...after, serviceMode: 'dine-in', updatedAt: 2 }, refs, 'put', after))
+
+    expect(put.status).toBe(201)
+    expect((await lastOrder())?.after).toMatchObject({ serviceMode: 'takeaway' })
+  })
+})

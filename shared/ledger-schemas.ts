@@ -156,6 +156,10 @@ export const OrderSchema = z.object({
   status: z.enum(['paid', 'partial', 'unpaid', 'void']),
   soldAt: Timestamp,
   note: z.string(),
+  // Không `.default`: máy 2.19.0 đọc đơn rồi ghi lại hàng thiếu trường này, nên mặc định lúc đọc sẽ
+  // để máy mới đẩy 'dine-in' đè lên đơn mang về. Thiếu trường = đơn cũ, không in gì. Đặt lúc tạo rồi
+  // bất biến: Worker dựng `put` của đơn từ bản đã lưu và không nhận trường này.
+  serviceMode: z.enum(['dine-in', 'takeaway']).optional(),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })

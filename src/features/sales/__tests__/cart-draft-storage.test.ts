@@ -158,3 +158,32 @@ describe('nháp do bản build trước khi có tuỳ chọn/topping ghi', () =>
     expect(loadCartDraft()?.cart.lines[0]).toMatchObject({ options: ['Ít đường'], toppings })
   })
 })
+
+describe('Tại chỗ / Mang về trong nháp', () => {
+  const DONG_PHO: Cart['lines'][number] = {
+    key: 'k',
+    itemId: 1,
+    name: 'Phở bò',
+    unit: 'tô',
+    unitPrice: 55_000,
+    retailPrice: 55_000,
+    priceSource: 'catalog',
+    costPrice: null,
+    qty: 1,
+    options: [],
+    toppings: [],
+    note: '',
+  }
+
+  it('nháp Mang về nạp lại vẫn Mang về', () => {
+    saveCartDraft({ ...emptyCart(), serviceMode: 'takeaway', lines: [DONG_PHO] })
+
+    expect(loadCartDraft()?.cart.serviceMode).toBe('takeaway')
+  })
+
+  it('nháp do bản trước ghi, thiếu trường, mở ra Tại chỗ', () => {
+    localStorage.setItem(KEY, NHAP_BAN_CU)
+
+    expect(loadCartDraft()?.cart.serviceMode).toBe('dine-in')
+  })
+})

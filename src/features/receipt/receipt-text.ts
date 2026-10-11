@@ -37,7 +37,13 @@ export function receiptToText({
   if (head.length > 0) blocks.push(head.join('\n'))
 
   blocks.push(
-    ['PHIẾU BÁN HÀNG', `Số: ${order.code}`, format(order.soldAt, 'dd/MM/yyyy HH:mm'), `Khách: ${order.customerName}`].join('\n'),
+    [
+      'PHIẾU BÁN HÀNG',
+      `Số: ${order.code}`,
+      ...(order.serviceMode === 'takeaway' ? ['MANG VỀ'] : []),
+      format(order.soldAt, 'dd/MM/yyyy HH:mm'),
+      `Khách: ${order.customerName}`,
+    ].join('\n'),
   )
 
   blocks.push(

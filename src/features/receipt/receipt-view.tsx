@@ -85,6 +85,9 @@ export function ReceiptView({
         <span>Số: {order.code}</span>
         <span>{format(order.soldAt, 'dd/MM/yyyy HH:mm')}</span>
       </div>
+      {order.serviceMode === 'takeaway' ? (
+        <p className="mt-1 text-center text-[14px] font-bold tracking-wide">MANG VỀ</p>
+      ) : null}
       <p className="mt-1 text-[11px]">
         Khách: <span className="font-semibold">{order.customerName}</span>
       </p>

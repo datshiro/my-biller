@@ -80,6 +80,7 @@ async function seedShop() {
     surcharge: 5_000,
     soldAt,
     note: 'Giao trước 11h',
+    serviceMode: 'takeaway',
     payment: null,
   })
   await addOrderPayment({ orderId: id, amount: 40_000, method: 'cash', paidAt: soldAt, note: 'Trả trước' })
@@ -173,6 +174,29 @@ describe('xuất → xoá → nhập', () => {
     expect(await db.payments.where('orderId').equals(orderId).toArray()).toMatchObject([
       { amount: 40_000, allocatedOrderId: 0 },
     ])
+  })
+
+  it('Mang về đi qua xuất → nhập → recalcAll; file của bản cũ thiếu cờ vẫn nhập được và không tự thành Tại chỗ', async () => {
+    const orderId = await seedShop()
+    const file = await collectBackup(exportedAt)
+    const fileCu = {
+      ...file.data,
+      orders: file.data.orders.map((order) => {
+        const old = { ...order }
+        delete old.serviceMode
+        return old
+      }),
+    }
+
+    await wipeAllData()
+    await replaceAllData(file.data)
+    await recalcAll()
+    expect((await db.orders.get(orderId))?.serviceMode).toBe('takeaway')
+
+    await wipeAllData()
+    await replaceAllData(fileCu)
+    await recalcAll()
+    expect(await db.orders.get(orderId)).not.toHaveProperty('serviceMode')
   })
 
   it('recalcAll không đóng dấu ngày nhập lên đơn cũ', async () => {
