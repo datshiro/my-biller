@@ -865,8 +865,7 @@ describe('thêm ly khác tuỳ chọn từ một dòng có sẵn', () => {
     expect(cartTotals(gio).total).toBe(3 * 27_000)
   })
 
-  it('topping của dòng nguồn giữ giá lúc bán dù thực đơn đã đổi giá', () => {
-    // Giá 5.000 nằm trên dòng; thực đơn có đổi thành 7.000 thì sheet vẫn gửi lại đúng topping của dòng.
+  it('topping gửi kèm được chép nguyên giá lúc bán, không tra lại thực đơn', () => {
     const gio = chép(gốc({ toppings: [tranChau] }), { options: ['Đường 50%'] })
 
     expect(gio.lines[1]?.toppings).toEqual([tranChau])

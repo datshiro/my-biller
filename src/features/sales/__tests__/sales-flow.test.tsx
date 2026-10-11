@@ -537,6 +537,22 @@ describe('bán hàng', () => {
       expect(order).toMatchObject({ subtotal: 60_000, total: 60_000 })
     })
 
+    it('gỡ rồi chọn lại topping theo thứ tự khác vẫn là chưa đổi gì: nút Thêm ly khác tuỳ chọn còn khoá', async () => {
+      // Mở nút ở đây thì bấm vào reducer không làm gì (khoá trùng dòng gốc) mà máy vẫn rung, sheet vẫn đóng.
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Thạch' }))
+      await them()
+
+      await suaDong('Cà phê sữa (+ Trân châu, + Thạch)')
+      await userEvent.click(dialog().getByRole('button', { name: 'Bớt Trân châu' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+      expect((dialog().getByRole('button', { name: 'Thêm ly khác tuỳ chọn' }) as HTMLButtonElement).disabled).toBe(true)
+    })
+
     it('chip ghi chú lấy từ ghi chú đã bán gần đây; chạm chip là ghi đúng cụm đó lên dòng', async () => {
       await seedCafe()
       await createOrder({
