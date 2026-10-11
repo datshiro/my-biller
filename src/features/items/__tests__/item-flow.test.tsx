@@ -8,6 +8,7 @@ import { ItemFormPage } from '../item-form-page'
 import { ItemListPage } from '../item-list-page'
 import { db } from '@/db/db'
 import { createItem, listItems } from '@/db/repositories/items'
+import { createOptionGroup } from '@/db/repositories/option-groups'
 import type { Item } from '@/domain/schema'
 
 afterEach(cleanup)
@@ -156,5 +157,192 @@ describe('bán lại mặt hàng chặn trùng tên', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Bán lại mặt hàng này' }))
 
     await waitFor(async () => expect(await db.items.get(inactiveId)).toMatchObject({ isActive: 1 }))
+  })
+})
+
+describe('món topping và nhóm lựa chọn', () => {
+  const choiceGroup = async (name: string, choices: string[]) => {
+    const id = await createOptionGroup({
+      kind: 'choice',
+      name,
+      choices,
+      required: 0,
+      maxSelect: 1,
+      defaultChoice: null,
+      sortOrder: 1,
+      isActive: 1,
+    })
+    return (await db.optionGroups.get(id))!
+  }
+  const saveItem = () => userEvent.click(screen.getByRole('button', { name: 'LƯU MẶT HÀNG' }))
+
+  it('tạo món topping không bán riêng: lưu thành kind topping, isActive 0, lưới hiện "Chỉ bán kèm"', async () => {
+    renderAt('/them/mat-hang/moi')
+
+    await userEvent.type(screen.getByLabelText('Tên mặt hàng *'), 'Trân châu')
+    await userEvent.type(screen.getByLabelText('Giá bán *'), '5k')
+    await userEvent.click(screen.getByRole('button', { name: 'Là topping' }))
+    await saveItem()
+
+    await waitFor(async () =>
+      expect(await listItems()).toEqual([expect.objectContaining({ name: 'Trân châu', kind: 'topping', isActive: 0 })]),
+    )
+    expect(await screen.findByText('Chỉ bán kèm')).toBeDefined()
+  })
+
+  it('bật "Bán riêng được" thì isActive 1 và lưới không đánh dấu chỉ bán kèm', async () => {
+    renderAt('/them/mat-hang/moi')
+
+    await userEvent.type(screen.getByLabelText('Tên mặt hàng *'), 'Thạch')
+    await userEvent.type(screen.getByLabelText('Giá bán *'), '3k')
+    await userEvent.click(screen.getByRole('button', { name: 'Là topping' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Bán riêng được' }))
+    await saveItem()
+
+    await waitFor(async () =>
+      expect(await listItems()).toEqual([expect.objectContaining({ name: 'Thạch', kind: 'topping', isActive: 1 })]),
+    )
+    expect(await screen.findByText(/Thạch/)).toBeDefined()
+    expect(screen.queryByText('Chỉ bán kèm')).toBeNull()
+  })
+
+  it('gắn nhóm lựa chọn vào món: lưu optionGroupGids theo nhóm đã chọn', async () => {
+    const sugar = await choiceGroup('Đường', ['Ít đường', 'Không đường'])
+    renderAt('/them/mat-hang/moi')
+
+    await userEvent.type(screen.getByLabelText('Tên mặt hàng *'), 'Cà phê sữa')
+    await userEvent.type(screen.getByLabelText('Giá bán *'), '25k')
+    await userEvent.click(screen.getByRole('button', { name: 'Đường' }))
+    await saveItem()
+
+    await waitFor(async () =>
+      expect(await listItems()).toEqual([
+        expect.objectContaining({ name: 'Cà phê sữa', kind: 'item', isActive: 1, optionGroupGids: [sugar.gid] }),
+      ]),
+    )
+  })
+
+  it('món đang là topping trong nhóm thì không đổi về món thường được; món topping không có nút ngừng bán', async () => {
+    const pearlId = await createItem({
+      name: 'Trân châu',
+      groupId: null,
+      unit: 'phần',
+      unitPrice: 5_000,
+      costPrice: null,
+      isActive: 0,
+      kind: 'topping',
+    })
+    const pearl = await db.items.get(pearlId)
+    await createOptionGroup({
+      kind: 'topping',
+      name: 'Topping trà sữa',
+      required: 0,
+      maxSelect: null,
+      defaultChoice: null,
+      sortOrder: 1,
+      isActive: 1,
+      toppings: [{ itemGid: pearl!.gid, price: null }],
+    })
+    renderAt(`/them/mat-hang/${pearlId}`)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Là topping' }))
+    expect(screen.queryByRole('button', { name: /Ngừng bán|Bán lại/ })).toBeNull()
+    await saveItem()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Món đang là topping trong nhóm “Topping trà sữa”')
+    expect((await db.items.get(pearlId))?.kind).toBe('topping')
+  })
+
+  it('sửa giá món cũ thiếu kind thì không đẩy kind hay optionGroupGids', async () => {
+    const id = await db.items.add({
+      gid: crypto.randomUUID(),
+      name: 'Bánh flan',
+      groupId: null,
+      unit: 'cái',
+      unitPrice: 10_000,
+      costPrice: null,
+      isActive: 1,
+      note: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    renderAt(`/them/mat-hang/${id}`)
+
+    const price = await screen.findByLabelText('Giá bán *')
+    await userEvent.clear(price)
+    await userEvent.type(price, '12k')
+    await saveItem()
+
+    await waitFor(async () => expect((await db.items.get(id))?.unitPrice).toBe(12_000))
+    const raw = await db.items.where(':id').equals(id).raw().first()
+    expect(raw).not.toHaveProperty('kind')
+    expect(raw).not.toHaveProperty('optionGroupGids')
+  })
+})
+
+describe('trùng tên và nhãn có sẵn trong danh mục', () => {
+  const choiceGroup = async (name: string, choices: string[]) => {
+    const id = await createOptionGroup({
+      kind: 'choice',
+      name,
+      choices,
+      required: 0,
+      maxSelect: 1,
+      defaultChoice: null,
+      sortOrder: 1,
+      isActive: 1,
+    })
+    return (await db.optionGroups.get(id))!
+  }
+  const saveItem = () => userEvent.click(screen.getByRole('button', { name: 'LƯU MẶT HÀNG' }))
+
+  it('đặt tên trùng món topping chỉ bán kèm thì báo "(topping chỉ bán kèm)" và không ghi', async () => {
+    await createItem({
+      name: 'Thạch',
+      groupId: null,
+      unit: 'phần',
+      unitPrice: 3_000,
+      costPrice: null,
+      isActive: 0,
+      kind: 'topping',
+    })
+    renderAt('/them/mat-hang/moi')
+
+    await userEvent.type(screen.getByLabelText('Tên mặt hàng *'), 'Thạch')
+    await userEvent.type(screen.getByLabelText('Giá bán *'), '4k')
+    await userEvent.click(screen.getByRole('button', { name: 'LƯU MẶT HÀNG' }))
+
+    expect(await screen.findByText(/Đã có món “Thạch” \(topping chỉ bán kèm\)/)).toBeDefined()
+    expect(await db.items.count()).toBe(1)
+  })
+
+  it('chỗ trùng nhãn có sẵn ở món khác không chặn sửa giá món này', async () => {
+    const sugar = await choiceGroup('Đường', ['Ít đường', 'Không đường'])
+    const level = await choiceGroup('Mức ngọt', ['Ít đường', 'Đường đầy'])
+    await createItem({
+      name: 'Cà phê',
+      groupId: null,
+      unit: 'ly',
+      unitPrice: 20_000,
+      costPrice: null,
+      isActive: 1,
+      optionGroupGids: [sugar.gid, level.gid],
+    })
+    const phoId = await createItem({
+      name: 'Phở bò',
+      groupId: null,
+      unit: 'tô',
+      unitPrice: 55_000,
+      costPrice: null,
+      isActive: 1,
+    })
+    renderAt(`/them/mat-hang/${phoId}`)
+
+    const price = await screen.findByLabelText('Giá bán *')
+    await userEvent.clear(price)
+    await userEvent.type(price, '60k')
+    await saveItem()
+
+    await waitFor(async () => expect((await db.items.get(phoId))?.unitPrice).toBe(60_000))
   })
 })

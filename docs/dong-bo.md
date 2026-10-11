@@ -193,9 +193,8 @@ Máy 2.19.0 chỉ đọc thực đơn kiểu cũ trên nhóm món và không bi�
   Máy của bản mới hiện chúng. Cảnh báo của một nhóm món tự xoá khi sửa đổi sau đó của nhóm ấy dịch được. Trong lúc
   dịch, mọi event tự sinh được kiểm hết rồi mới ghi, nên không có bản dịch dở dang.
 
-  Bản dịch áp cho event của **mọi** máy, không riêng máy thiếu `catalog-v2`. Lý do: bản mới vẫn còn sheet menu cũ cho
-  tới khi màn cài nhóm lựa chọn thay nó, và sửa trên sheet đó cũng phải chảy sang mô hình mới. Máy mới đổi tên nhóm hay
-  đổi `optionGroupGids` thì gửi trường cũ không đổi, nên không bị dịch, chỉ được chiếu. Nhóm món tắt hoặc gỡ nhóm topping
+  Bản dịch không lọc theo caps. Bản mới không còn màn nào sửa trường cũ (cài nhóm lựa chọn ở Thêm › Nhóm lựa chọn,
+  gắn ở form món và ở Nhóm mặt hàng), nên event của nó gửi trường cũ không đổi: không bị dịch, chỉ được chiếu. Nhóm món tắt hoặc gỡ nhóm topping
   riêng là quyết định của chủ quán: máy cũ thêm topping sau đó không hồi sinh nhóm đó, mà tạo một nhóm mới chỉ chứa
   topping vừa thêm.
 - **Không luật mới nào từ chối máy cũ** (máy không gửi cap `catalog-v2`):

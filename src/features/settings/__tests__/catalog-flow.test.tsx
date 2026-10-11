@@ -9,6 +9,8 @@ import { ItemGroupPage } from '../item-group-page'
 import { db } from '@/db/db'
 import { createExpense, createExpenseCategory } from '@/db/repositories/expenses'
 import { appendGroup, createItem } from '@/db/repositories/items'
+import { createOptionGroup } from '@/db/repositories/option-groups'
+import type { ItemGroup } from '@/domain/schema'
 
 beforeEach(async () => {
   await db.open()
@@ -112,68 +114,95 @@ describe('nhóm mặt hàng', () => {
   })
 })
 
-describe('tuỳ chọn và topping của nhóm mặt hàng', () => {
-  const openMenu = async (groupName: string) => {
+describe('nhóm lựa chọn của nhóm mặt hàng', () => {
+  const choiceGroup = async (name: string, choices: string[]) => {
+    const id = await createOptionGroup({
+      kind: 'choice',
+      name,
+      choices,
+      required: 0,
+      maxSelect: 1,
+      defaultChoice: null,
+      sortOrder: 1,
+      isActive: 1,
+    })
+    return (await db.optionGroups.get(id))!
+  }
+  const openSheet = async (groupName: string) => {
     renderPage(<ItemGroupPage />)
     await openRow(groupName)
-    await userEvent.click(await screen.findByRole('button', { name: /Tuỳ chọn & topping/ }))
-    return within(await screen.findByRole('dialog', { name: /Tuỳ chọn & topping/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Nhóm lựa chọn/ }))
+    return within(await screen.findByRole('dialog', { name: `Nhóm lựa chọn — ${groupName}` }))
   }
   const save = () => userEvent.click(screen.getByRole('button', { name: 'LƯU' }))
 
-  it('thêm nhóm tuỳ chọn và topping rồi lưu: nằm trên nhóm, giá topping là số nguyên đồng', async () => {
-    const groupId = await appendGroup('Đồ uống')
-    const sheet = await openMenu('Đồ uống')
+  it('gắn nhóm lựa chọn rồi lưu: chỉ optionGroupGids được ghi, không đẩy thực đơn kiểu cũ', async () => {
+    const groupId = await db.itemGroups.add({
+      gid: crypto.randomUUID(),
+      name: 'Đồ uống',
+      sortOrder: 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as ItemGroup)
+    const sugar = await choiceGroup('Đường', ['Ít đường', 'Không đường'])
+    const sheet = await openSheet('Đồ uống')
 
-    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm nhóm tuỳ chọn' }))
-    await userEvent.type(sheet.getByLabelText('Tên nhóm tuỳ chọn 1'), 'Đường')
-    await userEvent.type(sheet.getByLabelText('Các lựa chọn của nhóm 1'), 'Ít đường, Không đường')
-    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm topping' }))
-    await userEvent.type(sheet.getByLabelText('Tên topping 1'), 'Trân châu')
-    await userEvent.type(sheet.getByLabelText('Giá topping 1'), '5000')
+    await userEvent.click(sheet.getByRole('button', { name: 'Đường' }))
     await save()
 
-    await waitFor(async () => expect((await db.itemGroups.get(groupId))?.toppingMenu).toHaveLength(1))
-    expect(await db.itemGroups.get(groupId)).toMatchObject({
-      optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
-      toppingMenu: [{ name: 'Trân châu', price: 5_000 }],
-    })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Tuỳ chọn & topping/ })).toBeNull())
+    await waitFor(async () => expect((await db.itemGroups.get(groupId))?.optionGroupGids).toEqual([sugar.gid]))
+    const raw = await db.itemGroups.where(':id').equals(groupId).raw().first()
+    expect(raw).toMatchObject({ name: 'Đồ uống', optionGroupGids: [sugar.gid] })
+    expect(raw).not.toHaveProperty('optionGroups')
+    expect(raw).not.toHaveProperty('toppingMenu')
   })
 
-  it('lựa chọn trùng nhóm Đá có sẵn bị chặn kèm lý do, không ghi gì', async () => {
-    const groupId = await appendGroup('Đồ uống')
-    const sheet = await openMenu('Đồ uống')
+  it('mở sheet rồi LƯU khi không đổi gì: chỉ đóng sheet, không ghi gì', async () => {
+    const groupId = await db.itemGroups.add({
+      gid: crypto.randomUUID(),
+      name: 'Đồ uống',
+      sortOrder: 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as ItemGroup)
+    const outboxBefore = await db.outbox.count()
 
-    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm nhóm tuỳ chọn' }))
-    await userEvent.type(sheet.getByLabelText('Tên nhóm tuỳ chọn 1'), 'Kiểu đá')
-    await userEvent.type(sheet.getByLabelText('Các lựa chọn của nhóm 1'), 'Đá riêng')
+    await openSheet('Đồ uống')
     await save()
 
-    expect((await screen.findByRole('alert')).textContent).toContain('chỉ thuộc một nhóm')
-    expect((await db.itemGroups.get(groupId))?.optionGroups).toEqual([])
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nhóm lựa chọn — Đồ uống' })).toBeNull())
+    expect(await db.outbox.count()).toBe(outboxBefore)
+    expect(await db.itemGroups.where(':id').equals(groupId).raw().first()).not.toHaveProperty('optionGroupGids')
   })
 
-  it('topping thiếu giá bị chặn; xoá một topping rồi lưu thì thực đơn còn đúng cái còn lại', async () => {
-    const groupId = await appendGroup('Đồ uống')
-    await db.itemGroups.update(groupId, {
-      toppingMenu: [
-        { name: 'Trân châu', price: 5_000 },
-        { name: 'Thạch', price: 3_000 },
-      ],
+  it('nhãn trùng giữa nhóm của nhóm món và nhóm gắn thẳng vào một món trong nhóm thì bị chặn kèm lý do, không ghi gì', async () => {
+    const groupId = await db.itemGroups.add({
+      gid: crypto.randomUUID(),
+      name: 'Đồ uống',
+      sortOrder: 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as ItemGroup)
+    await choiceGroup('Đường', ['Ít đường', 'Không đường'])
+    const level = await choiceGroup('Mức ngọt', ['Ít đường', 'Đường đầy'])
+    await createItem({
+      name: 'Cà phê',
+      groupId,
+      unit: 'ly',
+      unitPrice: 20_000,
+      costPrice: null,
+      isActive: 1,
+      optionGroupGids: [level.gid],
     })
-    const sheet = await openMenu('Đồ uống')
+    const sheet = await openSheet('Đồ uống')
 
-    await userEvent.click(sheet.getByRole('button', { name: '＋ Thêm topping' }))
-    await userEvent.type(sheet.getByLabelText('Tên topping 3'), 'Pudding')
-    await save()
-    expect((await screen.findByRole('alert')).textContent).toContain('Nhập giá cho topping “Pudding”')
-
-    await userEvent.click(sheet.getByRole('button', { name: 'Xoá topping 3' }))
-    await userEvent.click(sheet.getByRole('button', { name: 'Xoá topping 1' }))
+    await userEvent.click(sheet.getByRole('button', { name: 'Đường' }))
     await save()
 
-    await waitFor(async () => expect((await db.itemGroups.get(groupId))?.toppingMenu).toHaveLength(1))
-    expect((await db.itemGroups.get(groupId))?.toppingMenu).toEqual([{ name: 'Thạch', price: 3_000 }])
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Món “Cà phê”')
+    expect(alert.textContent).toContain('Ít đường')
+    expect(alert.textContent).toContain('chỉ thuộc một nhóm')
+    expect(await db.itemGroups.where(':id').equals(groupId).raw().first()).not.toHaveProperty('optionGroupGids')
   })
 })

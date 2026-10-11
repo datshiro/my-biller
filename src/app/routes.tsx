@@ -18,6 +18,8 @@ import { ReportPage } from '@/features/reports/report-page'
 import { SalesPage } from '@/features/sales/sales-page'
 import { ExpenseCategoryPage } from '@/features/settings/expense-category-page'
 import { ItemGroupPage } from '@/features/settings/item-group-page'
+import { OptionGroupFormPage } from '@/features/settings/option-group-form-page'
+import { OptionGroupListPage } from '@/features/settings/option-group-list-page'
 import { SettingsPage } from '@/features/settings/settings-page'
 import { ShopInfoPage } from '@/features/settings/shop-info-page'
 import { DeviceSetupPage } from '@/features/settings/device-setup-page'
@@ -50,6 +52,7 @@ export function AppRoutes() {
           <Route path="/them/doi-soat" element={<DoiSoatPage />} />
           <Route path="/them/sao-luu" element={<SaoLuuPage />} />
           <Route path="/them/nhom-mat-hang" element={<ItemGroupPage />} />
+          <Route path="/them/nhom-lua-chon" element={<OptionGroupListPage />} />
           <Route path="/them/loai-chi-phi" element={<ExpenseCategoryPage />} />
         </Route>
 
@@ -59,6 +62,8 @@ export function AppRoutes() {
         {/* Màn form chiếm trọn màn hình, không có bottom nav — đang nhập dở thì không nên nhảy tab. */}
         <Route path="/them/mat-hang/moi" element={<ItemFormPage />} />
         <Route path="/them/mat-hang/:id" element={<ItemFormPage />} />
+        <Route path="/them/nhom-lua-chon/moi" element={<OptionGroupFormPage />} />
+        <Route path="/them/nhom-lua-chon/:id" element={<OptionGroupFormPage />} />
         <Route path="/them/khach-hang/moi" element={<CustomerFormPage />} />
         <Route path="/them/khach-hang/:id/sua" element={<CustomerFormPage />} />
         <Route path="/them/khach-hang/:id/bang-gia" element={<CustomerPricePage />} />

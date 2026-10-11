@@ -551,7 +551,7 @@
   tắt nhịp báo; cả hai là quyết định sản phẩm.
 
 ### ISSUE-039 — Sheet menu kiểu cũ trên máy chưa ghép không tới màn bán sau khi di trú
-- State: promoted (phase 7 của #87 xoá sheet này và thay bằng màn cài nhóm lựa chọn)
+- State: resolved (sheet menu kiểu cũ đã xoá; cài ở Thêm › Nhóm lựa chọn, gắn ở form món và Nhóm mặt hàng — cùng bản phát hành với màn bán đọc nhóm lựa chọn)
 - Severity: medium
 - Raised by: #87 phase 6 (màn bán đọc nhóm lựa chọn) / Date: 2026-10-11 / Related task: #87 phase 7
 - Description: Từ phase 6 màn bán chỉ đọc `optionGroups`. Sheet "Tuỳ chọn & topping" của nhóm món vẫn ghi
@@ -563,7 +563,7 @@
   phát hành thì phải dịch tại máy hoặc chặn phát hành.
 
 ### ISSUE-040 — Nhãn lựa chọn trùng nhau giữa hai nhóm gắn cùng một món
-- State: promoted (form nhóm lựa chọn ở phase 7 của #87 phải chặn)
+- State: resolved (`catalogClash` ở `src/domain/option-group-rules.ts` chặn lúc lưu nhóm, lúc gắn vào món và vào nhóm món, cả với hằng Đá; mẫu Đường / Mức đá / Ghi chú nhanh không trùng nhãn)
 - Severity: medium
 - Raised by: #87 phase 6 / Date: 2026-10-11 / Related task: #87 phase 7
 - Description: Dòng đơn chỉ lưu nhãn phẳng trong `options`. Hai nhóm cùng có nhãn "Ít" (ví dụ Đường và Mức đá) thì

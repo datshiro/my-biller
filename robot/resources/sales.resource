@@ -197,25 +197,14 @@ Bớt Một
     RETURN    ${giá_trị}
 
 Cài Thực Đơn Đồ Uống
-    [Documentation]    Cài nhóm Đồ uống đúng đường chủ quán đi: Nhóm mặt hàng › nhóm › Tuỳ chọn & topping.
-    ...    Một nhóm tuỳ chọn (Đường: Ít đường, Không đường) và hai topping (Trân châu 5.000, Thạch 3.000).
-    ...    Chờ lưu xong bằng cách đọc lại sổ, không đoán theo thời gian.
-    Mở Màn    /them/nhom-mat-hang
-    Click    css=button:has-text("Đồ uống")
-    Bấm Nút    Tuỳ chọn & topping
-    Bấm Nút    ＋ Thêm nhóm tuỳ chọn
-    Điền Ô    Tên nhóm tuỳ chọn 1    Đường
-    Điền Ô    Các lựa chọn của nhóm 1    Ít đường, Không đường
-    Bấm Nút    ＋ Thêm topping
-    Điền Ô    Tên topping 1    Trân châu
-    Điền Ô    Giá topping 1    5000
-    Bấm Nút    ＋ Thêm topping
-    Điền Ô    Tên topping 2    Thạch
-    Điền Ô    Giá topping 2    3000
-    Click    css=[role=dialog] >> css=button:text-is("LƯU")
-    Wait Until Keyword Succeeds    20x    250ms    Nhóm Đồ Uống Phải Có Thực Đơn
-    # Màn bán chỉ đọc nhóm lựa chọn. Sheet này còn ghi menu kiểu cũ (màn cài nhóm lựa chọn chưa có): máy chưa ghép
-    # chuyển nó khi mở lại app, máy đã ghép nhận bản Worker chuyển qua lượt kéo. Chờ đủ hai nhóm rồi mới bán.
+    [Documentation]    Cài nhóm Đồ uống đúng đường chủ quán đi: hai món topping chỉ bán kèm (Trân châu 5.000, Thạch
+    ...    3.000) ở form món, nhóm tuỳ chọn Đường (Ít đường, Không đường) và nhóm "Topping Đồ uống" ở màn Nhóm lựa
+    ...    chọn, rồi gắn cả hai vào nhóm món Đồ uống. Chờ lưu xong bằng cách đọc lại sổ, không đoán theo thời gian.
+    Thêm Món Topping    Trân châu    5000
+    Thêm Món Topping    Thạch    3000
+    Tạo Nhóm Tuỳ Chọn    Đường    Ít đường, Không đường
+    Tạo Nhóm Topping    Topping Đồ uống    Trân châu    Thạch
+    Gắn Nhóm Lựa Chọn Vào Nhóm Món    Đồ uống    Đường    Topping Đồ uống
     Mở Màn    /
     Wait Until Keyword Succeeds    80x    500ms    Nhóm Đồ Uống Phải Có Nhóm Lựa Chọn
 
@@ -223,13 +212,53 @@ Nhóm Đồ Uống Phải Có Nhóm Lựa Chọn
     ${nhóm_lc}=    Đọc Bảng    optionGroups
     ${tên}=    Evaluate    sorted(g['name'] for g in $nhóm_lc)
     Should Be Equal    ${tên}    ${{ ['Topping Đồ uống', 'Đường'] }}
-
-Nhóm Đồ Uống Phải Có Thực Đơn
     ${nhóm}=    Đọc Bảng    itemGroups
     ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
-    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [{'name': 'Đường', 'choices': ['Ít đường', 'Không đường']}] }}
-    ${menu}=    Evaluate    [(t['name'], t['price']) for t in $đồ_uống['toppingMenu']]
-    Should Be Equal    ${menu}    ${{ [('Trân châu', 5000), ('Thạch', 3000)] }}
+    Length Should Be    ${đồ_uống}[optionGroupGids]    2    Nhóm Đồ uống chưa gắn đủ hai nhóm lựa chọn.
+
+Thêm Món Topping
+    [Documentation]    Món topping qua form món: "Là topping", và "Bán riêng được" nếu món cũng lên lưới bán.
+    [Arguments]    ${tên}    ${giá}    ${bán_riêng}=${False}
+    Mở Màn    /them/mat-hang/moi
+    Điền Ô    Tên mặt hàng *    ${tên}
+    Điền Ô    Giá bán *    ${giá}
+    Chọn Chip    Là topping
+    IF    ${bán_riêng}    Chọn Chip    Bán riêng được
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+
+Tạo Nhóm Tuỳ Chọn
+    [Documentation]    Nhóm tuỳ chọn chọn-một ở màn Nhóm lựa chọn; `${lựa_chọn}` cách nhau bằng dấu phẩy.
+    [Arguments]    ${tên}    ${lựa_chọn}
+    Mở Màn    /them/nhom-lua-chon/moi
+    Điền Ô    Tên nhóm *    ${tên}
+    Điền Ô    Các lựa chọn *    ${lựa_chọn}
+    Bấm Nút    LƯU NHÓM
+    Wait For Condition    Url    ==    ${BASE_URL}/them/nhom-lua-chon
+
+Tạo Nhóm Topping
+    [Documentation]    Nhóm topping gồm các món topping đã có, theo đúng thứ tự chạm; giá lấy giá bán của món.
+    [Arguments]    ${tên}    @{món}
+    Mở Màn    /them/nhom-lua-chon/moi
+    Điền Ô    Tên nhóm *    ${tên}
+    Chọn Chip    Topping
+    FOR    ${một}    IN    @{món}
+        Click    css=[role=group][aria-label="Món topping"] >> css=button:has-text("${một} ·")
+    END
+    Bấm Nút    LƯU NHÓM
+    Wait For Condition    Url    ==    ${BASE_URL}/them/nhom-lua-chon
+
+Gắn Nhóm Lựa Chọn Vào Nhóm Món
+    [Documentation]    Màn Nhóm mặt hàng › nhóm › Nhóm lựa chọn: chạm các nhóm cần gắn rồi LƯU.
+    [Arguments]    ${nhóm_món}    @{nhóm}
+    Mở Màn    /them/nhom-mat-hang
+    Click    css=li >> css=button:has-text("${nhóm_món}")
+    Click    css=[role=dialog] >> css=button:has-text("Nhóm lựa chọn ›")
+    FOR    ${một}    IN    @{nhóm}
+        Click    css=[role=dialog] >> css=[role=group][aria-label="Nhóm lựa chọn"] >> css=button:text-is("${một}")
+    END
+    Click    css=[role=dialog] >> css=button:text-is("LƯU")
+    Wait For Elements State    css=[role=dialog]    detached
 
 Bán Hai Ly Cà Phê Có Topping
     [Documentation]    Hai ly cà phê sữa (20.000) + Ít đường + trân châu ×2 + thạch + ghi chú "mang về":

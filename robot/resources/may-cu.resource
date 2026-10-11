@@ -37,8 +37,10 @@ Tắt Máy Cũ
     Set Suite Variable    ${MÁY_CŨ_ĐANG_CHẠY}    ${False}
 
 Ghép Máy Cũ
-    [Documentation]    Máy A tạo mã ghép, máy cũ (C) ghép vào sổ đang có dữ liệu rồi kéo hết về.
+    [Documentation]    Máy A tạo mã ghép, máy cũ (C) ghép vào sổ đang có dữ liệu rồi kéo hết về. Chờ A đẩy hết hàng đợi
+    ...    trước: C chỉ kéo được thứ đã lên sổ chung, và A thành trang nền thì bị trình duyệt hãm nhịp đẩy.
     Dựng Máy Cũ
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
     Mở Màn Trên Máy    ${MÁY_A_PAGE}    /ghep-may
     ${failure_keyword}=    Register Keyword To Run On Failure    NONE
     TRY

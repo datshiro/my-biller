@@ -122,6 +122,12 @@ export function SettingsPage() {
           onClick={() => void navigate('/them/nhom-mat-hang')}
         />
         <ListRow
+          title="Nhóm lựa chọn"
+          subtitle="Tuỳ chọn và topping dùng chung cho nhiều món"
+          right={<span className="text-[20px] text-muted">›</span>}
+          onClick={() => void navigate('/them/nhom-lua-chon')}
+        />
+        <ListRow
           title="Loại chi phí"
           subtitle="Nhãn cho các khoản chi"
           right={<span className="text-[20px] text-muted">›</span>}

@@ -1070,13 +1070,11 @@ Nhóm lựa chọn tạo ở máy A tới máy B qua luồng danh mục, sổ ch
     Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/doi-soat
     Wait For Elements State    xpath=//span[normalize-space()="Nhóm lựa chọn"]/following-sibling::span[normalize-space()="1"]    visible
 
-Menu topping cũ cài trên máy đã ghép thành đúng một món topping mỗi tên trên cả hai máy, máy cũ vẫn giữ menu
+Nhóm lựa chọn và món topping cài ở máy A tới máy B giống từng gid, Worker chiếu thực đơn kiểu cũ cho máy bản cũ
     [Tags]    -regression
-    [Documentation]    Sổ chung có đúng một người ghi di trú là Worker: máy đã ghép không tự di trú. Cài thực đơn kiểu
-    ...    cũ trên A (màn cài nhóm mới chưa có) thì Worker chuyển nó ngay: mỗi topping thành đúng một món chỉ
-    ...    bán kèm (`isActive` 0), nhóm Đồ uống gắn nhóm lựa chọn, và trường cũ còn nguyên cho máy bản cũ. Hai máy phải
-    ...    giống hệt nhau từng gid. Việc máy đã ghép không tự di trú được khoá bằng ca Vitest riêng (gid tất định nên
-    ...    ca này không phân biệt được).
+    [Documentation]    Món topping (sổ chính) và nhóm lựa chọn (luồng danh mục) cài trên A phải tới B giống hệt nhau từng gid,
+    ...    nhóm Đồ uống gắn đúng hai nhóm, và trường thực đơn kiểu cũ trên nhóm món là phép chiếu Worker dựng cho máy
+    ...    bản 2.19.0 (máy bản mới không tự ghi trường đó). Đường di trú menu cũ do máy 2.19.0 tạo nằm ở ca máy cũ riêng.
     Chọn Máy A
     Cài Thực Đơn Đồ Uống
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
@@ -1089,18 +1087,18 @@ Menu topping cũ cài trên máy đã ghép thành đúng một món topping m�
         ${món}=    Đọc Bảng    items    ${page}
         ${topping}=    Evaluate    sorted((m['name'], m['unitPrice'], m['isActive']) for m in $món if m.get('kind') == 'topping')
         Should Be Equal    ${topping}    ${{ [('Thạch', 3000, 0), ('Trân châu', 5000, 0)] }}
-        ...    Mỗi topping phải thành đúng một món chỉ bán kèm.
+        ...    Mỗi topping phải là đúng một món chỉ bán kèm trên cả hai máy.
         ${nhóm_lc}=    Đọc Bảng    optionGroups    ${page}
         ${loại}=    Evaluate    sorted((g['kind'], g['name']) for g in $nhóm_lc)
         Should Be Equal    ${loại}    ${{ [('choice', 'Đường'), ('topping', 'Topping Đồ uống')] }}
         ${nhóm}=    Đọc Bảng    itemGroups    ${page}
         ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
         Should Be Equal    ${{ sorted($đồ_uống['optionGroupGids']) }}    ${{ sorted(g['gid'] for g in $nhóm_lc) }}
-        ...    Nhóm Đồ uống chưa gắn đúng nhóm lựa chọn Worker vừa tạo.
-        Length Should Be    ${đồ_uống}[toppingMenu]    2    Trường topping cũ bị xoá — máy bản cũ sẽ mất menu.
+        ...    Nhóm Đồ uống chưa gắn đúng hai nhóm lựa chọn.
+        Length Should Be    ${đồ_uống}[toppingMenu]    2    Worker chưa chiếu thực đơn kiểu cũ — máy bản cũ sẽ không có menu.
     END
 
-    # Đơn vẫn bán và lên sổ chung như thường sau di trú.
+    # Đơn vẫn bán và lên sổ chung như thường.
     Chọn Máy B
     Bán Nhanh    Phở bò
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
@@ -1153,7 +1151,7 @@ Máy bản 2.19.0 bán topping từ menu Worker chiếu ra, thêm topping đư�
 
 Máy bản 2.19.0 mất mạng tạo món trùng tên topping chỉ bán kèm thì topping thành bán riêng, không sinh món trùng
     [Documentation]    Bản 2.19.0 tự chặn tên trùng với món nó đã có, nên món trùng chỉ lên tới Worker khi máy cũ chưa kéo
-    ...    về món topping: máy cũ mất mạng, máy mới cài menu (Worker di trú, sinh "Trân châu" chỉ bán kèm), máy cũ tạo
+    ...    về món topping: máy cũ mất mạng, máy mới cài menu (tạo "Trân châu" chỉ bán kèm ở form món), máy cũ tạo
     ...    "Trân châu" rồi có mạng lại. Luật máy cũ ở Worker: bật topping đó thành bán riêng rồi trả `item-name-taken`, bản
     ...    cũ nối món vừa tạo vào topping sẵn có. Kiểm bằng bản 2.19.0 thật: hàng đợi máy cũ rỗng và câu báo đang hiện là
     ...    lời nối món của chính lượt này, không phải câu báo từ chối; sổ có đúng một
