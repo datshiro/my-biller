@@ -504,6 +504,39 @@ describe('bán hàng', () => {
       expect(await screen.findByRole('button', { name: 'Sửa Cà phê sữa (Không đường)' })).toBeDefined()
     })
 
+    it('Thêm ly khác tuỳ chọn: dòng gốc giữ số ly, thêm đúng 1 ly mang lựa chọn mới; chưa đổi gì thì nút khoá', async () => {
+      await seedCafe()
+      renderSales()
+
+      await pick('Cà phê sữa')
+      await userEvent.click(dialog().getByRole('button', { name: 'Ít đường' }))
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm một' }))
+      await them()
+
+      await suaDong('Cà phê sữa (Ít đường)')
+      const nut = () => dialog().getByRole('button', { name: 'Thêm ly khác tuỳ chọn' }) as HTMLButtonElement
+      expect(nut().disabled).toBe(true)
+      // Sửa ô số lượng không tính là đổi lựa chọn, và không được lan sang dòng gốc.
+      await userEvent.click(dialog().getByRole('button', { name: 'Thêm một' }))
+      expect(nut().disabled).toBe(true)
+      await userEvent.click(dialog().getByRole('button', { name: 'Không đường' }))
+      expect(nut().disabled).toBe(false)
+      await userEvent.click(nut())
+
+      expect(await screen.findByRole('button', { name: /Xem đơn · 3 món/ })).toBeDefined()
+      await openPayment()
+      await userEvent.click(screen.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }))
+      await waitFor(async () => expect(await db.orders.count()).toBe(1))
+
+      const [order] = await db.orders.toArray()
+      const lines = await getOrderLines(order?.id ?? -1)
+      expect(lines.map(({ qty, options, amount }) => ({ qty, options, amount }))).toEqual([
+        { qty: 2, options: ['Ít đường'], amount: 40_000 },
+        { qty: 1, options: ['Không đường'], amount: 20_000 },
+      ])
+      expect(order).toMatchObject({ subtotal: 60_000, total: 60_000 })
+    })
+
     it('chip ghi chú lấy từ ghi chú đã bán gần đây; chạm chip là ghi đúng cụm đó lên dòng', async () => {
       await seedCafe()
       await createOrder({
