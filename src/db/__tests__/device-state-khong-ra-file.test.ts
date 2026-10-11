@@ -12,6 +12,7 @@ import {
   savePairedDevice,
 } from '../repositories/device-state'
 import { createItem } from '../repositories/items'
+import { testGid } from '@/test-fixtures'
 
 const oldStores = {
   settings: 'key',
@@ -70,7 +71,78 @@ describe('nâng Dexie v2 lên schema hiện tại', () => {
     expect(await upgraded.expenseCategories.get(1)).toMatchObject({ createdAt: 11, updatedAt: 12 })
     expect(await upgraded.expenses.get(1)).toMatchObject({ createdAt: 13, updatedAt: 14 })
     expect(await upgraded.payments.get(1)).toMatchObject({ allocatedOrderId: 1 })
-    expect(await upgraded.deviceState.get('schema')).toEqual({ key: 'schema', schemaGen: 5 })
+    expect(await upgraded.deviceState.get('schema')).toEqual({ key: 'schema', schemaGen: 6 })
+    upgraded.close()
+    await Dexie.delete(name)
+  })
+})
+
+const v5Stores = {
+  settings: 'key',
+  deviceState: 'key',
+  itemGroups: '++id, name, sortOrder, &gid',
+  items: '++id, name, groupId, isActive, &gid',
+  customers: '++id, name, phone, &gid',
+  customerPrices: '++id, &[customerId+itemId], customerId, itemId, &gid',
+  orders: '++id, &code, customerId, soldAt, status, &gid',
+  orderLines: '++id, orderId, itemId, &gid',
+  payments: '++id, orderId, customerId, paidAt, &gid, allocatedOrderId',
+  expenseCategories: '++id, name, &gid',
+  expenses: '++id, categoryId, spentAt, &gid',
+  outbox: '++id, &eventId, txId, status, [txId+txOrder]',
+}
+
+async function seedV5Device(name: string, rows: object[]): Promise<void> {
+  await Dexie.delete(name)
+  const old = new Dexie(name)
+  old.version(5).stores(v5Stores)
+  await old.open()
+  await old.table('deviceState').bulkPut([{ key: 'schema', schemaGen: 5 }, ...rows])
+  old.close()
+}
+
+const connectionRow = {
+  key: 'connection',
+  shopId: testGid(2),
+  token: 't'.repeat(43),
+  syncUrl: 'https://sync.example.com',
+}
+
+const syncRow = { key: 'sync', lastSeq: 7, revision: 3, resyncRequired: false, lastConnectedAt: 1_234 }
+
+describe('nâng từ v5 lên v6: cờ resyncRequired', () => {
+  it('máy đã ghép (có connection) được đặt resyncRequired để dựng lại bản sao, schemaGen lên 6', async () => {
+    const name = 'upgrade-v5-paired'
+    await seedV5Device(name, [connectionRow, syncRow])
+
+    const upgraded = new BillerDb(name)
+    await upgraded.open()
+    expect(await upgraded.deviceState.get('sync')).toEqual({ ...syncRow, resyncRequired: true })
+    expect(await upgraded.deviceState.get('connection')).toEqual(connectionRow)
+    expect(await upgraded.deviceState.get('schema')).toEqual({ key: 'schema', schemaGen: 6 })
+    upgraded.close()
+    await Dexie.delete(name)
+  })
+
+  it('máy đã rời sổ chung (có sync nhưng không connection) không bị đặt cờ, vì không lượt kéo nào gỡ được', async () => {
+    const name = 'upgrade-v5-unpaired'
+    await seedV5Device(name, [syncRow])
+
+    const upgraded = new BillerDb(name)
+    await upgraded.open()
+    expect(await upgraded.deviceState.get('sync')).toEqual(syncRow)
+    expect(await upgraded.deviceState.get('schema')).toEqual({ key: 'schema', schemaGen: 6 })
+    upgraded.close()
+    await Dexie.delete(name)
+  })
+
+  it('máy chưa từng ghép không có hàng sync nào được tạo ra khi nâng', async () => {
+    const name = 'upgrade-v5-fresh'
+    await seedV5Device(name, [])
+
+    const upgraded = new BillerDb(name)
+    await upgraded.open()
+    expect(await upgraded.deviceState.get('sync')).toBeUndefined()
     upgraded.close()
     await Dexie.delete(name)
   })
@@ -122,28 +194,18 @@ describe('schemaGen', () => {
 
     const future = new Dexie(name)
     future
-      .version(6)
+      .version(7)
       .stores({
-        settings: 'key',
-        deviceState: 'key',
-        itemGroups: '++id, name, sortOrder, &gid',
-        items: '++id, name, groupId, isActive, &gid',
-        customers: '++id, name, phone, &gid',
-        customerPrices: '++id, &[customerId+itemId], customerId, itemId, &gid',
-        orders: '++id, &code, customerId, soldAt, status, &gid',
-        orderLines: '++id, orderId, itemId, &gid',
-        payments: '++id, orderId, customerId, paidAt, &gid, allocatedOrderId',
-        expenseCategories: '++id, name, &gid',
-        expenses: '++id, categoryId, spentAt, &gid',
-        outbox: '++id, &eventId, txId, status, [txId+txOrder]',
+        ...v5Stores,
+        optionGroups: '++id, &gid, sortOrder, isActive',
       })
-      .upgrade((transaction) => transaction.table('deviceState').put({ key: 'schema', schemaGen: 6 }))
+      .upgrade((transaction) => transaction.table('deviceState').put({ key: 'schema', schemaGen: 7 }))
     await future.open()
-    expect(await future.table('deviceState').get('schema')).toEqual({ key: 'schema', schemaGen: 6 })
+    expect(await future.table('deviceState').get('schema')).toEqual({ key: 'schema', schemaGen: 7 })
     future.close()
 
     const stale = new BillerDb(name)
-    await expect(stale.open()).rejects.toThrow(/schema 6 > 5/)
+    await expect(stale.open()).rejects.toThrow(/schema 7 > 6/)
     stale.close()
     await Dexie.delete(name)
   })

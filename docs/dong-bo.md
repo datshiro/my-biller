@@ -50,6 +50,24 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   không có đường nào đổi được nó. Gộp sao lưu giữ cờ của phía nào có, vì file của máy cũ thiếu trường. Worker phải
   lên TRƯỚC Pages/APK: Worker cũ cắt trường ở `create` vĩnh viễn, và applier đặt lại nguyên hàng từ event phát
   lại nên chính máy vừa tạo đơn cũng mất cờ. Không rollback Worker về bản chưa biết trường.
+- Món topping và nhóm lựa chọn dùng chung: `items.kind` (`item`/`topping`), `items.optionGroupGids` và
+  `itemGroups.optionGroupGids` (gid của nhóm lựa chọn, tối đa 20, không trùng). Cả ba **không có `.default`**, cùng lẽ
+  với `serviceMode`: applier parse hàng kéo về trước khi lưu, mặc định ở schema sẽ biến "không biết" thành giá trị thật.
+  Mặc định (`kind: 'item'`, `[]`) chỉ điền lúc đọc Dexie; `updateItem`/`updateGroup` chỉ ghi các trường này khi đang
+  sửa chúng hoặc hàng gốc đã có (cùng guard với thực đơn nhóm món). Worker chép giá trị đang lưu vào bản ghi thiếu
+  trường (`preserveItemCatalog`, `preserveItemGroupMenu`), nên máy 2.19.0 sửa giá món topping hay đổi tên nhóm không
+  làm mất chúng. Món topping `isActive: 1` bán riêng được như món thường; `isActive: 0` chỉ bán kèm, app cũ tự ẩn khỏi
+  lưới vì lọc theo `isActive`.
+- Bảng `optionGroups` (nhóm lựa chọn: `kind: 'choice'` với `choices`, hoặc `kind: 'topping'` với
+  `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
+  bộ khi gặp bảng lạ, nên bảng này đi luồng danh mục riêng (mục "Luồng danh mục" bên dưới). Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
+  máy đã ghép để dựng lại bản sao (hàng đã đi qua zod của bản cũ bị cắt `kind`/`optionGroupGids`). Tham chiếu theo
+  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó (trên
+  máy, và ở Worker với máy gửi cap `catalog-v2`); lúc đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. Hai
+  luồng không có thứ tự chung giữa các máy, nên món có thể về trước nhóm nó trỏ tới — gid treo là trạng thái hợp lệ,
+  không phải lỗi. File sao lưu lên `version: 5` có bảng `optionGroups`
+  (file 1–4 được bù mảng rỗng; file 5 thiếu bảng là file hỏng); gộp file của máy cũ giữ `kind`/`optionGroupGids` của
+  phía có trường.
 - Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
   đang mở, và ngay sau khi tự huỷ ghép hoặc chuyển thành máy chưa ghép. Nhịp báo chỉ gồm mã cài đặt, tên quán, phiên
   bản, nền tảng, số đơn, số khách và tổng nợ; **không** có đơn, khách hay tên khách. Máy đã ghép không gửi nhịp báo.
@@ -90,6 +108,114 @@ Cloudflare.
 
 Đường trên dành cho máy đã kích hoạt. Lần nạp sổ đầu tiên khi ghép máy dùng admission nguyên tử riêng,
 không đẩy từng event qua pusher.
+
+## Luồng danh mục
+
+- Nhóm lựa chọn đi oplog thứ hai trên cùng Durable Object: bảng `catalogOplog` (seq riêng, bắt đầu từ 1) và
+  `catalogLedger`, qua `POST /shop/:id/catalog/events` và `GET /shop/:id/catalog/oplog?since=`. Cùng xác thực máy,
+  epoch, chống gửi trùng theo `eventId` và chặn `seed-in-progress` như sổ chính. Hợp đồng event ở
+  `shared/catalog-events.ts` (`refs` luôn rỗng: danh mục trỏ nhau bằng gid trong payload). Sổ chính không bao giờ có
+  event `optionGroups`, nên seq sổ chính vẫn liền mạch cho máy bản cũ.
+- Client giữ **một** outbox cho cả hai luồng; pusher đẩy theo `id` và chọn endpoint theo bảng, nên nhóm lựa chọn lên
+  trước món trỏ tới nó và một lần từ chối vẫn cuộn ngược cả đuôi như sổ chính. `deviceState.sync` có thêm
+  `catalogLastSeq` (hàng cũ thiếu khoá đọc là 0); puller kéo sổ chính trước rồi luồng danh mục, mỗi luồng đòi seq liền
+  nhau trên con trỏ của mình. `resetReadReplica` luôn xoá và kéo lại **cả hai** luồng.
+- Luật tham chiếu ở Worker, chỉ xét phần tử **mới** so với bản đang lưu: nhóm topping đang bật chỉ nhận `itemGid` là
+  món `kind: 'topping'` có trong sổ chính (nhóm tắt không kiểm, để nhóm bị gỡ hết topping khi nối món trùng tên vẫn lên
+  được); với máy gửi cap `catalog-v2`, `optionGroupGids` mới phải có trong `catalogLedger` và xoá món còn nằm trong nhóm
+  topping đang bật bị từ chối. Máy bản cũ không gửi cap nên không luật nào trong số này từ chối nó.
+- Client mới gửi `caps: ['item-name-taken', 'catalog-v2']` ở mọi lần đẩy và `?caps=catalog-v2` khi kéo sổ chính.
+  Với cap này Worker giữ cả tên của món topping chỉ bán kèm; nối một món mới đang bán vào món đó thì client bật món
+  topping thành bán riêng và xếp lần bật vào cuối hàng đợi, không để món vừa thêm biến khỏi lưới. Nối món trùng tên
+  cũng ánh xạ lại `toppings[].itemGid` trong payload nhóm còn chờ đẩy.
+- Ghép máy: client đếm và nạp `optionGroups` cùng ảnh sổ (sau các bảng sổ chính); `/seed` nhận cả hai loại event, áp
+  danh mục sau sổ chính và chỉ kiểm hình dạng. "Sổ chung đã có dữ liệu" (`merge-required`) và số dòng promote đếm cả
+  `catalogLedger`. Máy ghép sau kéo cả hai luồng từ 0.
+- Worker phải lên **trước** Pages/APK: Worker cũ trả 404 cho `/catalog/*` và 400 cho `/seed` có event danh mục (ghép
+  máy hỏng). Lượt kéo luồng danh mục lỗi chỉ được ghi log, không chặn bước đẩy đơn phía sau; con trỏ đứng yên nên lượt
+  sau kéo lại.
+  Màn admin đọc bảng danh mục bằng `table=optionGroups` (con trỏ trang là seq danh mục); màn Đối soát đếm thêm dòng
+  "Nhóm lựa chọn", còn số `#` trên neo vẫn là seq sổ chính.
+
+## Di trú menu cũ
+
+- Thực đơn kiểu cũ (`optionGroups`/`toppingMenu` nằm trong nhóm món) được chuyển sang món topping và nhóm lựa chọn bởi
+  **một** hàm thuần dùng chung, `planCatalogMigration` (`shared/catalog-migration.ts`). Chỉ nhóm món có menu cũ và
+  **thiếu hẳn** trường `optionGroupGids` mới đủ điều kiện; `[]` là chủ quán chủ ý gỡ hết nên không bao giờ bị gắn lại.
+  Mỗi tên topping (khoá `itemNameKey`, chuẩn hoá NFC riêng trong di trú — luật `item-name-taken` của máy cũ không đổi)
+  thành đúng một món: món sẵn có cùng tên chỉ được đặt
+  `kind: 'topping'`, giữ `isActive` và giá; chưa có thì tạo món chỉ bán kèm (`isActive: 0`, giá phổ biến nhất, hoà lấy
+  thấp). Mỗi nhóm món được một nhóm `topping` ("Topping <tên nhóm>", giá riêng khi khác giá món) và một nhóm `choice`
+  cho mỗi nhóm tuỳ chọn cũ. Nhóm "Đá chung / Đá riêng" là hằng, không di trú. Gid tất định (UUID v5 trên gid thực thể
+  và tên), nên chạy lại không sinh trùng; dòng đích đã có không bao giờ bị ghi đè. Dữ liệu cũ vượt giới hạn schema mới
+  bị cắt bớt, không làm hỏng lượt chạy. Trường menu cũ giữ nguyên cho máy bản cũ.
+- **Quán đã ghép:** Worker là người ghi duy nhất. Lần đầu một máy bản mới chạm sổ (kéo sổ chính có `caps=catalog-v2`,
+  đẩy có cap `catalog-v2`, hoặc gọi `/catalog/*`), DO di trú cả sổ trong một transaction, ghi event thường vào hai luồng
+  (món và nhóm món vào sổ chính, nhóm lựa chọn vào luồng danh mục) rồi đặt mốc `catalogMigratedAt` trong bảng
+  `catalogMeta`. Sau mốc, DO quét lại sau mỗi event `itemGroups` được nhận (kể cả từ máy cũ) và sau mỗi lần nạp sổ.
+  Event tự sinh đi qua cùng cửa kiểm với ảnh sổ; hỏng thì huỷ cả lượt và ghi log, không bao giờ làm hỏng event của máy
+  vừa đẩy. Máy đã ghép không tự di trú.
+- **Máy chưa ghép:** client chạy cùng hàm lúc khởi động (`migrateLocalCatalog`, transaction thường, không qua outbox)
+  và trên sổ sắp ghi khi khôi phục hoặc gộp file sao lưu (`migrateBackupData`), để báo cáo đối chiếu tính trên đúng sổ
+  đã di trú. Ghép làm máy nạp sổ thì ảnh sổ mang sẵn kết quả, Worker quét lại không ra gì.
+
+## Máy bản cũ: chiếu và dịch menu cũ
+
+Máy 2.19.0 chỉ đọc thực đơn kiểu cũ trên nhóm món và không biết nhóm lựa chọn hay món topping. Nó vẫn bán, sửa menu và
+đẩy đơn bình thường nhờ ba cơ chế của Worker (`shared/legacy-menu.ts`, `worker/src/shop-do.ts`).
+
+- **Worker là chủ của trường menu cũ.** Nhóm món nào đã có `optionGroupGids` thì `optionGroups`/`toppingMenu` luôn là
+  phép chiếu `projectLegacyMenu`:
+  - nhóm `choice` đang bật thành `{ name, choices }`;
+  - phần tử của nhóm `topping` đang bật thành `{ name: tên món, price: giá riêng ?? giá món }`;
+  - xếp theo `sortOrder`; trùng tên thì nhóm có `sortOrder` nhỏ hơn thắng;
+  - nhóm tắt, nhóm mất, và topping trỏ món không còn hoặc không còn là `kind: 'topping'` đều bị bỏ.
+
+  Mọi event `itemGroups`, từ máy cũ hay máy mới, đều bị ghi đè hai trường này trước khi ghi. Sau mỗi event `items`, mỗi
+  event luồng danh mục và mỗi lượt di trú (kể cả sau `/seed`), Worker chiếu lại mọi nhóm món. Nó chỉ sinh event
+  `itemGroups` khi trường cũ thật sự đổi, nên không có vòng lặp. Máy chưa ghép không chiếu, vì không có máy cũ nào đọc.
+- **Dịch sửa đổi từ sheet menu cũ.** Event `itemGroups` `put` có trường cũ đổi (`before` khác `after`) trên một nhóm món
+  đã ở mô hình mới thì được dịch bằng `planLegacyMenuEdit`, rồi mới chiếu. Diff ba chiều tính theo từng phần tử: chỉ
+  phần tử mà `before` khác `after` **và** `before` còn khớp phép chiếu hiện tại mới được dịch. Máy khác vừa sửa phần tử
+  đó thì sổ thắng.
+  - Topping thêm: dùng món cùng tên bất kể `kind` (đặt `kind: 'topping'`, giữ `isActive`); chưa có thì tạo món chỉ bán
+    kèm. Món được thêm vào nhóm topping riêng của nhóm món (gid tất định `toppings:<gid nhóm>`, tạo nếu chưa có).
+  - Topping bỏ hoặc đổi giá: áp lên mọi nhóm topping đang bật gắn vào nhóm món. Nhóm hết phần tử thì được gỡ khỏi nhóm
+    món.
+  - Lựa chọn: sửa nhóm `choice` cùng tên; nhóm mới thì tạo `choice` với `maxSelect: 1`; nhóm bị bỏ thì gỡ khỏi nhóm món.
+  - Nhóm lựa chọn còn gắn ở món hay nhóm món khác thì **sao-khi-ghi**: nhóm món đang sửa nhận một bản sao đã sửa, nơi
+    khác giữ bản cũ.
+  - Bản dịch làm sạch `defaultChoice` và `maxSelect` để luôn qua schema mới.
+
+  Event như vậy kích hoạt di trú lười trước, kể cả khi chưa máy bản mới nào chạm sổ. Phần vượt giới hạn (tên trên 40 ký
+  tự, trên 30 phần tử, trên 20 nhóm gắn) và lỗi bất ngờ thì không dịch: event được nhận nguyên trạng, không chiếu, và
+  Worker ghi một dòng vào bảng `catalogWarnings` (giữ 50 dòng mới nhất). `GET /devices` trả 20 dòng mới nhất, và màn
+  Máy của bản mới hiện chúng. Cảnh báo của một nhóm món tự xoá khi sửa đổi sau đó của nhóm ấy dịch được. Trong lúc
+  dịch, mọi event tự sinh được kiểm hết rồi mới ghi, nên không có bản dịch dở dang.
+
+  Bản dịch không lọc theo caps. Bản mới không còn màn nào sửa trường cũ (cài nhóm lựa chọn ở Thêm › Nhóm lựa chọn,
+  gắn ở form món và ở Nhóm mặt hàng), nên event của nó gửi trường cũ không đổi: không bị dịch, chỉ được chiếu. Nhóm món tắt hoặc gỡ nhóm topping
+  riêng là quyết định của chủ quán: máy cũ thêm topping sau đó không hồi sinh nhóm đó, mà tạo một nhóm mới chỉ chứa
+  topping vừa thêm.
+- **Không luật mới nào từ chối máy cũ** (máy không gửi cap `catalog-v2`):
+
+  | Luật | Máy `catalog-v2` | Máy cũ |
+  |---|---|---|
+  | Xoá món đang nằm trong nhóm topping | Từ chối nếu nhóm đang bật | Thành `put` ghi lại đúng bản đang lưu (kể cả nhóm đang tắt, để không để lại `itemGid` treo); món trở về máy cũ ở lượt kéo sau |
+  | Kiểm tham chiếu `optionGroupGids` | Từ chối gid mới chưa có | Máy cũ không gửi trường này; Worker giữ bản đã lưu |
+  | Tên trùng với món topping chỉ bán kèm | `item-name-taken` (cả khi tạo hay sửa chính một topping ẩn) | Bật topping thành bán riêng (`isActive: 1`) rồi trả `item-name-taken` theo luật hiện hành, nên máy cũ nối món mới vào topping đó |
+  | Schema chặt cho `items`/`itemGroups` | Từ chối | Payload cũ không mang trường mới |
+
+- **Giới hạn được chấp nhận:**
+  - Máy cũ không thấy nhóm gắn thẳng vào món, và không có nhóm bắt buộc, lựa chọn mặc định hay chọn nhiều.
+  - Danh sách món của máy cũ hiện topping chỉ bán kèm là "Ngừng bán". Bật lại món đó thì nó thành món bán riêng.
+  - Sheet menu mở lâu trên máy cũ trong lúc máy khác sửa: phần tử máy khác vừa sửa được ưu tiên theo sổ.
+  - Máy cũ đổi giá một topping thì giá đó áp lên mọi nhóm topping gắn vào nhóm món, kể cả nhóm máy mới cố ý đặt giá
+    riêng khác.
+  - Luật bật topping thành bán riêng chỉ bắt lúc máy cũ **tạo** món. Máy cũ đổi tên hay bán lại một món cho trùng tên
+    topping chỉ bán kèm thì vẫn được nhận, và sổ có hai món cùng tên.
+  - Sửa đổi vượt giới hạn chỉ giữ cho tới lần chiếu sau. Máy cũ thấy sửa đổi của mình bị hoàn lại mà không có câu báo;
+    câu báo chỉ hiện trên màn Máy của bản mới.
 
 ## Ghép máy và nạp sổ ban đầu
 
@@ -160,6 +286,8 @@ không đẩy từng event qua pusher.
   với một món khác đang `isActive` bị từ chối `item-name-taken`. Luật chỉ áp cho máy gửi `caps` kèm
   `item-name-taken` trong request; máy ở bản cũ hơn chưa gửi `caps` không bị ảnh hưởng, đơn của máy đó
   không bao giờ bị hoàn lại vì lý do này.
+- Máy gửi thêm `catalog-v2` trong `caps` thì món topping chỉ bán kèm (`isActive: 0`) cũng giữ tên của nó. Máy cũ
+  không thấy món đó trên lưới nên với máy cũ luật giữ như trên.
 - Khi bị từ chối lúc tạo mới, máy không hoàn tác mà nối (merge) dữ liệu vừa tạo sang món có sẵn trong
   sổ chung — đơn hàng, giá riêng theo khách và các thay đổi khác của món đó được trỏ lại sang
   `entityKey` của món có sẵn, không cuộn đuôi tên để thử lại.

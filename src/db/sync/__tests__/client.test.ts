@@ -143,7 +143,7 @@ describe('pairDevice gửi mã cài đặt', () => {
 })
 
 describe('pushEvent', () => {
-  it("gửi caps: ['item-name-taken'] để Worker biết máy xử lý được mã trùng tên", async () => {
+  it("gửi caps item-name-taken và catalog-v2 để Worker biết máy xử lý được mã trùng tên và luồng danh mục", async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ seq: 1, duplicate: false }), { status: 201 }),
     )
@@ -153,7 +153,7 @@ describe('pushEvent', () => {
     await pushEvent(connection, 1, event)
 
     const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))
-    expect(body.caps).toEqual(['item-name-taken'])
+    expect(body.caps).toEqual(['item-name-taken', 'catalog-v2'])
     fetchSpy.mockRestore()
   })
 })

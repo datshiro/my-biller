@@ -3,12 +3,13 @@ import { getDeviceSyncState } from './repositories/device-state'
 import { countPendingOperations } from './sync/outbox'
 import { ledgerTotals, type LedgerTotals } from '@/domain/doi-soat'
 import { DeviceConnectionSchema, type DeviceConnection } from '@/domain/schema'
-import { LEDGER_TABLE_NAMES, type LedgerTableName } from '@shared/sync-events'
+import type { LedgerTableName } from '@shared/sync-events'
+import { SYNCED_TABLE_NAMES, type CatalogTableName } from '@shared/catalog-events'
 
-export type CountedTable = Exclude<LedgerTableName, 'settings'>
+export type CountedTable = Exclude<LedgerTableName | CatalogTableName, 'settings'>
 
-/** Chín bảng sổ; `settings` là cấu hình máy, không phải dữ liệu để so hai máy. */
-export const COUNTED_TABLES: readonly CountedTable[] = LEDGER_TABLE_NAMES.filter(
+/** Các bảng sổ của cả hai luồng; `settings` là cấu hình máy, không phải dữ liệu để so hai máy. */
+export const COUNTED_TABLES: readonly CountedTable[] = SYNCED_TABLE_NAMES.filter(
   (name): name is CountedTable => name !== 'settings',
 )
 
@@ -55,10 +56,10 @@ export type LedgerOverview = {
 }
 
 /**
- * Bốn tổng và số dòng — truy vấn nặng, cố ý tách khỏi neo. Transaction chỉ bao đúng 9 bảng sổ:
+ * Bốn tổng và số dòng — truy vấn nặng, cố ý tách khỏi neo. Transaction chỉ bao đúng các bảng sổ:
  * không `deviceState`, không `outbox`, nên pusher xoá từng event hay lease ghi mỗi 5 giây đều không
  * kích hoạt tính lại; chỉ trang applier mới làm. `ledgerTotals` chạy sau khi transaction đóng để
- * không giữ khoá 9 bảng trong lúc cộng.
+ * không giữ khoá các bảng sổ trong lúc cộng.
  */
 export async function getLedgerOverview(): Promise<LedgerOverview> {
   const tables = COUNTED_TABLES.map((name) => db.table(name))

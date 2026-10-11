@@ -1,12 +1,13 @@
 import type { Transaction } from 'dexie'
 import { db, verbatimWrites } from '../db'
 import { getDeviceSyncState } from '../repositories/device-state'
-import { pushEvent, SyncApiError } from './client'
+import { pushCatalogEvent, pushEvent, SyncApiError } from './client'
 import { assertLeadership, type LeaderToken } from './leader'
 import { resolveItemNameTaken } from './item-name-taken'
 import { OUTBOX_CHANGED_EVENT, type OutboxRow } from './outbox'
 import { DeviceNoticeSchema, type DeviceConnection } from '@/domain/schema'
-import { LEDGER_TABLE_NAMES, SyncEventSchema } from '@shared/sync-events'
+import { SyncEventSchema } from '@shared/sync-events'
+import { CatalogEventSchema, SYNCED_TABLE_NAMES, isCatalogTable } from '@shared/catalog-events'
 
 // Không lặp nóng khi món có sẵn mãi chưa về máy: chỉ bắn sự kiện một lần cho mỗi dòng, chờ nhịp kéo kế
 // tiếp (`runner.ts`) tự chạy lại. Không `import` từ `runner.ts` — runner đã `import` pusher, tránh vòng.
@@ -28,7 +29,7 @@ async function currentRow(transaction: Transaction, row: OutboxRow) {
   const table = transaction.table(row.table)
   return row.table === 'settings'
     ? table.get(row.entityKey)
-    : table.where('gid').equals(row.entityKey).first()
+    : table.where('gid').equals(row.entityKey).raw().first()
 }
 
 export async function restoreRow(transaction: Transaction, row: OutboxRow): Promise<boolean> {
@@ -53,7 +54,7 @@ export async function rollbackRejectedTail(
   leader: LeaderToken,
   reason: string,
 ): Promise<void> {
-  const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const tables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   await db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
     await assertLeadership(db, leader)
     verbatimWrites.add(transaction)
@@ -102,7 +103,8 @@ export async function pushNext(
   if (!row) return 'empty'
 
   try {
-    await pushEvent(connection, leader.epoch, SyncEventSchema.parse(row))
+    if (isCatalogTable(row.table)) await pushCatalogEvent(connection, leader.epoch, CatalogEventSchema.parse(row))
+    else await pushEvent(connection, leader.epoch, SyncEventSchema.parse(row))
   } catch (caught) {
     if (caught instanceof SyncApiError && caught.code === 'stale-leader') throw caught
     if (caught instanceof SyncApiError && caught.code === 'item-name-taken') {

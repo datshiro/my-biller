@@ -19,6 +19,7 @@ may-in-ao-out/
 __pycache__/
 robot/results/
 robot/downloads/
+robot/.may-cu/
 
 # working artifacts, never committed
 plans/

@@ -11,6 +11,7 @@ import {
 } from '@/domain/backup-merge'
 import { expectedAfterReplace, type DerivedLedger } from '@/domain/backup-report'
 import { BackupFileSchema, type BackupData, type BackupFile } from '@/domain/schema'
+import { migrateBackupData } from '@/domain/catalog-migration'
 
 /** Các bảng thuộc cuốn sổ. Trạng thái riêng của máy tuyệt đối không đi theo sao lưu/phục hồi. */
 const ledgerTables = () => [
@@ -24,6 +25,7 @@ const ledgerTables = () => [
   db.payments,
   db.expenseCategories,
   db.expenses,
+  db.optionGroups,
 ]
 
 /**
@@ -43,10 +45,12 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       payments,
       expenseCategories,
       expenses,
+      optionGroups,
     ] = await Promise.all([
       db.settings.toArray(),
-      db.itemGroups.toArray(),
-      db.items.toArray(),
+      // Thô, không qua hook đọc: mặc định điền lúc đọc mà vào file thì nhập lại thành giá trị thật trong máy.
+      db.itemGroups.toCollection().raw().toArray(),
+      db.items.toCollection().raw().toArray(),
       db.customers.toArray(),
       db.customerPrices.toArray(),
       db.orders.toArray(),
@@ -54,6 +58,7 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       db.payments.toArray(),
       db.expenseCategories.toArray(),
       db.expenses.toArray(),
+      db.optionGroups.toArray(),
     ])
 
     // `satisfies` là hàng rào duy nhất ở đây: `file as BackupFile` bên dưới cố ý khoan dung, nên quên
@@ -70,6 +75,7 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       payments,
       expenseCategories,
       expenses,
+      optionGroups,
     } satisfies Record<keyof BackupData, unknown[]>
 
     const file = {
@@ -164,6 +170,7 @@ async function replaceLedger(data: BackupData): Promise<void> {
     db.payments.bulkPut(data.payments),
     db.expenseCategories.bulkPut(data.expenseCategories),
     db.expenses.bulkPut(data.expenses),
+    db.optionGroups.bulkPut(data.optionGroups),
   ])
 }
 
@@ -233,10 +240,12 @@ export async function mergeAllDataAndRecalculate(
       throw new MergeReviewError(`Sổ trên máy đang có chỗ hỏng: ${outcome.blocked} — lần này chỉ Ghi đè được.`)
     }
 
-    await replaceLedger(outcome.merged)
+    // Gộp với file v1–v4 có thể mang về nhóm món còn menu cũ chưa di trú.
+    const merged = migrateBackupData(outcome.merged, Date.now())
+    await replaceLedger(merged)
     await recalcAll()
     // Cùng luật với `replaceLedger`: dòng giá mồ côi bị bỏ khi ghi, nên bản kỳ vọng cũng bỏ — không thì báo LỆCH giả.
-    return { expected: expectedAfterReplace(outcome.merged), summary: outcome.summary }
+    return { expected: expectedAfterReplace(merged), summary: outcome.summary }
   })
 }
 

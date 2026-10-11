@@ -21,19 +21,22 @@ export function StatusChip({ tone = 'neutral', children }: { tone?: Tone; childr
 export function SelectChip({
   selected,
   onClick,
+  disabled,
   children,
 }: {
   selected: boolean
   onClick: () => void
+  disabled?: boolean
   children: ReactNode
 }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
+      disabled={disabled}
       onClick={onClick}
       // Giữ nguyên bề ngang chữ: hàng chip nào chật thì cuộn ngang, không bóp chữ xuống hai dòng.
-      className={`h-12 shrink-0 whitespace-nowrap rounded-full border px-4 font-semibold ${
+      className={`h-12 shrink-0 whitespace-nowrap rounded-full border px-4 font-semibold disabled:opacity-40 ${
         selected ? 'border-brand bg-brand-tint text-brand' : 'border-line bg-white text-ink'
       }`}
     >

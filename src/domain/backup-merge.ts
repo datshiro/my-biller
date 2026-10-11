@@ -1,5 +1,6 @@
 import { cleanPriceRows, validateBackupIntegrity } from './backup'
 import { withDerivedPaid } from './backup-report'
+import { migrateBackupData } from './catalog-migration'
 import { ledgerTotals, type LedgerTotals } from './doi-soat'
 import { newGid } from './gid'
 import { buildOrderCode, nextSeqOfDay, orderCodeDatePart, parseOrderCode } from './order-code'
@@ -136,6 +137,7 @@ const TABLES: readonly Table[] = [
   'payments',
   'expenseCategories',
   'expenses',
+  'optionGroups',
 ]
 
 const zeroCounts = () => Object.fromEntries(TABLES.map((table) => [table, 0])) as Record<Table, number>
@@ -169,6 +171,30 @@ function keepServiceMode(
   return rows.map((row) => {
     const serviceMode = known.get(row.gid)
     return row.serviceMode === undefined && serviceMode !== undefined ? { ...row, serviceMode } : row
+  })
+}
+
+/**
+ * File của bản 2.19.0 không có `kind`/`optionGroupGids`: món topping mà máy sửa giá trên bản cũ thắng bằng `updatedAt`
+ * mới hơn với hàng thiếu hai trường. Hàng thắng mà thiếu trường thì "không biết", không phải "xoá" — lấy của phía kia.
+ */
+function keepCatalogFields<R extends { gid: string; kind?: unknown; optionGroupGids?: unknown }>(
+  rows: R[],
+  local: readonly R[],
+  file: readonly R[],
+): R[] {
+  const sides = [new Map(local.map((row) => [row.gid, row])), new Map(file.map((row) => [row.gid, row]))]
+  return rows.map((row) => {
+    const filled = { ...row }
+    for (const side of sides) {
+      const other = side.get(row.gid)
+      filled.kind ??= other?.kind
+      filled.optionGroupGids ??= other?.optionGroupGids
+    }
+    for (const field of ['kind', 'optionGroupGids'] as const) {
+      if (filled[field] === undefined) delete filled[field]
+    }
+    return filled
   })
 }
 
@@ -435,11 +461,13 @@ function mergeLedger(
     counter,
   )
 
+  const optionGroups = mergeVersioned('optionGroups', current.optionGroups, incoming.optionGroups, (row) => ({ ...row }), counter)
+
   return {
     merged: {
       settings,
-      itemGroups: groups.rows,
-      items: items.rows,
+      itemGroups: keepCatalogFields(groups.rows, current.itemGroups, incoming.itemGroups),
+      items: keepCatalogFields(items.rows, current.items, incoming.items),
       customers: customers.rows,
       customerPrices,
       orders,
@@ -447,6 +475,7 @@ function mergeLedger(
       payments,
       expenseCategories: categories.rows,
       expenses: expenses.rows,
+      optionGroups: optionGroups.rows,
     },
     summary,
   }
@@ -615,7 +644,9 @@ export function previewMerge(
     integrity: validateBackupIntegrity(main.merged),
     willAdd: {
       itemGroups: namesOnlyInFile(current.itemGroups, incoming.itemGroups),
-      items: namesOnlyInFile(current.items, incoming.items),
+      // Gộp xong sổ được di trú rồi mới ghi (`mergeAllDataAndRecalculate`), nên món topping sinh từ menu cũ cũng là món
+      // sẽ thêm. Mốc thời gian không ảnh hưởng tên món.
+      items: namesOnlyInFile(current.items, migrateBackupData(main.merged, 0).items),
       customers: namesOnlyInFile(current.customers, incoming.customers),
       expenseCategories: namesOnlyInFile(current.expenseCategories, incoming.expenseCategories),
       orders: main.summary.added.orders,

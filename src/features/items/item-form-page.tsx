@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { useItem, useItemGroups, useItems } from './use-items'
+import { useItem, useItemGroups, useItems, useOptionGroups } from './use-items'
 import { createItem, deactivateItem, deleteItem, updateItem } from '@/db/repositories/items'
+import { catalogClash } from '@/domain/option-group-rules'
 import type { Item } from '@/domain/schema'
+import { OptionGroupPicker } from '@/features/settings/option-group-picker'
 import { itemNameKey } from '@shared/item-name'
 import { Button } from '@/ui/button'
 import { SelectChip } from '@/ui/chip'
@@ -30,6 +32,8 @@ function ItemForm({ item }: { item: Item | null }) {
   const { state } = useLocation()
   const groups = useItemGroups() ?? []
   const allItems = useItems() ?? []
+  const loadedOptionGroups = useOptionGroups()
+  const optionGroups = loadedOptionGroups ?? []
 
   // Tên điền sẵn là mốc so, không phải chữ "chưa lưu": người bán chưa gõ gì trên màn này, hỏi lại
   // lúc họ bấm ✕ là hỏi về chữ của chính app.
@@ -41,6 +45,12 @@ function ItemForm({ item }: { item: Item | null }) {
   const [groupId, setGroupId] = useState<number | null>(item?.groupId ?? null)
   const [note, setNote] = useState(item?.note ?? '')
   const [customUnit, setCustomUnit] = useState(() => Boolean(item?.unit && !COMMON_UNITS.includes(item.unit)))
+  const initialKind = item?.kind ?? 'item'
+  const [isTopping, setIsTopping] = useState(initialKind === 'topping')
+  // "Bán riêng được" của món topping chính là `isActive`: tắt thì món chỉ bán kèm qua nhóm topping, khỏi lưới bán.
+  const [sellAlone, setSellAlone] = useState(item ? item.isActive === 1 : false)
+  const initialGids = item?.optionGroupGids ?? []
+  const [optionGroupGids, setOptionGroupGids] = useState<string[]>(initialGids)
 
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
   const [confirming, setConfirming] = useState(false)
@@ -56,7 +66,7 @@ function ItemForm({ item }: { item: Item | null }) {
         )
       : undefined
   const duplicateError = duplicate
-    ? `Đã có món “${duplicate.name}”${duplicate.isActive === 1 ? '' : ' (đang ngừng bán)'}. Đặt tên khác để phiếu và báo cáo không lẫn hai món.`
+    ? `Đã có món “${duplicate.name}”${duplicate.isActive === 1 ? '' : duplicate.kind === 'topping' ? ' (topping chỉ bán kèm)' : ' (đang ngừng bán)'}. Đặt tên khác để phiếu và báo cáo không lẫn hai món.`
     : undefined
 
   const losing = costPrice !== null && unitPrice !== null && costPrice >= unitPrice
@@ -66,7 +76,10 @@ function ItemForm({ item }: { item: Item | null }) {
     costPrice !== (item?.costPrice ?? null) ||
     unit !== (item?.unit ?? '') ||
     groupId !== (item?.groupId ?? null) ||
-    note !== (item?.note ?? '')
+    note !== (item?.note ?? '') ||
+    isTopping !== (initialKind === 'topping') ||
+    (isTopping && sellAlone !== (item ? item.isActive === 1 : false)) ||
+    JSON.stringify(optionGroupGids) !== JSON.stringify(initialGids)
 
   const save = () => {
     const trimmed = name.trim()
@@ -77,15 +90,52 @@ function ItemForm({ item }: { item: Item | null }) {
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0 || unitPrice === null || duplicateError) return
 
+    const problem = catalogProblem()
+    if (problem) {
+      setSaveError(problem)
+      return
+    }
+
+    const kind = isTopping ? ('topping' as const) : ('item' as const)
+    const isActive = isTopping && !sellAlone ? (0 as const) : (1 as const)
     void run(async () => {
       const payload = { name: trimmed, unitPrice, costPrice, unit: unit.trim(), groupId, note: note.trim() }
       if (item?.id) {
-        await updateItem(item.id, payload)
+        // Chỉ gửi trường mới khi đang sửa nó: hàng cũ thiếu `kind`/`optionGroupGids` thì để Worker giữ bản đã lưu.
+        await updateItem(item.id, {
+          ...payload,
+          ...(kind !== initialKind ? { kind } : {}),
+          ...(isTopping || kind !== initialKind ? { isActive: isTopping ? isActive : item.isActive } : {}),
+          ...(JSON.stringify(optionGroupGids) !== JSON.stringify(initialGids) ? { optionGroupGids } : {}),
+        })
       } else {
-        await createItem({ ...payload, isActive: 1 })
+        await createItem({ ...payload, isActive, kind, optionGroupGids })
       }
       void navigate('/them/mat-hang', { replace: true })
     })
+  }
+
+  /** Luật danh mục kiểm ở form, trước khi ghi: món đang nằm trong nhóm topping, nhãn trùng giữa các nhóm gắn cùng món. */
+  const catalogProblem = (): string | null => {
+    const gid = item?.gid
+    if (!isTopping && initialKind === 'topping' && gid) {
+      const using = optionGroups.filter(
+        (group) => group.kind === 'topping' && group.toppings.some((topping) => topping.itemGid === gid),
+      )
+      if (using.length > 0) {
+        return `Món đang là topping trong nhóm ${using.map((group) => `“${group.name}”`).join(', ')} — gỡ khỏi nhóm trước khi đổi thành món thường.`
+      }
+    }
+    if (isTopping && sellAlone && item && item.isActive !== 1) {
+      const key = itemNameKey(name)
+      const clash = allItems.find((other) => other.id !== item.id && other.isActive === 1 && itemNameKey(other.name) === key)
+      if (clash) return `Đã có món “${clash.name}” đang bán. Đổi tên trước khi cho bán riêng để phiếu và báo cáo không lẫn hai món.`
+    }
+    const self = { id: item?.id ?? -1, gid: gid ?? '', name: name.trim(), kind: isTopping ? ('topping' as const) : ('item' as const), groupId, optionGroupGids }
+    return catalogClash(
+      { optionGroups, items: allItems, itemGroups: groups },
+      { optionGroups, items: [...allItems.filter((other) => other.id !== item?.id), self], itemGroups: groups },
+    )
   }
 
   const removeItem = () => {
@@ -124,7 +174,7 @@ function ItemForm({ item }: { item: Item | null }) {
       error={saveError}
       dirty={dirty && !saving}
       cta={
-        <Button size="cta" disabled={saving} onClick={save}>
+        <Button size="cta" disabled={saving || loadedOptionGroups === undefined} onClick={save}>
           {saving ? 'Đang lưu…' : 'LƯU MẶT HÀNG'}
         </Button>
       }
@@ -202,6 +252,26 @@ function ItemForm({ item }: { item: Item | null }) {
         </Field>
       ) : null}
 
+      <Field label="Loại món" hint={isTopping ? 'Món topping bán kèm qua nhóm topping; bật “Bán riêng được” để hiện cả trên lưới bán.' : undefined}>
+        <div role="group" aria-label="Loại món" className="flex flex-wrap gap-2">
+          <SelectChip selected={isTopping} onClick={() => setIsTopping(!isTopping)}>
+            Là topping
+          </SelectChip>
+          {isTopping ? (
+            <SelectChip selected={sellAlone} onClick={() => setSellAlone(!sellAlone)}>
+              Bán riêng được
+            </SelectChip>
+          ) : null}
+        </div>
+      </Field>
+
+      <OptionGroupPicker
+        groups={optionGroups}
+        value={optionGroupGids}
+        onChange={setOptionGroupGids}
+        hint="Gắn thẳng vào món này, cộng với nhóm lựa chọn của nhóm món."
+      />
+
       <TextField
         label="Ghi chú"
         value={note}
@@ -211,9 +281,11 @@ function ItemForm({ item }: { item: Item | null }) {
 
       {item?.id ? (
         <div className="flex flex-col gap-2 border-t border-line pt-5">
-          <Button variant="secondary" disabled={saving} onClick={toggleActive}>
-            {item.isActive === 1 ? 'Ngừng bán mặt hàng này' : 'Bán lại mặt hàng này'}
-          </Button>
+          {initialKind === 'topping' ? null : (
+            <Button variant="secondary" disabled={saving} onClick={toggleActive}>
+              {item.isActive === 1 ? 'Ngừng bán mặt hàng này' : 'Bán lại mặt hàng này'}
+            </Button>
+          )}
           <Button variant="danger" onClick={() => setConfirming(true)}>
             Xoá hẳn
           </Button>

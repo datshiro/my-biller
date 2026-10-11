@@ -57,6 +57,7 @@ function ledgerWithCredit(
     })),
     expenseCategories: [],
     expenses: [],
+    optionGroups: [],
   }
 }
 

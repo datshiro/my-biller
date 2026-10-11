@@ -1,4 +1,5 @@
 import { buildOrderCode, nextSeqOfDay } from './order-code'
+import { remapToppingItems } from './option-groups'
 import type { BackupData } from './schema'
 
 type NumberTable = Exclude<keyof BackupData, 'settings'>
@@ -28,6 +29,7 @@ const TABLES: NumberTable[] = [
   'payments',
   'expenseCategories',
   'expenses',
+  'optionGroups',
 ]
 
 const firstNewId = (rows: readonly { id: number }[]) =>
@@ -102,6 +104,21 @@ export function mergeLedgers(
     return [mapped]
   })
 
+  // Nhóm topping trỏ món theo gid, nên món của B được nối vào món của A thì topping cũng nối theo.
+  const aItemGids = new Map(a.items.map((row) => [row.id, row.gid]))
+  const itemGidOfB = new Map(
+    b.items.flatMap((row) => {
+      const target = decisions.items?.[row.id]
+      const gid = target === undefined ? undefined : aItemGids.get(target)
+      return gid ? [[row.gid, gid] as const] : []
+    }),
+  )
+  const bOptionGroups = b.optionGroups.map((row) => {
+    const id = shifted(row.id, idOffsets.optionGroups)
+    if (row.kind !== 'topping') return { ...row, id }
+    return { ...row, id, toppings: remapToppingItems(row.toppings, (gid) => itemGidOfB.get(gid) ?? gid) }
+  })
+
   const merged: BackupData = {
     settings: a.settings,
     itemGroups: [
@@ -169,6 +186,7 @@ export function mergeLedgers(
         categoryId: shiftedNullable(row.categoryId, idOffsets.expenseCategories),
       })),
     ],
+    optionGroups: [...a.optionGroups, ...bOptionGroups],
   }
 
   const codes = merged.orders.map((order) => order.code)

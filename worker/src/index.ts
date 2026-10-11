@@ -439,6 +439,8 @@ const worker = {
         (request.method === 'POST' && rest === '/events') ||
         (request.method === 'POST' && rest === '/seed') ||
         (request.method === 'GET' && rest === '/oplog') ||
+        (request.method === 'POST' && rest === '/catalog/events') ||
+        (request.method === 'GET' && rest === '/catalog/oplog') ||
         (request.method === 'POST' && /^\/devices\/[^/]+\/revoke$/.test(rest))
 
       response = safeShopId && allowed

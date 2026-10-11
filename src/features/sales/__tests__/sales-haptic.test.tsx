@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SalesPage } from '../sales-page'
 import { db } from '@/db/db'
 import { createGroup, createItem } from '@/db/repositories/items'
+import { createOptionGroup } from '@/db/repositories/option-groups'
 import { installTestDevice } from '@/test-fixtures'
 
 let vibrate: ReturnType<typeof vi.fn>
@@ -26,12 +27,19 @@ afterEach(() => {
 })
 
 const seedItems = async () => {
-  const groupId = await createGroup({
-    name: 'Đồ uống',
+  // Màn bán đọc nhóm lựa chọn dùng chung gắn vào nhóm món, không đọc thực đơn kiểu cũ trên nhóm.
+  await createOptionGroup({
+    name: 'Đường',
+    kind: 'choice',
+    choices: ['Ít đường', 'Không đường'],
+    required: 0,
+    maxSelect: 1,
+    defaultChoice: null,
     sortOrder: 1,
-    optionGroups: [{ name: 'Đường', choices: ['Ít đường', 'Không đường'] }],
-    toppingMenu: [],
+    isActive: 1,
   })
+  const sugar = (await db.optionGroups.toArray())[0]!
+  const groupId = await createGroup({ name: 'Đồ uống', sortOrder: 1, optionGroupGids: [sugar.gid] })
   await createItem({ name: 'Cà phê sữa', groupId, unit: 'ly', unitPrice: 20_000, costPrice: 8_000, isActive: 1 })
   await createItem({ name: 'Trà đá', groupId: null, unit: 'ly', unitPrice: 3_000, costPrice: 500, isActive: 1 })
 }

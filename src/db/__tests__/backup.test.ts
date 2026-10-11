@@ -15,6 +15,7 @@ import { db } from '../db'
 import { recalcAll } from '../recalc'
 import { createExpense, createExpenseCategory } from '../repositories/expenses'
 import { createGroup, createItem, deleteItem } from '../repositories/items'
+import { createOptionGroup } from '../repositories/option-groups'
 import { createCustomer, deleteCustomer } from '../repositories/customers'
 import { savePriceBook } from '../repositories/customer-prices'
 import { cleanPriceRows, parseBackupFile } from '@/domain/backup'
@@ -59,6 +60,17 @@ async function seedShop() {
     address: 'Cuối hẻm 5',
     note: 'Trả cuối tháng',
   })
+  const optionGroupId = await createOptionGroup({
+    kind: 'choice',
+    name: 'Đường',
+    required: 1,
+    maxSelect: 1,
+    defaultChoice: 'Ít đường',
+    sortOrder: 2,
+    isActive: 1,
+    choices: ['Ít đường', 'Không đường'],
+  })
+  const optionGroupGid = (await db.optionGroups.get(optionGroupId))!.gid
   const itemId = await createItem({
     name: 'Phở',
     groupId,
@@ -67,6 +79,7 @@ async function seedShop() {
     costPrice: 20_000,
     isActive: 1,
     note: 'Không hành',
+    optionGroupGids: [optionGroupGid],
   })
   await savePriceBook(customerId, [{ itemId, unitPrice: 45_000 }])
   const categoryId = await createExpenseCategory({ name: 'Nguyên liệu' })
@@ -100,7 +113,7 @@ describe('collectBackup', () => {
     const file = await collectBackup(exportedAt)
 
     expect(file.app).toBe('my-biller')
-    expect(file.version).toBe(4)
+    expect(file.version).toBe(5)
     expect(file.exportedAt).toBe(new Date(exportedAt).toISOString())
     expect(Object.entries(file.data).filter(([, rows]) => rows.length === 0)).toEqual([])
   })
@@ -142,6 +155,41 @@ describe('xuất → xoá → nhập', () => {
     expect(await db.orderLines.where('orderId').equals(orderId).count()).toBe(1)
     expect(await db.payments.where('orderId').equals(orderId).count()).toBe(1)
     expect((await collectBackup(exportedAt)).data).toEqual(file.data)
+  })
+
+  it('nhóm lựa chọn và liên kết optionGroupGids của món đi qua sao lưu rồi nhập lại nguyên vẹn', async () => {
+    await seedShop()
+    const groupsBefore = await db.optionGroups.toArray()
+    const itemBefore = (await db.items.where('name').equals('Phở').first())!
+    expect(groupsBefore).toHaveLength(1)
+    expect(itemBefore.optionGroupGids).toEqual([groupsBefore[0]!.gid])
+    const file = await collectBackup(exportedAt)
+
+    await wipeAllData()
+    expect(await db.optionGroups.count()).toBe(0)
+    await replaceAllData(file.data)
+
+    expect(await db.optionGroups.toArray()).toEqual(groupsBefore)
+    expect(await db.items.get(itemBefore.id!)).toMatchObject({ optionGroupGids: itemBefore.optionGroupGids })
+  })
+
+  it('món ghi trước khi có kind: sao lưu không xuất hai trường danh mục, nhập lại cũng không ghi chúng vào hàng', async () => {
+    const id = await createItem({ name: 'Trà đá', groupId: null, unit: 'ly', unitPrice: 3_000, costPrice: null, isActive: 1 })
+    expect(await db.items.where(':id').equals(id).raw().first()).not.toHaveProperty('kind')
+
+    const file = await collectBackup(exportedAt)
+    const exported = file.data.items.find((row) => row.id === id)
+    expect(exported).toMatchObject({ name: 'Trà đá' })
+    expect(exported).not.toHaveProperty('kind')
+    expect(exported).not.toHaveProperty('optionGroupGids')
+
+    await wipeAllData()
+    await replaceAllData(file.data)
+
+    const restored = await db.items.where(':id').equals(id).raw().first()
+    expect(restored).toMatchObject({ name: 'Trà đá', unitPrice: 3_000 })
+    expect(restored).not.toHaveProperty('kind')
+    expect(restored).not.toHaveProperty('optionGroupGids')
   })
 
   it('file có paidAmount sai thì recalcAll dựng lại theo payments, không tin con số trong file', async () => {
@@ -297,6 +345,7 @@ describe('khóa ghi đè sổ khi ghép máy', () => {
 
     expect(await countAllRecords()).toBe(beforeCount)
     expect(await db.outbox.count()).toBe(staged)
+    // Nhóm lựa chọn lên sổ chung qua luồng danh mục, nhưng lúc ghép vẫn nạp cùng ảnh sổ như mọi bảng khác.
     expect(staged).toBe(beforeCount)
     expect(await db.deviceState.get('pairing')).toMatchObject({ connectionSaved: true })
   })

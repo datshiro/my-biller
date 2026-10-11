@@ -46,6 +46,7 @@ export const ledgerA: BackupData = {
   payments: [payment(1, 61, 2, 50_000, 2)],
   expenseCategories: [category(71)],
   expenses: [expense(81, 10_000)],
+  optionGroups: [],
 }
 
 export const ledgerB: BackupData = {
@@ -63,4 +64,5 @@ export const ledgerB: BackupData = {
   payments: [payment(1, 62, 1, 70_000, 1), payment(2, 63, 3, 20_000, 0)],
   expenseCategories: [category(72)],
   expenses: [expense(82, 15_000)],
+  optionGroups: [],
 }

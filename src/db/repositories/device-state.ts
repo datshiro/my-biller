@@ -12,7 +12,7 @@ import {
   type DeviceNotice,
   type DeviceSyncState,
 } from '@/domain/schema'
-import { LEDGER_TABLE_NAMES } from '@shared/sync-events'
+import { SYNCED_TABLE_NAMES } from '@shared/catalog-events'
 import { stageExistingLedger } from '../sync/outbox'
 
 export type DeviceIdentityInput = Pick<DeviceIdentity, 'label' | 'letter'>
@@ -24,7 +24,7 @@ export async function beginDevicePairing(): Promise<{
   hasLocalLedger: boolean
   localLedgerRows: number
 }> {
-  const ledgerTables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const ledgerTables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   return db.transaction('rw', [...ledgerTables, db.deviceState], async () => {
     const current = await db.deviceState.get('pairing')
     if (current?.key === 'pairing' && current.expiresAt > Date.now()) {
@@ -141,7 +141,7 @@ export async function savePairedDevice(input: {
     token: input.token,
     syncUrl: input.syncUrl,
   })
-  const ledgerTables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const ledgerTables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   await db.transaction('rw', [...ledgerTables, db.outbox, db.deviceState], async (transaction) => {
     const pairing = await db.deviceState.get('pairing')
     if (
@@ -172,6 +172,7 @@ export async function savePairedDevice(input: {
     await db.deviceState.put({
       key: 'sync',
       lastSeq: 0,
+      catalogLastSeq: 0,
       revision: previousSync.revision + 1,
       resyncRequired: false,
       lastConnectedAt: null,
@@ -207,17 +208,17 @@ export function clearDeviceConnection(): Promise<void> {
   return db.deviceState.delete('connection')
 }
 
-export async function getDeviceSyncState(): Promise<DeviceSyncState> {
+export async function getDeviceSyncState(): Promise<DeviceSyncState & { catalogLastSeq: number }> {
   const current = (await db.deviceState.get('sync')) as DeviceSyncState | undefined
-  return (
-    current ?? {
-      key: 'sync',
-      lastSeq: 0,
-      revision: 0,
-      resyncRequired: false,
-      lastConnectedAt: null,
-    }
-  )
+  if (current) return { ...current, catalogLastSeq: current.catalogLastSeq ?? 0 }
+  return {
+    key: 'sync',
+    lastSeq: 0,
+    catalogLastSeq: 0,
+    revision: 0,
+    resyncRequired: false,
+    lastConnectedAt: null,
+  }
 }
 
 export function getDeviceNotice(): Promise<DeviceNotice | undefined> {
@@ -322,6 +323,7 @@ export async function leaveSharedLedger(
     await db.deviceState.put({
       key: 'sync',
       lastSeq: 0,
+      catalogLastSeq: 0,
       revision: previousSync.revision + 1,
       resyncRequired: false,
       lastConnectedAt: null,

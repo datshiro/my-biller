@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { getItem, listGroups, listItems } from '@/db/repositories/items'
-import type { Item, ItemGroup } from '@/domain/schema'
+import { listOptionGroups } from '@/db/repositories/option-groups'
+import type { Item, ItemGroup, OptionGroupRow } from '@/domain/schema'
 
 /** `undefined` = đang đọc DB, `null` = không tìm thấy. Hai thứ này khác nhau nên màn hình hiện khác nhau. */
 export function useItems(): Item[] | undefined {
@@ -9,6 +10,10 @@ export function useItems(): Item[] | undefined {
 
 export function useItemGroups(): ItemGroup[] | undefined {
   return useLiveQuery(() => listGroups())
+}
+
+export function useOptionGroups(): OptionGroupRow[] | undefined {
+  return useLiveQuery(() => listOptionGroups())
 }
 
 export function useItem(id: number | null): Item | null | undefined {

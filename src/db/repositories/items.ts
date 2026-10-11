@@ -3,6 +3,7 @@ import { deleteByItem } from './customer-prices'
 import { newGid } from '@/domain/gid'
 import { ItemGroupSchema, ItemSchema, type Item, type ItemGroup } from '@/domain/schema'
 import { syncTransaction } from '../sync/outbox'
+import { activeGroupsUsingTopping } from './option-groups'
 
 /** `note` để tuỳ chọn vì schema có `.default('')` — chỗ gọi không phải truyền chuỗi rỗng cho có. */
 export type ItemInput = Omit<Item, 'id' | 'gid' | 'createdAt' | 'updatedAt' | 'note'> & { note?: string }
@@ -30,12 +31,26 @@ export async function createItem(input: ItemInput): Promise<number> {
   )
 }
 
+/**
+ * Hook đọc điền mặc định cho trường hàng gốc không có. Đẩy giá trị điền đó lên là ghi đè thứ máy khác vừa đặt, nên
+ * trường đó chỉ được ghi khi đang sửa nó hoặc hàng gốc đã có nó.
+ */
+function keepUnknownFieldsAbsent(
+  row: Record<string, unknown>,
+  patch: object,
+  stored: object | undefined,
+  fields: readonly string[],
+): void {
+  for (const field of fields) {
+    if (!(field in patch) && stored && !(field in stored)) delete row[field]
+  }
+}
+
+/** Gộp lên hàng THÔ (không qua hook đọc): `kind`/`optionGroupGids` chỉ có khi hàng gốc có hoặc đang được sửa. */
 export async function updateItem(id: number, patch: Partial<ItemInput>): Promise<void> {
-  const current = await db.items.get(id)
-  if (!current) throw new Error(`Không tìm thấy mặt hàng #${id}`)
-  await syncTransaction(() =>
-    db.items.put(ItemSchema.parse({ ...current, ...patch, id, updatedAt: now() })),
-  )
+  const stored = await db.items.where(':id').equals(id).raw().first()
+  if (!stored) throw new Error(`Không tìm thấy mặt hàng #${id}`)
+  await syncTransaction(() => db.items.put(ItemSchema.parse({ ...stored, ...patch, id, updatedAt: now() })))
 }
 
 /** Ngừng bán thay vì xoá: mặt hàng cũ vẫn cần cho phiếu đã xuất và báo cáo. */
@@ -52,6 +67,11 @@ export async function deleteItem(id: number): Promise<void> {
   const sold = await countOrderLinesOfItem(id)
   if (sold > 0) {
     throw new Error(`Mặt hàng này đã bán ${sold} lần — hãy chọn "Ngừng bán" thay vì xoá.`)
+  }
+  const item = await db.items.get(id)
+  const usedBy = item ? await activeGroupsUsingTopping(item.gid) : []
+  if (usedBy.length > 0) {
+    throw new Error(`Món này đang là topping trong nhóm “${usedBy[0]!.name}” — gỡ khỏi nhóm trước khi xoá.`)
   }
   await syncTransaction(async () => {
     await deleteByItem(id)
@@ -83,6 +103,7 @@ export async function appendGroup(name: string): Promise<number> {
 }
 
 const MENU_FIELDS = ['optionGroups', 'toppingMenu'] as const
+const GROUP_CATALOG_FIELDS = ['optionGroupGids'] as const
 
 /**
  * Hàng nhóm ghi trước khi có thực đơn không có hai trường thực đơn, nhưng hook đọc của Dexie điền `[]` cho
@@ -96,9 +117,8 @@ export async function updateGroup(id: number, patch: Partial<ItemGroupInput>): P
   const stored = await db.itemGroups.where(':id').equals(id).raw().first()
   await syncTransaction(() => {
     const row: Record<string, unknown> = ItemGroupSchema.parse({ ...current, ...patch, id, updatedAt: now() })
-    for (const field of MENU_FIELDS) {
-      if (!(field in patch) && stored && !(field in stored)) delete row[field]
-    }
+    keepUnknownFieldsAbsent(row, patch, stored, MENU_FIELDS)
+    keepUnknownFieldsAbsent(row, patch, stored, GROUP_CATALOG_FIELDS)
     return db.itemGroups.put(row as ItemGroup)
   })
 }

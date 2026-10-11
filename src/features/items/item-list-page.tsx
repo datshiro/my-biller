@@ -77,7 +77,7 @@ export function ItemListPage() {
                     {item.isActive === 0 ? (
                       <>
                         {' '}
-                        <StatusChip>Ngừng bán</StatusChip>
+                        <StatusChip>{item.kind === 'topping' ? 'Chỉ bán kèm' : 'Ngừng bán'}</StatusChip>
                       </>
                     ) : null}
                   </>

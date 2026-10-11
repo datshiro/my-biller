@@ -23,6 +23,7 @@ const emptyData: BackupData = {
   payments: [],
   expenseCategories: [],
   expenses: [],
+  optionGroups: [],
 }
 
 const file = (overrides: Record<string, unknown> = {}) =>
@@ -94,7 +95,7 @@ describe('parseBackupFile', () => {
   })
 
   it('file của bản mới hơn bảo người dùng cập nhật, không bảo file hỏng', () => {
-    expect(() => parseBackupFile(file({ version: 5 }))).toThrow(/v5/)
+    expect(() => parseBackupFile(file({ version: 6 }))).toThrow(/v6/)
   })
 
   it('thiếu bảng thì chỉ đúng chỗ hỏng', () => {
@@ -111,6 +112,47 @@ describe('parseBackupFile', () => {
       ],
     }
     expect(() => parseBackupFile(file({ data }))).toThrow(/hỏng/)
+  })
+})
+
+const withoutOptionGroups = (): Partial<BackupData> => {
+  const data: Partial<BackupData> = { ...emptyData }
+  delete data.optionGroups
+  return data
+}
+
+const choiceGroup = {
+  id: 1,
+  gid: testGid(5),
+  kind: 'choice',
+  name: 'Đường',
+  required: 1,
+  maxSelect: 1,
+  defaultChoice: 'Ít đường',
+  sortOrder: 1,
+  isActive: 1,
+  choices: ['Ít đường', 'Không đường'],
+  createdAt: 0,
+  updatedAt: 0,
+}
+
+describe('parseBackupFile — bảng nhóm lựa chọn qua các bản sao lưu', () => {
+  it.each([1, 2, 3, 4])('file bản v%i không có bảng nhóm lựa chọn vẫn đọc được, bảng đó thành rỗng', (version) => {
+    expect(parseBackupFile(file({ version, data: withoutOptionGroups() })).data.optionGroups).toEqual([])
+  })
+
+  it('file v5 thiếu bảng nhóm lựa chọn bị từ chối, không bù rỗng như file cũ', () => {
+    expect(() => parseBackupFile(file({ version: 5, data: withoutOptionGroups() }))).toThrow(/data\.optionGroups/)
+  })
+
+  it('file v5 có nhóm lựa chọn đúng hình dạng thì đọc ra nguyên vẹn', () => {
+    const parsed = parseBackupFile(file({ version: 5, data: { ...emptyData, optionGroups: [choiceGroup] } }))
+    expect(parsed.data.optionGroups).toEqual([choiceGroup])
+  })
+
+  it('file v5 có nhóm chọn-một mà mặc định không nằm trong danh sách bị chặn như hàng hỏng', () => {
+    const broken = { ...emptyData, optionGroups: [{ ...choiceGroup, defaultChoice: 'Đá' }] }
+    expect(() => parseBackupFile(file({ version: 5, data: broken }))).toThrow(/hỏng/)
   })
 })
 

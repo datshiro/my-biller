@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mergeLedgers } from '../gop-so'
+import { testGid } from '@/test-fixtures'
 import { ledgerA, ledgerB } from './ledger-fixtures'
 
 describe('mergeLedgers', () => {
@@ -34,4 +35,48 @@ describe('mergeLedgers', () => {
   it('chạy hai lần cho kết quả giống hệt', () => {
     expect(mergeLedgers(ledgerA, ledgerB)).toEqual(mergeLedgers(ledgerA, ledgerB))
   })
+
+  it('nhóm topping của B trỏ món đã nối vào món của A thì trỏ sang gid của món A', () => {
+    const toppingOfB = { ...toppingGroup(40), toppings: [{ itemGid: testGid(22), price: null }] }
+    const { merged } = mergeLedgers(ledgerA, { ...ledgerB, optionGroups: [toppingOfB] }, { items: { 1: 1 } })
+
+    expect(merged.items.map((row) => row.gid)).toEqual([testGid(21)])
+    expect(merged.optionGroups).toEqual([{ ...toppingOfB, toppings: [{ itemGid: testGid(21), price: null }] }])
+  })
+
+  it('nhóm topping của B trỏ món không được nối thì giữ nguyên gid món', () => {
+    const toppingOfB = { ...toppingGroup(40), toppings: [{ itemGid: testGid(22), price: 3_000 }] }
+    const { merged } = mergeLedgers(ledgerA, { ...ledgerB, optionGroups: [toppingOfB] })
+
+    const [group] = merged.optionGroups
+    expect(group?.kind === 'topping' ? group.toppings : null).toEqual([{ itemGid: testGid(22), price: 3_000 }])
+  })
+
+  it('nhóm của hai máy cùng có mặt, id nhóm của B được đánh số lại sau id lớn nhất của A', () => {
+    const groupOfA = { ...toppingGroup(41), toppings: [{ itemGid: testGid(21), price: null }] }
+    const groupOfB = { ...toppingGroup(40), toppings: [{ itemGid: testGid(22), price: null }] }
+    const { merged } = mergeLedgers({ ...ledgerA, optionGroups: [groupOfA] }, { ...ledgerB, optionGroups: [groupOfB] })
+
+    expect(merged.optionGroups.map((row) => [row.gid, row.id])).toEqual([
+      [testGid(41), 1],
+      [testGid(40), 2],
+    ])
+  })
 })
+
+function toppingGroup(sequence: number) {
+  return {
+    id: 1,
+    gid: testGid(sequence),
+    kind: 'topping' as const,
+    name: 'Topping',
+    required: 0 as const,
+    maxSelect: null,
+    defaultChoice: null,
+    sortOrder: 1,
+    isActive: 1 as const,
+    createdAt: 1,
+    updatedAt: 1,
+    toppings: [] as { itemGid: string; price: number | null }[],
+  }
+}

@@ -36,7 +36,7 @@ async function seedItem(page: Page, name: string): Promise<string[]> {
   }, name)
 }
 
-test('artifact recovery mở schema v5, chạy offline và chỉ tải backup', async ({ page, context }) => {
+test('artifact recovery mở schema hiện tại, chạy offline và chỉ tải backup', async ({ page, context }) => {
   const syncRequests: string[] = []
   page.on('request', (request) => {
     if (request.url().includes('my-biller-sync')) syncRequests.push(request.url())
@@ -70,9 +70,10 @@ test('artifact recovery mở schema v5, chạy offline và chỉ tải backup', 
   const backup = JSON.parse(readFileSync(path ?? '', 'utf8')) as {
     app: string
     version: number
-    data: { items: Array<{ name: string }> }
+    data: { items: Array<{ name: string }>; optionGroups: unknown[] }
   }
-  expect(backup).toMatchObject({ app: 'my-biller', version: 4 })
+  expect(backup).toMatchObject({ app: 'my-biller', version: 5 })
+  expect(Array.isArray(backup.data.optionGroups)).toBe(true)
   expect(backup.data.items).toEqual([expect.objectContaining({ name: 'Món cần cứu' })])
 
   const localWrites = await page.evaluate(async () => {

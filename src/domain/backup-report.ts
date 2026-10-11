@@ -2,9 +2,8 @@ import { cleanPriceRows } from './backup'
 import { ledgerTotals } from './doi-soat'
 import { deriveStatus } from './order-status'
 import type { BackupData } from './schema'
-import type { LedgerTableName } from '@shared/sync-events'
 
-export type CountedTable = Exclude<LedgerTableName, 'settings'>
+export type CountedTable = Exclude<keyof BackupData, 'settings'>
 
 export type DerivedLedger = {
   data: BackupData
@@ -77,6 +76,7 @@ const TABLE_LABELS: Record<CountedTable, string> = {
   orderLines: 'Dòng hàng',
   expenseCategories: 'Loại chi',
   expenses: 'Khoản chi',
+  optionGroups: 'Nhóm lựa chọn',
 }
 
 const ALWAYS_SHOWN: readonly CountedTable[] = ['orders', 'customers', 'items', 'payments']

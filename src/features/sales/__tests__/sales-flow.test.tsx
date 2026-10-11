@@ -8,9 +8,11 @@ import { SalesPage } from '../sales-page'
 import { clearCartDraft, loadCartDraft } from '../cart-draft-storage'
 import { resetSalesRankCache } from '../sales-rank'
 import { db } from '@/db/db'
+import { migrateLocalCatalog } from '@/db/catalog-migration'
 import { savePriceBook } from '@/db/repositories/customer-prices'
 import { createCustomer, deleteCustomer } from '@/db/repositories/customers'
 import { createGroup, createItem } from '@/db/repositories/items'
+import { createOptionGroup } from '@/db/repositories/option-groups'
 import { createOrder, getOrderLines } from '@/db/repositories/orders'
 import { installTestDevice } from '@/test-fixtures'
 
@@ -415,6 +417,8 @@ describe('bán hàng', () => {
       })
       await createItem({ name: 'Cà phê sữa', groupId, unit: 'ly', unitPrice: 20_000, costPrice: 8_000, isActive: 1 })
       await createItem({ name: 'Phở bò', groupId: null, unit: 'tô', unitPrice: 55_000, costPrice: 30_000, isActive: 1 })
+      // Màn bán chỉ đọc nhóm lựa chọn: menu kiểu cũ đi qua đúng đường di trú máy chưa ghép chạy lúc mở app.
+      expect(await migrateLocalCatalog()).toBe(true)
     }
     const dialog = () => within(screen.getByRole('dialog'))
 
@@ -937,6 +941,7 @@ describe('công tắc Lẻ/SỈ', () => {
       toppingMenu: [],
     })
     const caPhe = await createItem({ name: 'Cà phê sữa', groupId, unit: 'ly', unitPrice: 20_000, costPrice: 8_000, isActive: 1 })
+    expect(await migrateLocalCatalog()).toBe(true)
     const coBay = await createCustomer({ name: 'Cô Bảy', phone: '', address: '', note: '' })
     await savePriceBook(coBay, [{ itemId: caPhe, unitPrice: 15_000 }])
     chamTheoKhach.set(coBay, 300)
@@ -1460,5 +1465,247 @@ describe('sheet xác nhận và thu tiền', () => {
     expect(viTri.fromSale).toBe(true)
     expect(viTri.kieu).toBe('PUSH')
     expect(await db.orders.count()).toBe(1)
+  })
+})
+
+/**
+ * Màn bán đọc nhóm lựa chọn dùng chung (`optionGroups`) gắn vào món hoặc nhóm món, không đọc menu kiểu cũ nữa. Tiền
+ * topping đối chiếu thẳng `orderLines` — màn hiện đúng mà sổ ghi sai là kiểu hỏng tệ nhất.
+ */
+describe('nhóm lựa chọn dùng chung trên màn bán', () => {
+  const dialog = () => within(screen.getByRole('dialog'))
+  const nutThem = () => dialog().getByRole('button', { name: /^THÊM/ }) as HTMLButtonElement
+  const nhomLuaChon = (base: { name: string; sortOrder: number }) => ({
+    required: 0 as const,
+    maxSelect: 1,
+    defaultChoice: null,
+    isActive: 1 as const,
+    ...base,
+  })
+
+  /** Trà sữa trong nhóm Trà sữa; Trân châu bán riêng được, Pudding chỉ bán kèm. */
+  const seedTraSua = async (
+    opts: { duongBatBuoc?: boolean; khongMacDinh?: boolean; sizeTuyY?: boolean; toiDaTopping?: number | null } = {},
+  ) => {
+    const tranChau = await createItem({ name: 'Trân châu', groupId: null, unit: 'phần', unitPrice: 5_000, costPrice: null, isActive: 1, kind: 'topping' })
+    const pudding = await createItem({ name: 'Pudding', groupId: null, unit: 'phần', unitPrice: 7_000, costPrice: null, isActive: 0, kind: 'topping' })
+    const [tc, pd] = await Promise.all([db.items.get(tranChau), db.items.get(pudding)])
+    const duong = await createOptionGroup({
+      ...nhomLuaChon({ name: 'Đường', sortOrder: 1 }),
+      kind: 'choice',
+      choices: ['50%', '100%'],
+      defaultChoice: opts.khongMacDinh ? null : '100%',
+      required: opts.duongBatBuoc ? 1 : 0,
+    })
+    const size = await createOptionGroup({ ...nhomLuaChon({ name: 'Size', sortOrder: 0 }), kind: 'choice', choices: ['M', 'L'], required: opts.sizeTuyY ? 0 : 1 })
+    const nhanh = await createOptionGroup({
+      ...nhomLuaChon({ name: 'Ghi chú nhanh', sortOrder: 3 }),
+      kind: 'choice',
+      choices: ['Ít ngọt', 'Mang ống hút', 'Không nắp'],
+      maxSelect: 2,
+    })
+    const topping = await createOptionGroup({
+      ...nhomLuaChon({ name: 'Topping trà sữa', sortOrder: 2 }),
+      kind: 'topping',
+      toppings: [
+        { itemGid: tc?.gid ?? '', price: null },
+        { itemGid: pd?.gid ?? '', price: 6_000 },
+      ],
+      maxSelect: opts.toiDaTopping ?? null,
+    })
+    const gids = await Promise.all([duong, size, nhanh, topping].map(async (id) => (await db.optionGroups.get(id))?.gid ?? ''))
+    const groupId = await createGroup({ name: 'Trà sữa', sortOrder: 1, optionGroupGids: gids })
+    await createItem({ name: 'Trà sữa', groupId, unit: 'ly', unitPrice: 25_000, costPrice: null, isActive: 1 })
+    await createItem({ name: 'Phở bò', groupId: null, unit: 'tô', unitPrice: 55_000, costPrice: 30_000, isActive: 1 })
+  }
+
+  const chot = async () => {
+    await openPayment()
+    await userEvent.click(screen.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }))
+    await waitFor(async () => expect(await db.orders.count()).toBe(1))
+    const [order] = await db.orders.toArray()
+    return { order, lines: await getOrderLines(order?.id ?? -1) }
+  }
+
+  it('topping bán riêng hiện trên lưới như món thường và vào sổ thành một dòng; topping chỉ bán kèm không hiện', async () => {
+    await seedTraSua()
+    // Hàng `items` của bản cũ không có `kind`: vẫn phải lên lưới.
+    const buncha = await createItem({ name: 'Bún chả', groupId: null, unit: 'tô', unitPrice: 45_000, costPrice: null, isActive: 1 })
+    await db.items.where('id').equals(buncha).modify((row) => {
+      delete (row as Partial<typeof row>).kind
+    })
+    expect((await db.items.toCollection().raw().toArray()).find((row) => row.id === buncha)).not.toHaveProperty('kind')
+    renderSales()
+
+    const grid = await screen.findByRole('group', { name: 'Mặt hàng' })
+    expect(within(grid).queryByRole('button', { name: /Pudding/ })).toBeNull()
+    expect(within(grid).getByRole('button', { name: /Bún chả/ })).toBeDefined()
+    await pick('Trân châu')
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    const { lines } = await chot()
+    const tc = await db.items.where('name').equals('Trân châu').first()
+    expect(lines).toMatchObject([{ itemId: tc?.id, name: 'Trân châu', unitPrice: 5_000, qty: 1, amount: 5_000, toppings: [] }])
+  })
+
+  it('món có nhóm lựa chọn: mặc định chọn sẵn, nhóm bắt buộc chưa chọn thì THÊM khoá; chọn xong thì dòng vào sổ đủ tiền', async () => {
+    await seedTraSua()
+    renderSales()
+
+    await pick('Trà sữa')
+    expect(dialog().getByRole('button', { name: '100%' }).getAttribute('aria-pressed')).toBe('true')
+    expect(nutThem().disabled).toBe(true)
+    expect(dialog().getByRole('status').textContent).toContain('Size')
+    // Nhóm theo thứ tự chủ quán đặt, hằng Đá luôn đầu.
+    expect(dialog().getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Đá',
+      'Size',
+      'Đường',
+      'Topping trà sữa',
+      'Ghi chú nhanh',
+    ])
+
+    await userEvent.click(dialog().getByRole('button', { name: 'L' }))
+    await userEvent.click(dialog().getByRole('button', { name: '50%' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Thêm Pudding' }))
+    expect(nutThem().disabled).toBe(false)
+    expect(nutThem().textContent).toBe('THÊM · 41.000')
+    await userEvent.click(nutThem())
+
+    const { order, lines } = await chot()
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ unitPrice: 25_000, qty: 1, amount: 41_000 })
+    expect([...(lines[0]?.options ?? [])].sort()).toEqual(['50%', 'L'])
+    expect(lines[0]?.toppings).toEqual([
+      { name: 'Trân châu', unitPrice: 5_000, qty: 2 },
+      { name: 'Pudding', unitPrice: 6_000, qty: 1 },
+    ])
+    expect(order).toMatchObject({ subtotal: 41_000, total: 41_000 })
+  })
+
+  it('chọn xong nhóm bắt buộc thì sheet cuộn tới nhóm bắt buộc kế còn trống', async () => {
+    // jsdom không có `scrollIntoView`; gắn tạm để ghi lại nhóm được cuộn tới.
+    const scrolled: string[] = []
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.getAttribute('aria-label') ?? '')
+    }
+    try {
+      await seedTraSua({ duongBatBuoc: true, khongMacDinh: true })
+      renderSales()
+
+      await pick('Trà sữa')
+      expect(dialog().getByRole('status').textContent).toBe('Chưa chọn: Size, Đường')
+      await userEvent.click(dialog().getByRole('button', { name: 'L' }))
+      expect(scrolled).toEqual(['Đường'])
+      await userEvent.click(dialog().getByRole('button', { name: '50%' }))
+      expect(scrolled).toEqual(['Đường'])
+      expect(nutThem().disabled).toBe(false)
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
+  })
+
+  it('ghi chú nhanh chọn được nhiều mục tới đúng số tối đa; nhóm topping có giới hạn chỉ khoá loại mới', async () => {
+    await seedTraSua({ toiDaTopping: 1 })
+    renderSales()
+
+    await pick('Trà sữa')
+    await userEvent.click(dialog().getByRole('button', { name: 'M' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Ít ngọt' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Mang ống hút' }))
+    expect((dialog().getByRole('button', { name: 'Không nắp' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(dialog().getByRole('button', { name: 'Ít ngọt' }).getAttribute('aria-pressed')).toBe('true')
+
+    await userEvent.click(dialog().getByRole('button', { name: 'Thêm Trân châu' }))
+    expect((dialog().getByRole('button', { name: 'Thêm Pudding' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((dialog().getByRole('button', { name: 'Thêm Trân châu' }) as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.click(nutThem())
+
+    const { lines } = await chot()
+    expect([...(lines[0]?.options ?? [])].sort()).toEqual(['100%', 'Mang ống hút', 'M', 'Ít ngọt'].sort())
+    expect(lines[0]?.toppings).toEqual([{ name: 'Trân châu', unitPrice: 5_000, qty: 1 }])
+    expect(lines[0]?.amount).toBe(30_000)
+  })
+
+  it('sửa dòng không tự điền mặc định, và bỏ chọn nhóm bắt buộc thì XONG khoá', async () => {
+    await seedTraSua()
+    renderSales()
+
+    await pick('Trà sữa')
+    await userEvent.click(dialog().getByRole('button', { name: 'M' }))
+    await userEvent.click(dialog().getByRole('button', { name: '100%' }))
+    await userEvent.click(nutThem())
+
+    await suaDong('Trà sữa (M)')
+    expect(dialog().getByRole('button', { name: '100%' }).getAttribute('aria-pressed')).toBe('false')
+    await userEvent.click(dialog().getByRole('button', { name: 'M' }))
+    expect((screen.getByRole('button', { name: 'XONG' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('gõ nhanh mang lựa chọn mặc định nên gộp với ly chạm từ lưới; gõ "trân châu" thêm topping bán riêng', async () => {
+    await seedTraSua({ sizeTuyY: true })
+    renderSales()
+
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra sua, tran chau, pudding{Enter}')
+    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('pudding')
+    await userEvent.clear(screen.getByLabelText(/Tìm món/))
+    await pick('Trà sữa')
+    await userEvent.click(nutThem())
+
+    const { lines } = await chot()
+    expect(lines.map((line) => [line.name, line.qty, line.options])).toEqual([
+      ['Trà sữa', 3, ['100%']],
+      ['Trân châu', 1, []],
+    ])
+  })
+
+  it('gõ nhanh món còn nhóm bắt buộc chưa có mặc định: mở sheet THÊM với số lượng đã gõ, phần khác vẫn vào giỏ', async () => {
+    await seedTraSua()
+    renderSales()
+
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra sua, tran chau{Enter}')
+    expect(await dialog().findByLabelText('Số lượng')).toHaveProperty('textContent', '2')
+    expect(dialog().getByRole('status').textContent).toBe('Chưa chọn: Size')
+    expect(dialog().getByRole('button', { name: '100%' }).getAttribute('aria-pressed')).toBe('true')
+    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('')
+    await userEvent.click(dialog().getByRole('button', { name: 'L' }))
+    await userEvent.click(nutThem())
+
+    const { lines } = await chot()
+    expect(lines.map((line) => [line.name, line.qty, [...line.options].sort()])).toEqual([
+      ['Trân châu', 1, []],
+      ['Trà sữa', 2, ['100%', 'L']],
+    ])
+  })
+
+  it('gõ nhanh hai món cùng thiếu nhóm bắt buộc: món đầu mở sheet, món sau ở lại trong ô kèm lời nhắc', async () => {
+    await seedTraSua()
+    await createItem({
+      name: 'Hồng trà',
+      groupId: (await db.itemGroups.where('name').equals('Trà sữa').first())?.id ?? null,
+      unit: 'ly',
+      unitPrice: 20_000,
+      costPrice: null,
+      isActive: 1,
+    })
+    renderSales()
+
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), 'tra sua, 3 hong tra, abc{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Trà sữa' })).toBeDefined()
+    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('3 Hồng trà, abc')
+    expect(screen.getByText(/Chưa thêm được 2 phần còn lại/)).toBeDefined()
+  })
+
+  it('món chỉ có hằng Đá vẫn một chạm vào giỏ, sửa dòng vẫn có Đá chung / Đá riêng', async () => {
+    await seedTraSua()
+    renderSales()
+
+    await pick('Phở bò')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await suaDong('Phở bò')
+    expect(dialog().getByRole('button', { name: 'Đá riêng' })).toBeDefined()
+    expect(dialog().queryByRole('button', { name: '100%' })).toBeNull()
   })
 })

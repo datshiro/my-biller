@@ -322,6 +322,12 @@ yêu cầu người dùng chấp nhận cập nhật service worker/tải lại 
 về bất kỳ frontend 1.x nào sau khi schema v5 đã được mở; 1.x không hiểu schema mới. Nếu cần rollback Worker, chỉ dùng
 Worker version tương thích với frontend/schema v5 và version đã qua kiểm thử.
 
+Từ bản có nhóm lựa chọn (Dexie `version(6)`, menu cũ được di trú sang món topping và nhóm lựa chọn), **không**
+kích hoạt recovery schema v5 hay khôi phục bản Pages nào chưa có `version(6)` trên máy đã mở bản mới: app cũ mở
+kho đã nâng version sẽ khoá ở màn "app cũ hơn dữ liệu" (`src/db/db.ts`, sự kiện `ready`). Di trú không có cờ tắt —
+sự cố sau đó chỉ sửa tiến bằng một bản 2.x mới. Máy bản cũ vẫn chạy được trên sổ đã di trú vì trường menu cũ được giữ
+nguyên.
+
 Normal và staging đều ghi vào `dist/`, còn recovery ghi vào `dist-recovery/`. Khi chuẩn bị local
 release candidate, build staging và recovery trước rồi chạy `npm run build` cuối cùng để `dist/` còn
 lại là artifact production normal.

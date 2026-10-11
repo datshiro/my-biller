@@ -72,8 +72,11 @@ export const SettingRowSchema = z.discriminatedUnion('key', [
   z.object({ key: z.literal('app'), value: AppStateSchema }),
 ])
 
-/** Một nhóm tuỳ chọn của nhóm món (Đường, Đá…): trong một nhóm chỉ chọn được một lựa chọn. */
-export const OptionGroupSchema = z.object({
+/**
+ * Thực đơn tuỳ chọn kiểu cũ, nằm ngay trong nhóm món (Đường, Đá…): trong một nhóm chỉ chọn được một lựa chọn.
+ * Máy bản cũ chỉ đọc được dạng này nên nó vẫn sống song song với `OptionGroupRowSchema`.
+ */
+export const LegacyOptionGroupSchema = z.object({
   name: z.string().trim().min(1),
   choices: z.array(z.string().trim().min(1)).min(1),
 })
@@ -94,14 +97,29 @@ export const LineToppingSchema = z.object({
   qty: z.number().int().positive(),
 })
 
+/**
+ * Không `.default`, cùng lẽ với `OrderSchema.serviceMode`: máy 2.19.0 bỏ hai trường này khi đọc rồi ghi lại
+ * hàng thiếu chúng, và đồng bộ parse hàng kéo về trước khi lưu — mặc định ở schema sẽ biến "không biết" thành
+ * giá trị thật để máy mới đẩy đè lên. Mặc định chỉ điền lúc đọc (`src/db/db.ts`).
+ */
+export const ItemKindSchema = z.enum(['item', 'topping'])
+
+const OPTION_GROUP_REFS_MAX = 20
+
+const OptionGroupGids = z
+  .array(Gid)
+  .max(OPTION_GROUP_REFS_MAX)
+  .refine((gids) => new Set(gids).size === gids.length, 'Một nhóm lựa chọn chỉ gắn một lần.')
+
 export const ItemGroupSchema = z.object({
   id: Id.optional(),
   gid: Gid,
   name: z.string().min(1),
   sortOrder: z.number().int(),
   // Không index nên Dexie không cần bump `version`; `.default` giữ file sao lưu và event cũ đi qua được.
-  optionGroups: z.array(OptionGroupSchema).default(() => []),
+  optionGroups: z.array(LegacyOptionGroupSchema).default(() => []),
   toppingMenu: z.array(ToppingMenuItemSchema).default(() => []),
+  optionGroupGids: OptionGroupGids.optional(),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })
@@ -116,6 +134,10 @@ export const ItemSchema = z.object({
   costPrice: Money.nullable(),
   isActive: Flag,
   note: z.string().default(''),
+  // Món topping đang bán (`isActive: 1`) vẫn hiện trên lưới như món thường; `isActive: 0` là chỉ bán kèm qua
+  // nhóm topping — app cũ lọc lưới theo `isActive` nên tự ẩn nó mà không cần trường riêng.
+  kind: ItemKindSchema.optional(),
+  optionGroupGids: OptionGroupGids.optional(),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })
@@ -217,6 +239,74 @@ export const ExpenseSchema = z.object({
   createdAt: Timestamp,
   updatedAt: Timestamp,
 })
+
+const OPTION_GROUP_ITEMS_MAX = 30
+const OPTION_LABEL_MAX = 40
+
+const ChoiceListSchema = z
+  .array(z.string().trim().min(1).max(OPTION_LABEL_MAX))
+  .min(1)
+  .max(OPTION_GROUP_ITEMS_MAX)
+  .refine((choices) => new Set(choices).size === choices.length, 'Lựa chọn trong một nhóm không được trùng.')
+
+const ToppingListSchema = z
+  .array(z.object({ itemGid: Gid, price: Money.nullable() }))
+  .min(1)
+  .max(OPTION_GROUP_ITEMS_MAX)
+  .refine(
+    (toppings) => new Set(toppings.map((topping) => topping.itemGid)).size === toppings.length,
+    'Một món topping chỉ có mặt một lần trong nhóm.',
+  )
+
+const optionGroupFields = {
+  gid: Gid,
+  name: z.string().trim().min(1).max(OPTION_LABEL_MAX),
+  required: Flag,
+  /**
+   * Nhóm tuỳ chọn: `null` hoặc 1 là chọn-một, lớn hơn 1 là chọn-nhiều (ghi chú nhanh). Nhóm topping: `null` là không
+   * giới hạn, có số là tối đa bấy nhiêu LOẠI topping (số phần mỗi loại không tính).
+   */
+  maxSelect: z.number().int().min(1).max(OPTION_GROUP_ITEMS_MAX).nullable(),
+  defaultChoice: z.string().nullable(),
+  sortOrder: z.number().int(),
+  isActive: Flag,
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+}
+
+const ChoiceGroupSchema = z.object({ ...optionGroupFields, kind: z.literal('choice'), choices: ChoiceListSchema })
+// `price: null` = lấy giá bán của chính món topping; có số là giá riêng khi bán kèm trong nhóm này.
+const ToppingGroupSchema = z.object({ ...optionGroupFields, kind: z.literal('topping'), toppings: ToppingListSchema })
+
+type OptionGroupShape = { maxSelect: number | null; defaultChoice: string | null } & (
+  | { kind: 'choice'; choices: string[] }
+  | { kind: 'topping'; toppings: unknown[] }
+)
+
+function checkOptionGroup(group: OptionGroupShape, ctx: z.RefinementCtx): void {
+  const count = group.kind === 'choice' ? group.choices.length : group.toppings.length
+  if (group.maxSelect !== null && group.maxSelect > count) {
+    ctx.addIssue({ code: 'custom', path: ['maxSelect'], message: 'Chọn tối đa nhiều hơn số lựa chọn có.' })
+  }
+  if (group.defaultChoice !== null && (group.kind !== 'choice' || !group.choices.includes(group.defaultChoice))) {
+    ctx.addIssue({ code: 'custom', path: ['defaultChoice'], message: 'Lựa chọn mặc định không có trong nhóm.' })
+  }
+}
+
+/**
+ * Nhóm lựa chọn dùng chung, gắn vào món hoặc nhóm món qua `optionGroupGids`. KHÔNG nằm trong `LedgerTableSchema`:
+ * máy bản cũ kẹt đồng bộ khi gặp bảng lạ trong sổ chính, nên bảng này đi luồng danh mục riêng.
+ */
+export const OptionGroupRowSchema = z
+  .discriminatedUnion('kind', [
+    ChoiceGroupSchema.extend({ id: Id.optional() }),
+    ToppingGroupSchema.extend({ id: Id.optional() }),
+  ])
+  .superRefine(checkOptionGroup)
+
+export const OptionGroupPayloadSchema = z
+  .discriminatedUnion('kind', [ChoiceGroupSchema, ToppingGroupSchema])
+  .superRefine(checkOptionGroup)
 
 export const LedgerRowSchemaByTable = {
   settings: SettingRowSchema,

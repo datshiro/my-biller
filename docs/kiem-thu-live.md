@@ -58,6 +58,25 @@ Kết quả nằm ở `robot/results/report.html` (tóm tắt) và `robot/result
 `hasToken`, không trả giá trị token hay deviceId. Browser library cũng tắt `playwright-log.txt`
 nội bộ vì file này ghi nguyên text đọc từ DOM, bao gồm mã ghép dùng một lần.
 
+### Máy bản cũ thật (2.19.0)
+
+Các ca tương thích ngược trong `hai-may.robot` ghép thêm một máy chạy **bản phát hành cũ thật**, không giả lập bằng code
+hiện tại. Lý do: code đổi thì "bản cũ giả" cũng đổi theo. Ca nào gọi `Ghép Máy Cũ` hoặc `Mở Quán Bằng Máy Cũ`
+(`robot/resources/may-cu.resource`) thì tự gọi `robot/may-cu.sh`:
+
+- `robot/may-cu.sh build` lấy mã nguồn đúng tag bằng `git archive` (thiếu tag thì `git fetch` riêng tag đó, không tạo
+  worktree), rồi chạy `npm ci && npm run build`. Bản build nằm ở `robot/.may-cu/<tag>/` (đã gitignore) và được dùng lại
+  ở các lượt sau. Lần đầu mất khoảng nửa phút đến vài phút.
+- `robot/may-cu.sh serve` phục vụ bản đó ở `127.0.0.1:5176`. Cổng này cố định: thấy bận thì dừng chứ không đổi cổng.
+  Suite tắt server ở `Suite Teardown`. Robot recovery (`npm run test:live:recovery`) mặc định cũng dùng 5176, nên đừng
+  chạy nó song song với `hai-may.robot`. Trên CI hai bộ nằm ở hai shard khác nhau.
+- Lượt remote (`ROBOT_REMOTE=1`, Pages preview với Worker staging) bỏ qua các ca máy cũ, vì bản cũ chạy ở hostname local
+  chỉ nối Worker local.
+
+App chạy ở hostname local nên tự nối Worker local 8787, cùng sổ với hai máy bản mới. Đổi bản bằng `MAY_CU_TAG`, đổi cổng
+bằng `MAY_CU_PORT`. Thao tác trên máy cũ dùng keyword riêng (`Máy Cũ Chốt Đơn`…), vì giao diện bản cũ khác bản hiện
+tại. Log build ở `robot/results/may-cu-build.log`, log server ở `robot/results/may-cu.log`.
+
 ## Trên GitHub Actions
 
 Workflow [`kiem-thu.yml`](../.github/workflows/kiem-thu.yml) chạy hai job độc lập trên mọi pull request

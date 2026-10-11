@@ -152,20 +152,157 @@ Tìm không ra thì báo rõ chứ không để danh sách trống trơn
     Click    css=button:has-text("Đồ ăn")
     Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trà đá")    visible
 
-Thực đơn tuỳ chọn của nhóm: lựa chọn trùng nhóm Đá có sẵn bị chặn kèm lý do, sổ không ghi gì
-    [Documentation]    Nhãn lựa chọn lưu phẳng trên dòng đơn nên mỗi nhãn chỉ được thuộc một nhóm; "Đá riêng"
-    ...    đã nằm ở nhóm Đá có sẵn. Chặn ở màn cài đặt thay vì để bấm nhóm này gỡ nhầm lựa chọn nhóm kia.
-    Mở Màn    /them/nhom-mat-hang
-    Click    css=button:has-text("Đồ uống")
-    Bấm Nút    Tuỳ chọn & topping
-    Bấm Nút    ＋ Thêm nhóm tuỳ chọn
-    Điền Ô    Tên nhóm tuỳ chọn 1    Kiểu đá
-    Điền Ô    Các lựa chọn của nhóm 1    Đá riêng
-    Click    css=[role=dialog] >> css=button:text-is("LƯU")
-    Chờ Thấy Chữ    chỉ thuộc một nhóm
+Nhóm Đường tạo từ mẫu gắn vào nhóm Đồ uống thì màn bán chọn sẵn 100% đường và dòng đơn ghi đúng nhãn
+    [Documentation]    Mẫu Đường điền sẵn năm mức và mặc định 100%; gắn vào nhóm món là mọi món trong nhóm nhận nhóm đó.
+    ...    Máy bản mới không ghi thực đơn kiểu cũ: trường cũ trên nhóm món chỉ do Worker chiếu ra cho máy bản cũ.
+    Mở Màn    /them/nhom-lua-chon/moi
+    Bấm Nút    Mẫu Đường
+    Bấm Nút    LƯU NHÓM
+    Wait For Condition    Url    ==    ${BASE_URL}/them/nhom-lua-chon
+    Chờ Thấy Chữ    chọn một
+    ${nhóm_lc}=    Đọc Bảng    optionGroups
+    ${đường}=    Evaluate    [(g['kind'], g['choices'], g['defaultChoice'], g['maxSelect']) for g in $nhóm_lc]
+    Should Be Equal    ${đường}
+    ...    ${{ [('choice', ['0% đường', '30% đường', '50% đường', '70% đường', '100% đường'], '100% đường', 1)] }}
+    Gắn Nhóm Lựa Chọn Vào Nhóm Món    Đồ uống    Đường
     ${nhóm}=    Đọc Bảng    itemGroups
     ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
-    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [] }}    Lựa chọn trùng vẫn ghi xuống sổ.
+    Should Be Equal    ${đồ_uống}[optionGroupGids]    ${{ [$nhóm_lc[0]['gid']] }}
+    Should Be Equal    ${đồ_uống}[optionGroups]    ${{ [] }}    Máy bản mới không được ghi thực đơn kiểu cũ.
+    Should Be Equal    ${đồ_uống}[toppingMenu]    ${{ [] }}    Máy bản mới không được ghi thực đơn kiểu cũ.
+
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    ${chọn_sẵn}=    Chip Đang Chọn    100% đường
+    Should Be Equal    ${chọn_sẵn}    true
+    Chọn Chip    50% đường
+    Bấm Thêm Vào Đơn
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${dòng}=    Đọc Bảng    orderLines
+    ${ly}=    Evaluate    [d for d in $dòng if d['name'] == 'Cà phê sữa' and d.get('options')]
+    Length Should Be    ${ly}    1
+    Should Be Equal    ${ly}[0][options]    ${{ ['50% đường'] }}
+    Should Be Equal As Integers    ${ly}[0][amount]    20000
+
+Món topping chỉ bán kèm không lên lưới, đang nằm trong nhóm topping thì không xoá được, bật Bán riêng được thì lên lưới
+    [Documentation]    "Bán riêng được" của món topping chính là `isActive`. Xoá món đang là topping trong nhóm đang dùng
+    ...    là để lại một phần tử trỏ vào chỗ trống, nên bị chặn kèm tên nhóm.
+    Thêm Món Topping    Thạch    3000
+    Chờ Thấy Chữ    Chỉ bán kèm
+    Tạo Nhóm Topping    Topping Đồ uống    Thạch
+    Gắn Nhóm Lựa Chọn Vào Nhóm Món    Đồ uống    Topping Đồ uống
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Cà phê sữa")    visible
+    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Thạch")    ==    0
+
+    Mở Màn    /them/mat-hang
+    Click    css=button:has-text("Thạch")
+    Bấm Nút    Xoá hẳn
+    Xác Nhận Trong Hộp    Xoá
+    Chờ Thấy Chữ    đang là topping trong nhóm “Topping Đồ uống”
+    Món Phải Còn    Thạch
+
+    Mở Màn    /them/mat-hang
+    Click    css=button:has-text("Thạch")
+    Chọn Chip    Bán riêng được
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    ${món}=    Đọc Bảng    items
+    ${thạch}=    Evaluate    [(m['kind'], m['isActive'], m['unitPrice']) for m in $món if m['name'] == 'Thạch']
+    Should Be Equal    ${thạch}    ${{ [('topping', 1, 3000)] }}
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Thạch")    visible
+
+Ghi chú nhanh chọn được nhiều mục; nhãn trùng nhóm Đá hay nhóm khác cùng món bị chặn; nhóm đang gắn không lưu trữ được
+    [Documentation]    Dòng đơn lưu nhãn phẳng, nên hai nhóm gắn cùng một món không được trùng nhãn (kể cả với nhóm Đá có
+    ...    sẵn): trùng thì chọn ở nhóm này làm chip nhóm kia sáng theo. Chặn cả lúc lưu nhóm lẫn lúc gắn nhóm.
+    Mở Màn    /them/nhom-lua-chon/moi
+    Bấm Nút    Mẫu Ghi chú nhanh
+    Bấm Nút    LƯU NHÓM
+    Wait For Condition    Url    ==    ${BASE_URL}/them/nhom-lua-chon
+    Gắn Nhóm Lựa Chọn Vào Nhóm Món    Đồ uống    Ghi chú nhanh
+
+    Mở Màn    /them/nhom-lua-chon/moi
+    Điền Ô    Tên nhóm *    Kiểu đá
+    Điền Ô    Các lựa chọn *    Đá riêng
+    Bấm Nút    LƯU NHÓM
+    Chờ Thấy Chữ    nhóm Đá có sẵn
+    Bảng Phải Có Số Dòng    optionGroups    1
+
+    Tạo Nhóm Tuỳ Chọn    Độ ngọt    Ít ngọt, Ngọt vừa
+    Mở Màn    /them/nhom-mat-hang
+    Click    css=li >> css=button:has-text("Đồ uống")
+    Click    css=[role=dialog] >> css=button:has-text("Nhóm lựa chọn ›")
+    Click    css=[role=dialog] >> css=[role=group][aria-label="Nhóm lựa chọn"] >> css=button:text-is("Độ ngọt")
+    Click    css=[role=dialog] >> css=button:text-is("LƯU")
+    Chờ Thấy Chữ    “Ít ngọt” có ở cả nhóm
+    ${nhóm}=    Đọc Bảng    itemGroups
+    ${đồ_uống}=    Evaluate    [g for g in $nhóm if g['name'] == 'Đồ uống'][0]
+    Length Should Be    ${đồ_uống}[optionGroupGids]    1    Nhóm trùng nhãn vẫn được gắn.
+    Keyboard Key    press    Escape
+
+    Mở Màn    /them/nhom-lua-chon
+    Click    css=li >> css=button:has-text("Ghi chú nhanh")
+    Bấm Nút    Lưu trữ nhóm này
+    Chờ Thấy Chữ    Nhóm đang gắn vào nhóm món “Đồ uống”
+
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Chọn Chip    Không hành
+    Chọn Chip    Ít ngọt
+    # Không dùng `Bấm Thêm Vào Đơn`: chip "Thêm cay" của mẫu Ghi chú nhanh cũng chứa chữ THÊM.
+    Click    ${SHEET} >> css=button:has-text("THÊM ·")
+    Wait For Elements State    ${SHEET}    detached
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${dòng}=    Đọc Bảng    orderLines
+    ${ly}=    Evaluate    [d for d in $dòng if d['name'] == 'Cà phê sữa' and d.get('options')]
+    Should Be Equal    ${ly}[0][options]    ${{ ['Không hành', 'Ít ngọt'] }}
+
+Gắn nhóm lựa chọn thẳng vào món ở form món; trùng nhãn với nhóm của nhóm món bị chặn; món đang là topping không đổi về món thường được
+    [Documentation]    Món nhận nhóm gắn thẳng vào nó cộng nhóm của nhóm món, nên hai bên không được trùng nhãn — chặn
+    ...    ngay ở form món, sổ không ghi gì. Món đang nằm trong nhóm topping mà đổi về món thường thì nhóm đó trỏ vào một
+    ...    món màn bán không bán kèm được, nên cũng bị chặn kèm tên nhóm.
+    Tạo Nhóm Tuỳ Chọn    Đường    Ít đường, Không đường
+    Gắn Nhóm Lựa Chọn Vào Nhóm Món    Đồ uống    Đường
+    Tạo Nhóm Tuỳ Chọn    Size    Nhỏ, Lớn
+    Tạo Nhóm Tuỳ Chọn    Mức ngọt    Ít đường, Ngọt đầy
+
+    Mở Màn    /them/mat-hang
+    Click    css=button:has-text("Cà phê sữa")
+    Click    css=[role=group][aria-label="Nhóm lựa chọn"] >> css=button:text-is("Mức ngọt")
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    “Ít đường” có ở cả nhóm
+    ${món}=    Đọc Bảng    items
+    ${gắn}=    Evaluate    [m.get('optionGroupGids', []) for m in $món if m['name'] == 'Cà phê sữa'][0]
+    Should Be Equal    ${gắn}    ${{ [] }}    Nhóm trùng nhãn vẫn được gắn vào món.
+
+    Click    css=[role=group][aria-label="Nhóm lựa chọn"] >> css=button:text-is("Mức ngọt")
+    Click    css=[role=group][aria-label="Nhóm lựa chọn"] >> css=button:text-is("Size")
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    ${món}=    Đọc Bảng    items
+    ${nhóm_lc}=    Đọc Bảng    optionGroups
+    ${size}=    Evaluate    [g['gid'] for g in $nhóm_lc if g['name'] == 'Size']
+    ${gắn}=    Evaluate    [m['optionGroupGids'] for m in $món if m['name'] == 'Cà phê sữa'][0]
+    Should Be Equal    ${gắn}    ${size}
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Wait For Elements State    css=button[aria-pressed]:text-is("Nhỏ")    visible
+    Wait For Elements State    css=button[aria-pressed]:text-is("Ít đường")    visible
+    Keyboard Key    press    Escape
+
+    Thêm Món Topping    Thạch    3000
+    Tạo Nhóm Topping    Topping Đồ uống    Thạch
+    Mở Màn    /them/mat-hang
+    Click    css=button:has-text("Thạch")
+    Chọn Chip    Là topping
+    Bấm Nút    LƯU MẶT HÀNG
+    Chờ Thấy Chữ    gỡ khỏi nhóm trước khi đổi thành món thường
+    ${món}=    Đọc Bảng    items
+    ${thạch}=    Evaluate    [m['kind'] for m in $món if m['name'] == 'Thạch']
+    Should Be Equal    ${thạch}    ${{ ['topping'] }}
 
 Thực đơn của nhóm hiện ở màn Bán hàng: món trong nhóm có topping, món ngoài nhóm thì không
     Cài Thực Đơn Đồ Uống
@@ -306,6 +443,17 @@ Bán lại món ngừng bán chỉ trùng tên với món ngừng bán khác th�
 
 
 *** Keywords ***
+Món Phải Còn
+    [Arguments]    ${tên}
+    ${món}=    Đọc Bảng    items
+    ${khớp}=    Evaluate    [m for m in $món if m['name'] == $tên]
+    Length Should Be    ${khớp}    1    Món “${tên}” không còn trong sổ.
+
+Bảng Phải Có Số Dòng
+    [Arguments]    ${bảng}    ${số_dòng}
+    ${rows}=    Đọc Bảng    ${bảng}
+    Length Should Be    ${rows}    ${số_dòng}
+
 Chèn Món Cũ Trùng Tên
     [Documentation]    Ghi thẳng một món ngừng bán vào IndexedDB, giả dữ liệu trùng tên có từ trước luật
     ...    2.9.0 — form và nhập file đều chặn tên trùng nên không tạo lại được qua giao diện.

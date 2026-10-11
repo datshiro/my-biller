@@ -32,7 +32,8 @@ export class ImportChangedError extends Error {
 
 export async function applyItemImport(rows: ItemRow[], policy: DuplicatePolicy): Promise<ImportResult> {
   return syncTransaction(async () => {
-    const [items, groups] = await Promise.all([db.items.toArray(), db.itemGroups.toArray()])
+    // Món đọc thô: hàng cập nhật được dựng từ đây rồi ghi lại, mặc định điền lúc đọc không được thành giá trị thật.
+    const [items, groups] = await Promise.all([db.items.toCollection().raw().toArray(), db.itemGroups.toArray()])
     const plan = planItemImport(rows, items, groups)
     if (plan.errors.length > 0) {
       throw new ImportChangedError('Sổ vừa đổi trong lúc xem trước. Chọn lại file để xem trước lại.')

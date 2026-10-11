@@ -278,7 +278,7 @@ describe('truy vấn tổng không chạm outbox', () => {
     const overview = await getLedgerOverview()
     expect(spy).not.toHaveBeenCalled()
     expect(overview.counts.map((row) => row.table)).not.toContain('settings')
-    expect(overview.counts).toHaveLength(9)
+    expect(overview.counts).toHaveLength(10)
     spy.mockRestore()
   })
 })

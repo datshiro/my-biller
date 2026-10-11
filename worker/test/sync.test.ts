@@ -1120,3 +1120,116 @@ describe('Tại chỗ / Mang về trên đơn', () => {
     expect((await lastOrder())?.after).toMatchObject({ serviceMode: 'takeaway' })
   })
 })
+
+describe('nhóm lựa chọn và món topping trên sổ chung', () => {
+  const lastEntry = async (table: SyncEvent['table'], entityKey: string) =>
+    (await pullAll()).filter((entry) => entry.table === table && entry.entityKey === entityKey).at(-1)
+
+  const toppingItem = (gid: string, optionGroupGids: string[] = []) => ({
+    ...itemRow(gid),
+    name: 'Trân châu',
+    isActive: 0,
+    kind: 'topping',
+    optionGroupGids,
+  })
+
+  it('máy cũ sửa giá món topping không làm mất kind và nhóm lựa chọn đã lưu', async () => {
+    const gid = crypto.randomUUID()
+    const groupGid = crypto.randomUUID()
+    const stored = toppingItem(gid, [groupGid])
+    expect((await push(event('items', gid, stored, { groupId: null }))).status).toBe(201)
+
+    // Máy bản 2.19.0 không biết hai trường này nên payload không mang chúng.
+    const repricedByOldClient = { ...itemRow(gid), name: 'Trân châu', isActive: 0, unitPrice: 12_000, updatedAt: 2 }
+    expect((await push(event('items', gid, repricedByOldClient, { groupId: null }, 'put', stored))).status).toBe(201)
+
+    expect((await lastEntry('items', gid))?.after).toMatchObject({
+      unitPrice: 12_000,
+      kind: 'topping',
+      optionGroupGids: [groupGid],
+    })
+  })
+
+  it('máy mới ghi kind và optionGroupGids rõ ràng thì giá trị đó được giữ, kể cả khi bỏ trống', async () => {
+    const gid = crypto.randomUUID()
+    const stored = toppingItem(gid, [crypto.randomUUID()])
+    expect((await push(event('items', gid, stored, { groupId: null }))).status).toBe(201)
+
+    const cleared = { ...stored, kind: 'item', optionGroupGids: [], updatedAt: 2 }
+    expect((await push(event('items', gid, cleared, { groupId: null }, 'put', stored))).status).toBe(201)
+
+    expect((await lastEntry('items', gid))?.after).toMatchObject({ kind: 'item', optionGroupGids: [] })
+  })
+
+  it('máy cũ đổi tên nhóm món không xoá danh sách nhóm lựa chọn gắn vào nhóm', async () => {
+    const groupGid = crypto.randomUUID()
+    const attached = crypto.randomUUID()
+    const created = { ...groupRow(groupGid), optionGroupGids: [attached] }
+    expect((await push(event('itemGroups', groupGid, created))).status).toBe(201)
+
+    const renamedByOldClient = { ...groupRow(groupGid, 'Đồ uống'), updatedAt: 2 }
+    expect((await push(event('itemGroups', groupGid, renamedByOldClient, {}, 'put', created))).status).toBe(201)
+
+    expect((await lastEntry('itemGroups', groupGid))?.after).toMatchObject({
+      name: 'Đồ uống',
+      optionGroupGids: [attached],
+    })
+  })
+
+  it('món có optionGroupGids quá 20, trùng, hoặc không phải uuid bị từ chối trước khi vào sổ', async () => {
+    const before = (await pullAll()).length
+    const shared = crypto.randomUUID()
+    const invalidLists: Record<string, string[]> = {
+      'quá 20 gid': Array.from({ length: 21 }, () => crypto.randomUUID()),
+      'gid trùng': [shared, shared],
+      'không phải uuid': ['không-phải-uuid'],
+    }
+
+    for (const [label, optionGroupGids] of Object.entries(invalidLists)) {
+      const gid = crypto.randomUUID()
+      const response = await push(event('items', gid, { ...itemRow(gid), optionGroupGids }, { groupId: null }))
+      expect(response.status, label).toBe(409)
+      await expect(response.json(), label).resolves.toMatchObject({ error: 'business-rejected' })
+    }
+    expect(await pullAll()).toHaveLength(before)
+  })
+
+  it('món topping đang ẩn vẫn giữ tên: máy catalog-v2 bị chặn, máy cũ thì topping thành bán riêng rồi nối món vào nó', async () => {
+    const toppingGid = crypto.randomUUID()
+    expect((await push(event('items', toppingGid, toppingItem(toppingGid), { groupId: null }))).status).toBe(201)
+
+    const blockedGid = crypto.randomUUID()
+    const blocked = await push(
+      event('items', blockedGid, { ...itemRow(blockedGid), name: 'Trân châu', isActive: 1 }, { groupId: null }),
+      1,
+      ['item-name-taken', 'catalog-v2'],
+    )
+    expect(blocked.status).toBe(409)
+    await expect(blocked.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: toppingGid })
+
+    const oldClientGid = crypto.randomUUID()
+    const merged = await push(
+      event('items', oldClientGid, { ...itemRow(oldClientGid), name: 'Trân châu', isActive: 1 }, { groupId: null }),
+      1,
+      ['item-name-taken'],
+    )
+    expect(merged.status).toBe(409)
+    await expect(merged.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: toppingGid })
+    const events = await pullAll()
+    expect(events.findLast((row) => row.entityKey === toppingGid)?.after).toMatchObject({ isActive: 1, kind: 'topping' })
+    expect(events.some((row) => row.entityKey === oldClientGid)).toBe(false)
+  })
+
+  it('món ngừng bán thường không được tính là tên đã chiếm, kể cả với máy catalog-v2', async () => {
+    const hiddenGid = crypto.randomUUID()
+    expect((await push(event('items', hiddenGid, { ...itemRow(hiddenGid), name: 'Trà sữa', isActive: 0 }, { groupId: null }))).status).toBe(201)
+
+    const newGid = crypto.randomUUID()
+    const response = await push(
+      event('items', newGid, { ...itemRow(newGid), name: 'Trà sữa', isActive: 1 }, { groupId: null }),
+      1,
+      ['item-name-taken', 'catalog-v2'],
+    )
+    expect(response.status).toBe(201)
+  })
+})
