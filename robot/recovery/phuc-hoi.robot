@@ -1,5 +1,5 @@
 *** Settings ***
-Documentation       Artifact recovery thật trên Chrome: mở schema v5, chỉ đọc và tải backup.
+Documentation       Artifact recovery thật trên Chrome: mở schema hiện tại, chỉ đọc và tải backup.
 Resource            ../resources/app.resource
 Suite Setup         Mở Trình Duyệt Cho Suite
 Suite Teardown      Đóng Trình Duyệt Cuối Suite
@@ -9,7 +9,7 @@ Test Tags           recovery    regression
 
 
 *** Test Cases ***
-Recovery chỉ đọc sổ schema v5 và tải file không tạo outbox
+Recovery chỉ đọc sổ schema hiện tại và tải file không tạo outbox
     [Documentation]    Khóa đường cứu dữ liệu sau migration: artifact phải đọc đúng IndexedDB thật,
     ...    không lộ màn bán/sync và file tải không đóng dấu hay sinh event chờ đồng bộ.
     Chờ Thấy Chữ    Phục hồi dữ liệu — chỉ đọc
@@ -30,7 +30,8 @@ Recovery chỉ đọc sổ schema v5 và tải file không tạo outbox
     ${text}=    Get File    ${download}[saveAs]
     ${backup}=    Evaluate    __import__('json').loads($text)
     Should Be Equal    ${backup}[app]    my-biller
-    Should Be Equal As Integers    ${backup}[version]    4
+    Should Be Equal As Integers    ${backup}[version]    5
+    Dictionary Should Contain Key    ${backup}[data]    optionGroups
     Length Should Be    ${backup}[data][items]    1
     Should Be Equal    ${backup}[data][items][0][name]    Món cần cứu
 
@@ -56,7 +57,7 @@ Ghi Mặt Hàng Thử Vào Schema V5
     ...        })
     ...        if (!database.objectStoreNames.contains('outbox')) {
     ...            database.close()
-    ...            throw new Error('Kho chưa ở schema v5: thiếu outbox')
+    ...            throw new Error('Kho chưa ở schema hiện tại: thiếu outbox')
     ...        }
     ...        await new Promise((resolve, reject) => {
     ...            const transaction = database.transaction('items', 'readwrite')
