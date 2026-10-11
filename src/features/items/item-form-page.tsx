@@ -51,6 +51,9 @@ function ItemForm({ item }: { item: Item | null }) {
   const [sellAlone, setSellAlone] = useState(item ? item.isActive === 1 : false)
   const initialGids = item?.optionGroupGids ?? []
   const [optionGroupGids, setOptionGroupGids] = useState<string[]>(initialGids)
+  // Mốc so chốt lúc mở form: `item` là live query, ghim do máy khác vừa đồng bộ tới không được bị lần lưu này đảo lại.
+  const [initialPinned] = useState(() => item?.pinned === 1)
+  const [pinned, setPinned] = useState(initialPinned)
 
   const [errors, setErrors] = useState<{ name?: string; unitPrice?: string }>({})
   const [confirming, setConfirming] = useState(false)
@@ -79,7 +82,8 @@ function ItemForm({ item }: { item: Item | null }) {
     note !== (item?.note ?? '') ||
     isTopping !== (initialKind === 'topping') ||
     (isTopping && sellAlone !== (item ? item.isActive === 1 : false)) ||
-    JSON.stringify(optionGroupGids) !== JSON.stringify(initialGids)
+    JSON.stringify(optionGroupGids) !== JSON.stringify(initialGids) ||
+    pinned !== initialPinned
 
   const save = () => {
     const trimmed = name.trim()
@@ -107,9 +111,11 @@ function ItemForm({ item }: { item: Item | null }) {
           ...(kind !== initialKind ? { kind } : {}),
           ...(isTopping || kind !== initialKind ? { isActive: isTopping ? isActive : item.isActive } : {}),
           ...(JSON.stringify(optionGroupGids) !== JSON.stringify(initialGids) ? { optionGroupGids } : {}),
+          // Bỏ ghim ghi `0` tường minh: thiếu khoá là "không biết", Worker sẽ giữ lại ghim đã lưu.
+          ...(pinned !== initialPinned ? { pinned: pinned ? (1 as const) : (0 as const) } : {}),
         })
       } else {
-        await createItem({ ...payload, isActive, kind, optionGroupGids })
+        await createItem({ ...payload, isActive, kind, optionGroupGids, pinned: pinned ? 1 : 0 })
       }
       void navigate('/them/mat-hang', { replace: true })
     })
@@ -264,6 +270,17 @@ function ItemForm({ item }: { item: Item | null }) {
           ) : null}
         </div>
       </Field>
+
+      {/* Topping chỉ bán kèm không lên lưới, ghim nó là bật một công tắc không làm gì. */}
+      {isTopping && !sellAlone ? null : (
+        <Field label="Màn bán" hint={pinned ? 'Món ghim đứng đầu lưới “Tất cả”, trước món bán chạy.' : undefined}>
+          <div role="group" aria-label="Màn bán" className="flex flex-wrap gap-2">
+            <SelectChip selected={pinned} onClick={() => setPinned(!pinned)}>
+              Ghim lên đầu màn bán
+            </SelectChip>
+          </div>
+        </Field>
+      )}
 
       <OptionGroupPicker
         groups={optionGroups}

@@ -1078,14 +1078,15 @@ export class ShopDO extends DurableObject<Env> {
 
   /**
    * Máy bản cũ không biết món topping: sửa giá món topping là đẩy lên bản ghi thiếu `kind` và `optionGroupGids`.
-   * Ghi đè theo last-write-wins thì món topping thành món thường và mất nhóm lựa chọn trên mọi máy.
+   * Ghi đè theo last-write-wins thì món topping thành món thường và mất nhóm lựa chọn trên mọi máy. `pinned` cùng bẫy:
+   * máy cũ sửa giá món đã ghim là gỡ ghim trên mọi máy.
    */
   private preserveItemCatalog(raw: SyncEvent, event: SyncEvent): SyncEvent {
     if (event.table !== 'items' || !event.after || !raw.after) return event
     const stored = this.ledgerPayload('items', event.entityKey)?.after
     if (!stored) return event
     const after = { ...event.after }
-    for (const field of ['kind', 'optionGroupGids']) {
+    for (const field of ['kind', 'optionGroupGids', 'pinned']) {
       if (!(field in raw.after) && field in stored) after[field] = stored[field]
     }
     return { ...event, after }

@@ -93,8 +93,8 @@ export function SalesPage() {
         (!keyword || normalizeName(item.name).includes(keyword)),
     )
     if (groupId !== null || keyword || !rank) return matched
-    const rankOf = (item: Item) => rank.get(item.id ?? -1) ?? rank.size
-    // `sort` ổn định nên món chưa bán giữ thứ tự tên của `listItems`.
+    const rankOf = (item: Item) => (item.pinned === 1 ? -1 : (rank.get(item.id ?? -1) ?? rank.size))
+    // `sort` ổn định nên món ghim với nhau, và món chưa bán, giữ thứ tự tên của `listItems`.
     return [...matched].sort((a, b) => rankOf(a) - rankOf(b))
   }, [active, groupId, keyword, rank])
 

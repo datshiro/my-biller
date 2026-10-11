@@ -280,6 +280,64 @@ describe('món topping và nhóm lựa chọn', () => {
   })
 })
 
+describe('ghim món lên đầu màn bán', () => {
+  const saveItem = () => userEvent.click(screen.getByRole('button', { name: 'LƯU MẶT HÀNG' }))
+  const plainItem = () =>
+    db.items.add({
+      gid: crypto.randomUUID(),
+      name: 'Bánh flan',
+      groupId: null,
+      unit: 'cái',
+      unitPrice: 10_000,
+      costPrice: null,
+      isActive: 1,
+      note: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+
+  it('ghim rồi bỏ ghim: bỏ ghim ghi pinned: 0 tường minh, không xoá khoá', async () => {
+    const id = await plainItem()
+    renderAt(`/them/mat-hang/${id}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Ghim lên đầu màn bán' }))
+    await saveItem()
+    await waitFor(async () => expect((await db.items.get(id))?.pinned).toBe(1))
+    cleanup()
+
+    renderAt(`/them/mat-hang/${id}`)
+    await userEvent.click(await screen.findByRole('button', { name: 'Ghim lên đầu màn bán' }))
+    await saveItem()
+    await waitFor(async () => expect(await db.items.where(':id').equals(id).raw().first()).toHaveProperty('pinned', 0))
+  })
+
+  it('máy khác ghim món trong lúc form đang mở thì lưu sửa giá không gỡ ghim đó', async () => {
+    const id = await plainItem()
+    renderAt(`/them/mat-hang/${id}`)
+    const price = await screen.findByLabelText('Giá bán *')
+
+    await db.items.update(id, { pinned: 1 })
+    await userEvent.clear(price)
+    await userEvent.type(price, '12k')
+    await saveItem()
+
+    await waitFor(async () => expect((await db.items.get(id))?.unitPrice).toBe(12_000))
+    expect((await db.items.get(id))?.pinned).toBe(1)
+  })
+
+  it('sửa giá món chưa từng ghim thì không đẩy khoá pinned', async () => {
+    const id = await plainItem()
+    renderAt(`/them/mat-hang/${id}`)
+
+    const price = await screen.findByLabelText('Giá bán *')
+    await userEvent.clear(price)
+    await userEvent.type(price, '12k')
+    await saveItem()
+
+    await waitFor(async () => expect((await db.items.get(id))?.unitPrice).toBe(12_000))
+    expect(await db.items.where(':id').equals(id).raw().first()).not.toHaveProperty('pinned')
+  })
+})
+
 describe('trùng tên và nhãn có sẵn trong danh mục', () => {
   const choiceGroup = async (name: string, choices: string[]) => {
     const id = await createOptionGroup({

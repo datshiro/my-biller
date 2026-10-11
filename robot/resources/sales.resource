@@ -276,3 +276,23 @@ Bán Hai Ly Cà Phê Có Topping
     Wait For Elements State    ${SHEET}    detached
     Mở Sheet Thu Tiền
     Chốt Đơn
+
+Tên Ô Đầu Lưới Bán
+    [Documentation]    Tên món ở ô đầu lưới "Tất cả". Lưới chỉ vẽ khi đã có thứ hạng bán chạy, nên chờ ô hiện ra trước.
+    ${ô_đầu}=    Set Variable    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> css=span >> nth=0
+    Wait For Elements State    ${ô_đầu}    visible
+    ${tên}=    Get Text    ${ô_đầu}
+    RETURN    ${tên}
+
+Ô Đầu Lưới Bán Phải Là
+    [Arguments]    ${tên_món}
+    ${tên}=    Tên Ô Đầu Lưới Bán
+    Should Be Equal    ${tên}    ${tên_món}    Ô đầu lưới bán không phải món mong đợi.
+
+Món Phải Có Ghim
+    [Documentation]    Đọc thẳng IndexedDB: `pinned` phải đúng giá trị, bỏ ghim là `0` tường minh chứ không phải mất khoá.
+    [Arguments]    ${gid}    ${ghim}    ${page}=${None}
+    ${món}=    Đọc Bảng    items    ${page}
+    ${dòng}=    Evaluate    [m for m in $món if m['gid'] == $gid][0]
+    Dictionary Should Contain Key    ${dòng}    pinned    Sổ không có khoá pinned cho món ${dòng}[name].
+    Should Be Equal As Integers    ${dòng}[pinned]    ${ghim}    Ghim của món ${dòng}[name] sai trong sổ.

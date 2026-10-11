@@ -1161,6 +1161,22 @@ describe('nhóm lựa chọn và món topping trên sổ chung', () => {
     expect((await lastEntry('items', gid))?.after).toMatchObject({ kind: 'item', optionGroupGids: [] })
   })
 
+  it('máy cũ sửa giá món đã ghim không gỡ ghim; máy mới ghi pinned: 0 thì bỏ ghim', async () => {
+    const gid = crypto.randomUUID()
+    const stored = { ...itemRow(gid), pinned: 1 }
+    expect((await push(event('items', gid, stored, { groupId: null }))).status).toBe(201)
+
+    // Máy bản 2.19.0 không biết `pinned` nên payload không mang nó.
+    const repricedByOldClient = { ...itemRow(gid), unitPrice: 12_000, updatedAt: 2 }
+    expect((await push(event('items', gid, repricedByOldClient, { groupId: null }, 'put', stored))).status).toBe(201)
+    const kept = (await lastEntry('items', gid))?.after
+    expect(kept).toMatchObject({ unitPrice: 12_000, pinned: 1 })
+
+    const unpinned = { ...kept, pinned: 0, updatedAt: 3 }
+    expect((await push(event('items', gid, unpinned, { groupId: null }, 'put', kept))).status).toBe(201)
+    expect((await lastEntry('items', gid))?.after).toMatchObject({ pinned: 0 })
+  })
+
   it('máy cũ đổi tên nhóm món không xoá danh sách nhóm lựa chọn gắn vào nhóm', async () => {
     const groupGid = crypto.randomUUID()
     const attached = crypto.randomUUID()
