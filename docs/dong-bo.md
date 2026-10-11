@@ -62,9 +62,10 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
   bộ khi gặp bảng lạ, nên bảng này đi luồng danh mục riêng (mục "Luồng danh mục" bên dưới). Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
   máy đã ghép để dựng lại bản sao (hàng đã đi qua zod của bản cũ bị cắt `kind`/`optionGroupGids`). Tham chiếu theo
-  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó; lúc
-  đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. Hai luồng không có thứ tự chung giữa các máy, nên món
-  có thể về trước nhóm nó trỏ tới — gid treo là trạng thái hợp lệ, không phải lỗi. File sao lưu lên `version: 5` có bảng `optionGroups`
+  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó (trên
+  máy, và ở Worker với máy gửi cap `catalog-v2`); lúc đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. Hai
+  luồng không có thứ tự chung giữa các máy, nên món có thể về trước nhóm nó trỏ tới — gid treo là trạng thái hợp lệ,
+  không phải lỗi. File sao lưu lên `version: 5` có bảng `optionGroups`
   (file 1–4 được bù mảng rỗng; file 5 thiếu bảng là file hỏng); gộp file của máy cũ giữ `kind`/`optionGroupGids` của
   phía có trường.
 - Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
