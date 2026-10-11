@@ -791,3 +791,50 @@ describe('in qua RawBT trên web Android', () => {
     expect(document.querySelectorAll('a[data-rawbt]')).toHaveLength(0)
   })
 })
+
+describe('phiếu vừa xuất từ màn Bán', () => {
+  function renderFromSale(id: number, fromSale: boolean) {
+    const phieu = fromSale ? { pathname: `/don/${id}/phieu`, state: { fromSale: true } } : `/don/${id}/phieu`
+    const truoc = fromSale ? '/' : `/don/${id}`
+    return render(
+      <MemoryRouter initialEntries={[truoc, phieu]} initialIndex={1}>
+        <Routes>
+          <Route path="/" element={<p>Màn Bán</p>} />
+          <Route path="/don/:id" element={<p>Chi tiết đơn</p>} />
+          <Route path="/don/:id/phieu" element={<ReceiptPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('có BÁN ĐƠN MỚI ở thanh đáy, bấm thì lùi về màn Bán', async () => {
+    const { id } = await seedOrder()
+    renderFromSale(id, true)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'BÁN ĐƠN MỚI' }))
+
+    expect(await screen.findByText('Màn Bán')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'BÁN ĐƠN MỚI' })).toBeNull()
+  })
+
+  it('nút Quay lại ở header khi vừa xuất từ màn Bán thì lùi về màn Bán', async () => {
+    const { id } = await seedOrder()
+    renderFromSale(id, true)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Quay lại' }))
+
+    expect(await screen.findByText('Màn Bán')).toBeDefined()
+  })
+
+  it('mở phiếu từ chi tiết đơn không có BÁN ĐƠN MỚI, Quay lại vẫn lùi về lịch sử', async () => {
+    const { id } = await seedOrder()
+    renderFromSale(id, false)
+
+    await screen.findByText('PHIẾU BÁN HÀNG')
+    expect(screen.queryByRole('button', { name: 'BÁN ĐƠN MỚI' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quay lại' }))
+
+    expect(await screen.findByText('Chi tiết đơn')).toBeDefined()
+  })
+})

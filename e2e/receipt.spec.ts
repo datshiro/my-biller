@@ -24,7 +24,7 @@ async function sellTwoItems(page: Page) {
   await grid.getByRole('button', { name: /Phở bò/ }).click()
   await grid.getByRole('button', { name: /Trà đá/ }).click()
   await page.getByRole('button', { name: /THU TIỀN/ }).click()
-  await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
+  await page.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 }
 
