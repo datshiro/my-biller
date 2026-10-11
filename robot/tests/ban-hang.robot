@@ -1365,6 +1365,30 @@ Ghi chú nhanh chọn được hai mục, mục thứ ba bị khoá, cả hai xu
     Should Be Equal    ${lựa_chọn}    ${{ [sorted(['L', '100%', 'Ít ngọt', 'Mang ống hút'])] }}
     Should Be Equal As Integers    ${đơn}[total]    20000
 
+Gõ nhanh mang lựa chọn mặc định, món còn nhóm bắt buộc mở sheet THÊM với đúng số lượng đã gõ
+    [Documentation]    Gõ "2 tra da, 3 ca phe sua" rồi Enter: Trà đá chỉ có nhóm Đường (mặc định 100%) nên vào giỏ ngay
+    ...    kèm nhãn mặc định; Cà phê sữa còn Size bắt buộc nên sheet THÊM mở với số lượng 3, ô tìm trống và lưới vẫn
+    ...    đủ món. Đối chiếu `orderLines`: 2 × 3.000 và 3 × 20.000.
+    Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
+    Mở Màn    /
+    Gõ Vào Ô Tìm Món    2 tra da, 3 ca phe sua
+    Keyboard Key    press    Enter
+    Wait For Elements State    ${SHEET} >> css=[aria-label="Số lượng"]:text-is("3")    visible
+    Chờ Thấy Chữ    Chưa chọn: Size
+    ${ô}=    Get Property    css=input[type=search]    value
+    Should Be Empty    ${ô}    Ô tìm còn chữ làm lưới lọc rỗng.
+    Chọn Chip    M
+    Bấm Thêm Vào Đơn
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Phở bò")    visible
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate    sorted((d['name'], d['qty'], sorted(d['options']), d['amount']) for d in $dòng if d['orderId'] == ${đơn}[id])
+    Should Be Equal    ${của_đơn}    ${{ [('Cà phê sữa', 3, ['100%', 'M'], 60000), ('Trà đá', 2, ['100%'], 6000)] }}
+    Should Be Equal As Integers    ${đơn}[total]    66000
+
 Món không gắn nhóm lựa chọn vẫn một chạm vào giỏ và vẫn có Đá chung / Đá riêng
     [Documentation]    "Đá chung / Đá riêng" là hằng có sẵn cho mọi món, không phải nhóm dữ liệu: món chỉ có hằng
     ...    này không mở sheet khi chạm, nhưng sửa dòng vẫn chọn được và nhãn xuống sổ.
@@ -1387,11 +1411,12 @@ Món không gắn nhóm lựa chọn vẫn một chạm vào giỏ và vẫn có
 *** Keywords ***
 Nạp Nhóm Lựa Chọn Cho Cà Phê Sữa
     [Documentation]    Màn cài nhóm lựa chọn chưa có, nên dựng danh mục kiểu mới bằng đường Ghi đè file thật:
-    ...    sao lưu sổ mẫu, thêm hai món topping và bốn nhóm gắn vào Cà phê sữa, rồi khôi phục.
+    ...    sao lưu sổ mẫu, thêm hai món topping và bốn nhóm gắn vào Cà phê sữa, nhóm Đường gắn thêm vào Trà đá,
+    ...    rồi khôi phục.
     Mở Màn    /them/sao-luu
     ${f}=    Sao Lưu Ra File
     ${văn_bản}=    Get File    ${f}
-    ${nội_dung}=    Them Nhom Lua Chon    ${văn_bản}    Cà phê sữa
+    ${nội_dung}=    Them Nhom Lua Chon    ${văn_bản}    Cà phê sữa    Trà đá
     ${v5}=    Set Variable    ${DOWNLOAD_DIR}/ban-sao-nhom-lua-chon.json
     Create File    ${v5}    ${nội_dung}
     Nhập File Sao Lưu    ${v5}

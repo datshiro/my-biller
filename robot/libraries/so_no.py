@@ -85,10 +85,11 @@ def thanh_v1(van_ban):
     return json.dumps(ban, ensure_ascii=False, indent=2)
 
 
-def them_nhom_lua_chon(van_ban, ten_mon):
+def them_nhom_lua_chon(van_ban, ten_mon, ten_mon_chi_duong):
     """File sao lưu v5 kèm danh mục kiểu mới gắn thẳng vào món `ten_mon` — màn cài nhóm lựa chọn chưa có nên ca bán
     hàng dựng nhóm qua đường Ghi đè thật. Hai món topping: "Trân châu" 5.000 bán riêng được, "Pudding" 7.000 chỉ bán
-    kèm. Bốn nhóm: Size (bắt buộc, M/L), Đường (mặc định 100%), Topping (Trân châu, Pudding), Ghi chú nhanh (tối đa 2)."""
+    kèm. Bốn nhóm: Size (bắt buộc, M/L), Đường (mặc định 100%), Topping (Trân châu, Pudding), Ghi chú nhanh (tối đa 2).
+    Món `ten_mon_chi_duong` chỉ gắn nhóm Đường: có mặc định, không có nhóm bắt buộc."""
     import json
     import uuid
 
@@ -148,4 +149,6 @@ def them_nhom_lua_chon(van_ban, ten_mon):
     for item in data["items"]:
         if item["name"] == ten_mon:
             item["optionGroupGids"] = [g["gid"] for g in nhom_moi]
+        if item["name"] == ten_mon_chi_duong:
+            item["optionGroupGids"] = [nhom_moi[1]["gid"]]
     return json.dumps(ban, ensure_ascii=False, indent=2)

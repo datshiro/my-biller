@@ -48,7 +48,7 @@ export function SalesPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>('cash')
   const [editing, setEditing] = useState<CartLine | null>(null)
   /** Món có thực đơn riêng vừa chạm: chọn tuỳ chọn, topping, ghi chú trong sheet rồi mới vào giỏ. */
-  const [adding, setAdding] = useState<Item | null>(null)
+  const [adding, setAdding] = useState<{ item: Item; qty: number } | null>(null)
   const { submitting, error: saveError, setError: setSaveError, run } = useSubmitOnce('Không lưu được đơn. Thử lại.')
 
   /** Bảng giá của khách đang chọn. Nạp một lần mỗi lần đổi khách hoặc đổi chế độ, **không** `useLiveQuery`. */
@@ -204,7 +204,7 @@ export function SalesPage() {
   const addItem = (item: Item) => {
     setQuery('')
     if (itemHasOptions(item)) {
-      setAdding(item)
+      setAdding({ item, qty: 1 })
       return
     }
     dispatch({ type: 'addItem', item, book })
@@ -223,6 +223,8 @@ export function SalesPage() {
 
   /** Enter ở ô tìm: gõ "2 pho" thêm 2 Phở; gõ tên thường thì thêm kết quả đầu tiên. */
   const submitQuery = () => {
+    // Danh mục chưa đọc xong thì chưa biết món nào có nhóm bắt buộc — cùng lẽ với lưới đang khoá.
+    if (items === undefined || groups === undefined || optionGroups === undefined) return
     const candidates = active.flatMap((item) =>
       item.id === undefined
         ? []
@@ -230,28 +232,21 @@ export function SalesPage() {
     )
     const read = readOrderText(query, candidates)
     const { rejected } = read
-    // Gõ nhanh không mở sheet nên không chọn được nhóm bắt buộc: cụm đó ở lại trong ô, người bán chạm món để chọn.
+    // Gõ nhanh không chọn được nhóm bắt buộc: món đầu tiên còn thiếu mở thẳng sheet THÊM với số lượng đã gõ; món thiếu
+    // thứ hai trở đi (hiếm) ở lại trong ô để thêm tiếp sau.
     const held = read.lines.filter((line) => needsChoice(line.itemId).length > 0)
     const lines = read.lines.filter((line) => !held.includes(line))
+    const [ask, ...waiting] = held
 
     // Báo TRƯỚC khi thoát sớm: không đọc được cụm nào là hỏng nặng hơn đọc được một nửa, im lặng ở
     // nhánh nặng hơn là ngược đời. Chỉ ĐẶT notice của mình, không `setNotice(null)` để dọn —
     // banner đang đứng có thể là cảnh báo giỏ mang giá lẻ trong khi công tắc là SỈ (`applyMode`),
     // và nuốt nó đi là để đơn chốt ở giá sai không dấu vết.
-    if (held.length > 0) {
-      const first = held[0]
-      const missing = first ? needsChoice(first.itemId).map((group) => group.name).join(', ') : ''
-      setNotice({ text: `${first?.name} cần chọn ${missing} — chạm món trên lưới để chọn.` })
-    } else if (rejected.length > 0) {
+    const left = rejected.length + waiting.length
+    if (left > 0) {
       setNotice({
-        text: `Chưa đọc được ${rejected.length === 1 ? 'phần' : `${rejected.length} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.`,
+        text: `Chưa ${waiting.length > 0 ? 'thêm' : 'đọc'} được ${left === 1 ? 'phần' : `${left} phần`} còn lại trong ô tìm món — sửa rồi thêm tiếp.`,
       })
-    }
-    // Phần đã thêm được rời ô; phần đọc không được hay còn phải chọn thì ở lại, không bị xoá trắng không dấu vết.
-    const keep = [...held.map((line) => `${formatQty(line.qty)} ${line.name}`), ...rejected].join(', ')
-    if (lines.length === 0) {
-      if (held.length > 0) setQuery(keep)
-      return
     }
 
     // Gõ nhanh không mở sheet, nhưng vẫn mang lựa chọn mặc định: thiếu nó thì ly gõ và ly chạm lưới thành hai dòng
@@ -261,7 +256,9 @@ export function SalesPage() {
     }
     // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
     // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
-    setQuery(keep)
+    if (lines.length > 0 || ask) setQuery([...waiting.map((line) => `${formatQty(line.qty)} ${line.name}`), ...rejected].join(', '))
+    const askItem = ask ? items.find((item) => item.id === ask.itemId) : undefined
+    if (ask && askItem) setAdding({ item: askItem, qty: ask.qty })
   }
 
   // Nhánh lỗi của `run` không đụng tới giỏ: đơn chưa ghi được thì người bán phải còn nguyên hàng để thử lại.
@@ -653,31 +650,31 @@ export function SalesPage() {
           mode="add"
           line={{
             key: '',
-            itemId: adding.id ?? null,
-            name: adding.name,
-            unit: adding.unit,
-            unitPrice: priceOf(adding),
-            retailPrice: adding.unitPrice,
+            itemId: adding.item.id ?? null,
+            name: adding.item.name,
+            unit: adding.item.unit,
+            unitPrice: priceOf(adding.item),
+            retailPrice: adding.item.unitPrice,
             priceSource: 'catalog',
-            costPrice: adding.costPrice,
-            qty: 1,
-            options: defaultOptions(optionsOf(adding.id)),
+            costPrice: adding.item.costPrice,
+            qty: adding.qty,
+            options: defaultOptions(optionsOf(adding.item.id)),
             toppings: [],
             note: '',
           }}
-          subtitle={`${formatAmount(priceOf(adding))}${adding.unit ? ` / ${adding.unit}` : ''}`}
-          groups={optionsOf(adding.id)}
+          subtitle={`${formatAmount(priceOf(adding.item))}${adding.item.unit ? ` / ${adding.item.unit}` : ''}`}
+          groups={optionsOf(adding.item.id)}
           onApply={({ qty, options, toppings, note }) => {
             // Đi qua `addLine` để giá vẫn resolve theo chế độ Lẻ / SỈ đang chốt, như đường chạm món thường.
             // Đơn giá không sửa được ở đây: sheet thêm không có ô đơn giá.
             dispatch({
               type: 'addLine',
               line: {
-                itemId: adding.id ?? null,
-                name: adding.name,
-                unit: adding.unit,
-                unitPrice: adding.unitPrice,
-                costPrice: adding.costPrice,
+                itemId: adding.item.id ?? null,
+                name: adding.item.name,
+                unit: adding.item.unit,
+                unitPrice: adding.item.unitPrice,
+                costPrice: adding.item.costPrice,
                 qty,
                 options,
                 toppings,

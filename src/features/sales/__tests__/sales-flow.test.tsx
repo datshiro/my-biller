@@ -1488,16 +1488,41 @@ describe('nhóm lựa chọn dùng chung trên màn bán', () => {
     ])
   })
 
-  it('gõ nhanh món còn nhóm bắt buộc chưa có mặc định: cụm ở lại trong ô kèm lời nhắc, phần khác vẫn vào giỏ', async () => {
+  it('gõ nhanh món còn nhóm bắt buộc chưa có mặc định: mở sheet THÊM với số lượng đã gõ, phần khác vẫn vào giỏ', async () => {
     await seedTraSua()
     renderSales()
 
     await userEvent.type(await screen.findByLabelText(/Tìm món/), '2 tra sua, tran chau{Enter}')
-    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('2 Trà sữa')
-    expect(await screen.findByText('Trà sữa cần chọn Size — chạm món trên lưới để chọn.')).toBeDefined()
+    expect(await dialog().findByLabelText('Số lượng')).toHaveProperty('textContent', '2')
+    expect(dialog().getByRole('status').textContent).toBe('Chưa chọn: Size')
+    expect(dialog().getByRole('button', { name: '100%' }).getAttribute('aria-pressed')).toBe('true')
+    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('')
+    await userEvent.click(dialog().getByRole('button', { name: 'L' }))
+    await userEvent.click(nutThem())
 
     const { lines } = await chot()
-    expect(lines.map((line) => line.name)).toEqual(['Trân châu'])
+    expect(lines.map((line) => [line.name, line.qty, [...line.options].sort()])).toEqual([
+      ['Trân châu', 1, []],
+      ['Trà sữa', 2, ['100%', 'L']],
+    ])
+  })
+
+  it('gõ nhanh hai món cùng thiếu nhóm bắt buộc: món đầu mở sheet, món sau ở lại trong ô kèm lời nhắc', async () => {
+    await seedTraSua()
+    await createItem({
+      name: 'Hồng trà',
+      groupId: (await db.itemGroups.where('name').equals('Trà sữa').first())?.id ?? null,
+      unit: 'ly',
+      unitPrice: 20_000,
+      costPrice: null,
+      isActive: 1,
+    })
+    renderSales()
+
+    await userEvent.type(await screen.findByLabelText(/Tìm món/), 'tra sua, 3 hong tra, abc{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'Trà sữa' })).toBeDefined()
+    expect((screen.getByLabelText(/Tìm món/) as HTMLInputElement).value).toBe('3 Hồng trà, abc')
+    expect(screen.getByText(/Chưa thêm được 2 phần còn lại/)).toBeDefined()
   })
 
   it('món chỉ có hằng Đá vẫn một chạm vào giỏ, sửa dòng vẫn có Đá chung / Đá riêng', async () => {

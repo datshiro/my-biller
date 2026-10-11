@@ -1155,7 +1155,8 @@ Máy bản 2.19.0 mất mạng tạo món trùng tên topping chỉ bán kèm th
     [Documentation]    Bản 2.19.0 tự chặn tên trùng với món nó đã có, nên món trùng chỉ lên tới Worker khi máy cũ chưa kéo
     ...    về món topping: máy cũ mất mạng, máy mới cài menu (Worker di trú, sinh "Trân châu" chỉ bán kèm), máy cũ tạo
     ...    "Trân châu" rồi có mạng lại. Luật máy cũ ở Worker: bật topping đó thành bán riêng rồi trả `item-name-taken`, bản
-    ...    cũ nối món vừa tạo vào topping sẵn có. Kiểm bằng bản 2.19.0 thật: không event nào bị từ chối, sổ có đúng một
+    ...    cũ nối món vừa tạo vào topping sẵn có. Kiểm bằng bản 2.19.0 thật: hàng đợi máy cũ rỗng và câu báo đang hiện là
+    ...    lời nối món của chính lượt này, không phải câu báo từ chối; sổ có đúng một
     ...    "Trân châu" là món topping đang bán, cả hai máy thấy nó trên lưới, và đơn máy cũ bán nó lên sổ thành một dòng
     ...    trỏ đúng món topping — đối chiếu IndexedDB máy A.
     Ghép Máy Cũ
@@ -1179,11 +1180,10 @@ Máy bản 2.19.0 mất mạng tạo món trùng tên topping chỉ bán kèm th
     Mở Màn Máy Cũ    /
     Chọn Món    Trân châu
     Máy Cũ Chốt Đơn
-    # Câu báo duy nhất là lời nối món của bản cũ khi nhận `item-name-taken`, không phải event bị từ chối.
+    # Bản cũ giữ một câu báo (ghi đè); câu đang hiện phải là lời nối món khi nhận `item-name-taken`, không phải từ chối.
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_CŨ_PAGE}
     ${state}=    Đọc Bảng    deviceState    ${MÁY_CŨ_PAGE}
     ${báo}=    Evaluate    [row.get('message') for row in $state if row.get('key') == 'notice']
-    Length Should Be    ${báo}    1    Máy cũ phải nhận đúng một câu báo nối món: ${báo}
     Should Contain    ${báo}[0]    Máy này đã nối sang món có sẵn; giá bán hiện tại của món là 5.000 đ.
     ${món_a}=    Đọc Bảng    items    ${MÁY_A_PAGE}
     ${id_a}=    Evaluate    next(m['id'] for m in $món_a if m['name'] == 'Trân châu')
