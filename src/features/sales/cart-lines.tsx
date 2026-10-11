@@ -18,6 +18,27 @@ const nhãnDòng = (line: CartLine) => {
   return `${line.name}${extras.length > 0 ? ` (${extras.join(', ')})` : ''}`
 }
 
+/** Tên, đơn giá và phần thêm của một dòng — dùng chung cho giỏ sửa được và bản tóm tắt chỉ đọc lúc thu tiền. */
+function LineInfo({ line }: { line: CartLine }) {
+  return (
+    <>
+      <span className="block text-[15px] font-semibold">{line.name}</span>
+      <span className="block text-[13px] text-muted">
+        {formatAmount(calcUnitPriceWithToppings(line))}
+        {line.unit ? ` / ${line.unit}` : ''}
+        {/* Dấu này ở mức TỪNG DÒNG chứ không phải mức đơn: bật SỈ mà khách chỉ có giá riêng cho
+            vài món thì phần còn lại vẫn là giá lẻ, và người bán cần thấy dòng nào là dòng nào. */}
+        {line.priceSource === 'catalog' && line.unitPrice !== line.retailPrice ? (
+          <span className="ml-1 rounded-full bg-brand px-1.5 text-[11px] font-bold uppercase text-white">
+            sỉ
+          </span>
+        ) : null}
+        {extrasOf(line).map((extra) => ` · ${extra}`)}
+      </span>
+    </>
+  )
+}
+
 function StepperButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -131,19 +152,7 @@ export function CartLines({
             className="w-full min-w-0 text-left"
             aria-label={`Sửa ${nhãnDòng(line)}`}
           >
-            <span className="block text-[15px] font-semibold">{line.name}</span>
-            <span className="block text-[13px] text-muted">
-              {formatAmount(calcUnitPriceWithToppings(line))}
-              {line.unit ? ` / ${line.unit}` : ''}
-              {/* Dấu này ở mức TỪNG DÒNG chứ không phải mức đơn: bật SỈ mà khách chỉ có giá riêng cho
-                  vài món thì phần còn lại vẫn là giá lẻ, và người bán cần thấy dòng nào là dòng nào. */}
-              {line.priceSource === 'catalog' && line.unitPrice !== line.retailPrice ? (
-                <span className="ml-1 rounded-full bg-brand px-1.5 text-[11px] font-bold uppercase text-white">
-                  sỉ
-                </span>
-              ) : null}
-              {extrasOf(line).map((extra) => ` · ${extra}`)}
-            </span>
+            <LineInfo line={line} />
           </button>
 
           <div className="flex items-center gap-2">
@@ -154,6 +163,25 @@ export function CartLines({
             <span className="money flex-1 text-right text-[15px] font-bold">
               {formatAmount(calcLineAmount(line))}
             </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Các dòng đơn ở dạng chỉ đọc: người bán soát lại trước khi tạo đơn, muốn sửa thì quay về giỏ. */
+export function CartLinesSummary({ lines }: { lines: readonly CartLine[] }) {
+  return (
+    <ul aria-label="Các món trong đơn" className="border-t border-line">
+      {lines.map((line) => (
+        <li key={line.key} aria-label={nhãnDòng(line)} className="flex items-start gap-3 border-b border-line py-2">
+          <div className="min-w-0 flex-1">
+            <LineInfo line={line} />
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="block text-[13px] text-muted">× {formatQty(line.qty)}</span>
+            <span className="money block text-[15px] font-bold">{formatAmount(calcLineAmount(line))}</span>
           </div>
         </li>
       ))}

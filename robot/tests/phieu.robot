@@ -136,9 +136,9 @@ Từ phiếu bấm Chi tiết là sang trang chi tiết đơn
     Wait For Condition    Url    contains    /don/
     Chờ Thấy Chữ    MẶT HÀNG
 
-Bấm quay lại từ phiếu thì không rơi ngược vào giỏ vừa bán
-    [Documentation]    Phiếu thay chỗ màn Bán hàng trong lịch sử (`replace`), nên quay lại là về màn
-    ...    đứng trước lúc bán. Rơi đúng vào giỏ vừa chốt mới là nguy: rất dễ bấm bán thêm lần nữa.
+Nút Quay lại trên phiếu vừa bán về màn Bán với giỏ trống, dù trước đó có màn /don trong lịch sử
+    [Documentation]    Sau khi bán, phiếu được đẩy lên trên màn Bán (màn Bán vẫn ở lịch sử ngay trước phiếu) và giỏ
+    ...    đã reset. Quay lại phải về `/` với giỏ trống — rơi vào giỏ vừa chốt là nguy vì rất dễ bấm bán thêm lần nữa.
     Mở Màn    /don
     Click    ${NAV_BAN}
     Chọn Món    Phở bò
@@ -146,7 +146,37 @@ Bấm quay lại từ phiếu thì không rơi ngược vào giỏ vừa bán
     Chốt Đơn
 
     Click    css=button[aria-label="Quay lại"]
+    Wait For Condition    Url    ==    ${BASE_URL}/
+    Wait For Elements State    ${NÚT_THU_TIỀN}    detached
+
+Back trình duyệt trên phiếu vừa bán về màn Bán với giỏ trống, dù trước đó có màn /don trong lịch sử
+    [Documentation]    Cùng đường như nút Quay lại nhưng đi qua lịch sử của trình duyệt (`Go Back`), không qua
+    ...    `decideBack`. Lịch sử phải là /don → / → phiếu, nên lùi một bước là về màn Bán với giỏ trống.
+    Mở Màn    /don
+    Click    ${NAV_BAN}
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Go Back
+    Wait For Condition    Url    ==    ${BASE_URL}/
+    Wait For Elements State    ${NÚT_THU_TIỀN}    detached
+
+APK: Back trên phiếu vừa bán về màn Bán với giỏ trống, không thu app
+    [Documentation]    Lịch sử là /don → / → phiếu. Back phần cứng lùi một bước về màn Bán với giỏ đã reset, và không
+    ...    được thu app.
+    [Setup]    Mở Phiên APK Giả Có Dữ Liệu Mẫu
+    Mở Màn    /don
     Chờ Thấy Chữ    Đơn hàng
+    Click    ${NAV_BAN}
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Bấm Back Android
+    Wait For Condition    Url    ==    ${BASE_URL}/
+    ${thu_app}=    Số Lần Thu App
+    Should Be Equal As Integers    ${thu_app}    0    Back trên phiếu vừa bán thu app thay vì về màn Bán.
     Wait For Elements State    ${NÚT_THU_TIỀN}    detached
 
 Mở phiếu của đơn không tồn tại thì báo rõ và có lối về

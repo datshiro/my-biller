@@ -256,8 +256,9 @@ export function SalesPage() {
       reset()
       setSheet('none')
       // Chốt xong là đưa thẳng tới phiếu để gửi khách — đó là việc kế tiếp của người bán.
-      // `replace` để nút back không quay lại giỏ đã chốt.
-      void navigate(`/don/${id}/phieu`, { replace: true })
+      // Đẩy chứ không `replace`: giỏ đã `reset()` ở trên, nên mọi lối lùi (nút Quay lại, Back trình duyệt,
+      // Back phần cứng APK) đều về màn Bán với giỏ trống thay vì rơi vào màn đứng trước màn Bán.
+      void navigate(`/don/${id}/phieu`, { state: { fromSale: true } })
     })
 
   if (deviceIdentity === undefined) {
@@ -521,6 +522,12 @@ export function SalesPage() {
 
       {sheet === 'payment' ? (
         <PaymentSheet
+          lines={cart.lines}
+          count={count}
+          customerName={cart.customerName || KHACH_LE}
+          subtotal={totals.subtotal}
+          discount={totals.discount}
+          surcharge={totals.surcharge}
           total={totals.total}
           hasCustomer={cart.customerId !== null}
           method={payMethod}
@@ -538,6 +545,10 @@ export function SalesPage() {
           error={saveError}
           onConfirm={finish}
           onPickCustomer={() => setSheet('customer-for-debt')}
+          onEditOrder={() => {
+            setSheet('cart')
+            setSaveError(null)
+          }}
           onClose={() => {
             setSheet('none')
             setSaveError(null)
