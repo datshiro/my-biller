@@ -23,6 +23,7 @@ import { resolveUnitPrice, type PriceBook, type PriceMode } from '@/domain/whole
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { EmptyState, ListSkeleton } from '@/ui/empty-state'
+import { tapHaptic } from '@/ui/haptic'
 import { SearchInput } from '@/ui/search-input'
 import { SelectChip } from '@/ui/chip'
 import { useSubmitOnce } from '@/ui/use-submit-once'
@@ -192,6 +193,9 @@ export function SalesPage() {
 
   const menuOf = (groupId: number | null | undefined) => groups?.find((group) => group.id === groupId)
 
+  /** Ba đường thêm món (chạm lưới, THÊM của sheet, Enter ở ô tìm) đều rung: người bán biết món đã vào mà không cần nhìn. */
+  const onAdded = () => tapHaptic()
+
   const addItem = (item: Item) => {
     setQuery('')
     if (hasOwnMenu(menuOf(item.groupId))) {
@@ -199,6 +203,7 @@ export function SalesPage() {
       return
     }
     dispatch({ type: 'addItem', item, book })
+    onAdded()
   }
 
   // Giỏ hết dòng (gõ 0 hay Bỏ món dòng cuối) thì không còn gì để xem: đóng sheet đơn thay vì để một sheet rỗng.
@@ -233,6 +238,7 @@ export function SalesPage() {
     if (lines.length === 0) return
 
     for (const line of lines) dispatch({ type: 'addLine', line, book })
+    onAdded()
     // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
     // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
     setQuery(rejected.join(', '))
@@ -655,6 +661,7 @@ export function SalesPage() {
               },
               book,
             })
+            onAdded()
             setAdding(null)
           }}
           onClose={() => setAdding(null)}
