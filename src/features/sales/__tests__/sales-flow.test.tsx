@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1769,5 +1769,165 @@ describe('nhóm lựa chọn dùng chung trên màn bán', () => {
     await suaDong('Phở bò')
     expect(dialog().getByRole('button', { name: 'Đá riêng' })).toBeDefined()
     expect(dialog().queryByRole('button', { name: '100%' })).toBeNull()
+  })
+})
+
+describe('hoàn lại sửa dòng và gõ số lượng', () => {
+  const oSoLuong = async (name: string) =>
+    (await screen.findByRole('textbox', { name: `Số lượng ${name}` })) as HTMLInputElement
+  const goSoLuong = async (name: string, qty: string) => {
+    await moDon()
+    const o = await oSoLuong(name)
+    await userEvent.clear(o)
+    await userEvent.type(o, qty)
+    await userEvent.tab()
+  }
+
+  it('gõ 2→5 rồi rời ô: Hoàn lại đưa về 2', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await goSoLuong('Phở bò', '2')
+    await goSoLuong('Phở bò', '5')
+    expect(await screen.findByText('Đã đổi Phở bò từ 2 thành 5.')).toBeDefined()
+
+    await bam('Hoàn lại')
+    expect((await oSoLuong('Phở bò')).value).toBe('2')
+    expect(screen.queryByText(/Đã đổi Phở bò/)).toBeNull()
+  })
+
+  it('gõ 2→5 rồi Esc đóng sheet đơn: vẫn có Hoàn lại', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await goSoLuong('Phở bò', '2')
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '5')
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(await screen.findByText('Đã đổi Phở bò từ 2 thành 5.')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Hoàn lại' })).toBeDefined()
+  })
+
+  it('gõ 2→5 rồi chạm lưới thêm 1: nút Hoàn lại biến mất, không hứa đưa 6 về 2', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await goSoLuong('Phở bò', '2')
+    await goSoLuong('Phở bò', '5')
+    await pick('Phở bò')
+
+    expect(await screen.findByRole('button', { name: /Xem đơn · 6 món/ })).toBeDefined()
+    expect(screen.getByText('Đã đổi Phở bò từ 2 thành 5.')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Hoàn lại' })).toBeNull()
+  })
+
+  it('bấm Hoàn lại khi đang gõ ô khác: chạy đúng hoàn tác đang hiện, không phải hoàn tác của lần gõ', async () => {
+    // Chạm nút làm ô mất focus TRƯỚC khi click tới: nút lấy focus là blur dựng hoàn tác mới, click chạy nhầm nó.
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await pick('Trà đá')
+    await moDon()
+    await userEvent.click(within(screen.getAllByRole('listitem')[0] as HTMLElement).getByRole('button', { name: 'Bớt một' }))
+    expect(await screen.findByText('Đã bỏ Phở bò khỏi đơn.')).toBeDefined()
+
+    const o = await oSoLuong('Trà đá')
+    await userEvent.clear(o)
+    await userEvent.type(o, '3')
+    await userEvent.click(screen.getByRole('button', { name: 'Hoàn lại' }))
+
+    expect((await oSoLuong('Phở bò')).value).toBe('1')
+    expect((await oSoLuong('Trà đá')).value).toBe('3')
+  })
+
+  it('chạm ± lúc ô số lượng còn focus (iOS) thì lần ± đó không vào hoàn tác của lần gõ', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await goSoLuong('Phở bò', '2')
+    const o = await oSoLuong('Phở bò')
+    await userEvent.clear(o)
+    await userEvent.type(o, '5')
+    // `fireEvent` chứ không `userEvent`: iOS không chuyển focus khi chạm nút, ô vẫn giữ focus.
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm một' }))
+    expect(document.activeElement).toBe(o)
+    o.blur()
+
+    await waitFor(() => expect(o.value).toBe('6'))
+    expect(screen.queryByRole('button', { name: 'Hoàn lại' })).toBeNull()
+  })
+
+  it('−/+ không dựng hoàn tác', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await moDon()
+    await bam('Thêm một')
+    await bam('Thêm một')
+    await bam('Bớt một')
+
+    expect((await oSoLuong('Phở bò')).value).toBe('2')
+    expect(screen.queryByRole('button', { name: 'Hoàn lại' })).toBeNull()
+  })
+
+  it('sửa ghi chú trong sheet rồi Hoàn lại: dòng về như cũ', async () => {
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await suaDong('Phở bò')
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await bam('XONG')
+    expect(await screen.findByText('Đã sửa Phở bò.')).toBeDefined()
+
+    await bam('Hoàn lại')
+    expect(await screen.findByRole('button', { name: 'Sửa Phở bò' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Sửa Phở bò (ít hành)' })).toBeNull()
+  })
+
+  it('sửa làm dòng gộp vào dòng khác thì không có Hoàn lại', async () => {
+    // Dòng đem sửa đứng ĐẦU giỏ để dòng gộp nằm đúng chỗ của nó: dựng hoàn tác ở đây thì Hoàn lại đưa
+    // dòng gộp 2 tô về 1 tô ít hành — mất tô của dòng bị gộp.
+    await seedItems()
+    renderSales()
+    await pick('Phở bò')
+    await suaDong('Phở bò')
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await bam('XONG')
+    await pick('Phở bò')
+    await bam('Đã hiểu')
+    await suaDong('Phở bò (ít hành)')
+    await userEvent.clear(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'))
+    await bam('XONG')
+
+    expect((await oSoLuong('Phở bò')).value).toBe('2')
+    expect(screen.queryByRole('button', { name: 'Sửa Phở bò (ít hành)' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hoàn lại' })).toBeNull()
+  })
+
+  it('sửa dòng không nuốt cảnh báo giá đang đứng: cả hai cùng hiện', async () => {
+    const [phoId] = await seedItems()
+    const customerId = await createCustomer({ name: 'Cô Bảy', phone: '', address: '', note: '' })
+    await savePriceBook(customerId, [{ itemId: phoId ?? -1, unitPrice: 45_000 }])
+    const first = renderSales()
+    await pick('Phở bò')
+    await bam('SỈ')
+    await chonKhach(/Cô Bảy/)
+    await waitFor(() => expect(localStorage.getItem('my-biller:cart-draft')).toContain('45000'))
+    first.unmount()
+    await deleteCustomer(customerId)
+    renderSales()
+    expect(await screen.findByText(/không còn nữa/)).toBeDefined()
+
+    await suaDong('Phở bò')
+    await userEvent.type(within(screen.getByRole('dialog')).getByLabelText('Ghi chú'), 'ít hành')
+    await bam('XONG')
+
+    expect(await screen.findByText('Đã sửa Phở bò.')).toBeDefined()
+    expect(screen.getByText(/không còn nữa/)).toBeDefined()
+    await bam('Hoàn lại')
+    expect(screen.getByText(/không còn nữa/)).toBeDefined()
   })
 })

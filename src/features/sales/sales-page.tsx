@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { CartLines } from './cart-lines'
 import { CartSheet } from './cart-sheet'
@@ -15,7 +15,7 @@ import { createOrder } from '@/db/repositories/orders'
 import { useItemGroups, useItems, useOptionGroups } from '@/features/items/use-items'
 import { BackupBanner } from '@/features/settings/backup-banner'
 import { useDeviceIdentity } from '@/features/settings/use-settings'
-import { cartCount, cartTotals, KHACH_LE, type CartLine } from '@/domain/cart'
+import { cartCount, cartReducer, cartTotals, KHACH_LE, sameLine, type CartAction, type CartLine } from '@/domain/cart'
 import { defaultOptions, hasOptions, isGroupMissing, optionGroupLookup, withIce } from '@/domain/line-extras'
 import { formatAmount, formatQty, formatVnd } from '@/domain/money'
 import { normalizeName, readOrderText } from '@/domain/order-draft/parse-order-text'
@@ -31,6 +31,12 @@ import { AdjustSheet } from './adjust-sheet'
 
 /** `customer-for-debt` là màn chọn khách mở TỪ sheet thu tiền — chọn xong phải quay lại đúng chỗ cũ. */
 type OpenSheet = 'none' | 'cart' | 'payment' | 'customer' | 'customer-for-debt' | 'adjust'
+
+/** Thay đổi gần nhất còn hoàn lại được. Một ô riêng, không chung ô `notice`: hoàn tác mới không được nuốt cảnh báo giá. */
+type Undo = { text: string } & (
+  | { kind: 'removed'; line: CartLine }
+  | { kind: 'changed'; after: CartLine; previous: CartLine }
+)
 
 const KHONG_CO_GIA_RIENG: PriceBook = new Map()
 /** Nhóm của món không còn trong danh mục (dòng nháp cũ, món đã xoá): chỉ còn hằng Đá. */
@@ -63,7 +69,8 @@ export function SalesPage() {
    */
   const [shownMode, setShownMode] = useState<PriceMode>(cart.priceMode)
   const [repricing, setRepricing] = useState(false)
-  const [notice, setNotice] = useState<{ text: string; undo?: CartLine } | null>(null)
+  const [notice, setNotice] = useState<{ text: string } | null>(null)
+  const [undo, setUndo] = useState<Undo | null>(null)
   /** Chạm SỈ khi chưa có khách: nhớ ý định, bật lên sau khi người bán chọn xong khách. */
   const [wantWholesale, setWantWholesale] = useState(false)
   /**
@@ -122,6 +129,7 @@ export function SalesPage() {
     // hay bật/tắt SỈ xong mới bấm Hoàn lại là chèn giá cũ vào giỏ của khách mới, và không gì tính
     // lại nó cho tới lần toggle sau. Bỏ đường hoàn tác đi khi nền giá đã đổi.
     setNotice(null)
+    setUndo(null)
     setShownMode(mode)
     setRepricing(true)
     try {
@@ -329,10 +337,15 @@ export function SalesPage() {
     )
   }
 
-  // `restoreLine` cố ý không làm gì khi dòng đã quay lại giỏ (nếu không thì `upsert` cộng dồn qty).
-  // Nút vẫn hiện trong trạng thái đó là nút hứa suông, và hứa suông ở đây đi theo hướng IM: bỏ 3 tô,
-  // chạm lại 1 lần, bấm Hoàn lại tưởng lấy được 3 — sổ ghi 1, không con số nào nhảy để người bán thấy.
-  const undo = notice?.undo && !cart.lines.some((line) => line.key === notice.undo?.key) ? notice.undo : undefined
+  // `restoreLine` và `revertLine` cố ý không làm gì khi dòng đã đổi tiếp sau đó. Nút vẫn hiện trong trạng thái đó
+  // là nút hứa suông, và hứa suông ở đây đi theo hướng IM: bỏ 3 tô, chạm lại 1 lần, bấm Hoàn lại tưởng lấy được 3
+  // — sổ ghi 1, không con số nào nhảy để người bán thấy. Hỏi thẳng reducer để nút và reducer không lệch nhau.
+  const undoAction: CartAction | null = !undo
+    ? null
+    : undo.kind === 'removed'
+      ? { type: 'restoreLine', line: undo.line }
+      : { type: 'revertLine', after: undo.after, previous: undo.previous }
+  const canUndo = undoAction !== null && cartReducer(cart, undoAction) !== cart
 
   /**
    * Gõ `0` là bỏ món (chốt của chủ quán), nhưng `0` cũng là phím ĐẦU của "0,5" — nên phải luôn có
@@ -344,36 +357,87 @@ export function SalesPage() {
   const setQtyWithUndo = (key: string, qty: number) => {
     if (qty === 0) {
       const removed = cart.lines.find((line) => line.key === key)
-      if (removed) setNotice({ text: `Đã bỏ ${removed.name} khỏi đơn.`, undo: removed })
+      if (removed) setUndo({ kind: 'removed', line: removed, text: `Đã bỏ ${removed.name} khỏi đơn.` })
     }
     dispatch({ type: 'setQty', key, qty })
+  }
+
+  /** Gõ ô số lượng rồi rời ô. −/+ không đi đường này: bấm nút ngược lại là tự hoàn tác. */
+  const commitQty = (key: string, qtyAtFocus: number) => {
+    const after = cart.lines.find((line) => line.key === key)
+    if (!after || after.qty === qtyAtFocus) return
+    setUndo({
+      kind: 'changed',
+      after,
+      previous: { ...after, qty: qtyAtFocus },
+      text: `Đã đổi ${after.name} từ ${formatQty(qtyAtFocus)} thành ${formatQty(after.qty)}.`,
+    })
+  }
+
+  /**
+   * Áp sheet sửa dòng. Chạy thử reducer trước để biết dòng sau khi sửa: sửa làm khoá trùng một dòng khác thì
+   * `updateLine` GỘP hai dòng, và đưa dòng gộp về trạng thái cũ là xoá mất số lượng của dòng bị gộp — nên
+   * khi số dòng giảm thì không dựng hoàn tác.
+   */
+  const applyLineEdit = (action: Extract<CartAction, { type: 'updateLine' }>) => {
+    const at = cart.lines.findIndex((line) => line.key === action.key)
+    const previous = cart.lines[at]
+    const next = cartReducer(cart, action)
+    const after = next.lines.length === cart.lines.length ? next.lines[at] : undefined
+    if (previous && after && !sameLine(previous, after)) {
+      setUndo({ kind: 'changed', after, previous, text: `Đã sửa ${previous.name}.` })
+    }
+    dispatch(action)
   }
 
   const noticeBanner = notice ? (
     <p className="flex items-start gap-2 bg-warn-tint px-4 py-2 text-[13px] font-semibold text-warn">
       <span className="min-w-0 flex-1">{notice.text}</span>
+      <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
+        Đã hiểu
+      </button>
+    </p>
+  ) : null
+
+  /**
+   * Nút của banner hoàn tác không lấy focus: chạm nó lúc đang gõ ô số lượng thì blur dựng hoàn tác MỚI trước khi
+   * click tới, và click chạy nhầm hoàn tác mới — bỏ Phở, gõ Trà đá 3, bấm Hoàn lại ⇒ Phở mất hẳn, Trà đá về 1.
+   */
+  const keepFocus = (event: MouseEvent) => event.preventDefault()
+
+  const undoBanner = undo ? (
+    <p className="flex items-start gap-2 bg-warn-tint px-4 py-2 text-[13px] font-semibold text-warn">
+      <span className="min-w-0 flex-1">{undo.text}</span>
       {/*
         "Hoàn lại" đứng CẠNH "Đã hiểu", không thay chỗ nó. Bỏ món bằng cách gõ `0` thường là cố ý,
         và banner sống tới hết đơn — nếu nút duy nhất để dọn banner lại là nút chèn dòng thì người
         bán bấm theo quán tính, và `restoreLine` cộng dồn qty vào dòng họ vừa chạm lại.
       */}
-      {undo ? (
+      {canUndo && undoAction ? (
         <button
           type="button"
+          onMouseDown={keepFocus}
           onClick={() => {
-            dispatch({ type: 'restoreLine', line: undo })
-            setNotice(null)
+            dispatch(undoAction)
+            setUndo(null)
           }}
           className="shrink-0 underline"
         >
           Hoàn lại
         </button>
       ) : null}
-      <button type="button" onClick={() => setNotice(null)} className="shrink-0 underline">
+      <button type="button" onMouseDown={keepFocus} onClick={() => setUndo(null)} className="shrink-0 underline">
         Đã hiểu
       </button>
     </p>
   ) : null
+
+  const banners = (
+    <>
+      {noticeBanner}
+      {undoBanner}
+    </>
+  )
 
   /** Cảnh báo và phân tách tổng — hiện ở cả thanh đáy lẫn chân sheet đơn, hai chỗ người bán nhìn tổng. */
   const totalsNotes = (
@@ -443,7 +507,7 @@ export function SalesPage() {
       ) : null}
 
       {/* Sheet đơn đang mở thì banner hiện trong sheet; hiện cả ở đây là hai bản cùng một câu. */}
-      {sheet === 'cart' ? null : noticeBanner}
+      {sheet === 'cart' ? null : banners}
 
       <BackupBanner />
 
@@ -533,7 +597,7 @@ export function SalesPage() {
         <CartSheet
           customerName={cart.customerName || KHACH_LE}
           summary={`${cart.lines.length} dòng · ${formatQty(count)} món`}
-          notice={noticeBanner}
+          notice={banners}
           totals={
             <>
               {totalsNotes}
@@ -561,6 +625,7 @@ export function SalesPage() {
             }}
             onEdit={leaveFocusThen(setEditing)}
             onSetQty={setQtyWithUndo}
+            onQtyCommitted={commitQty}
             onUnreadableQty={(name, restored) =>
               setNotice({
                 text: `Số lượng của ${name} không đọc được — đã giữ nguyên ${formatQty(restored)}.`,
@@ -648,7 +713,7 @@ export function SalesPage() {
             // `updateLine` với qty 0 cũng gỡ dòng, nhưng lặng lẽ. Đẩy nhánh đó qua cùng handler với ô
             // số lượng trong giỏ để người bán có đúng một đường hoàn lại, dù bỏ món từ chỗ nào.
             if (qty === 0) setQtyWithUndo(editing.key, 0)
-            else dispatch({ type: 'updateLine', key: editing.key, qty, unitPrice, options, toppings, note })
+            else applyLineEdit({ type: 'updateLine', key: editing.key, qty, unitPrice, options, toppings, note })
             setEditing(null)
           }}
           onRemove={() => {
