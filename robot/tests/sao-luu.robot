@@ -479,6 +479,30 @@ Khôi phục file v4 có menu topping cũ thì máy chưa ghép tự chuyển sa
     Length Should Be    ${món_lại}    ${{len($món)}}    Mở lại app sinh thêm món.
     Length Should Be    ${nhóm_lc_lại}    2    Mở lại app sinh thêm nhóm lựa chọn.
 
+Xem trước Ghi đè file v4 có menu topping cũ đếm cả món topping sẽ sinh ra
+    [Documentation]    File v4 còn menu cũ được di trú ngay trước khi ghi, nên mỗi tên topping thành thêm một món. Số
+    ...    "File có …" ở hộp chọn chế độ và hộp xác nhận Ghi đè phải đếm trên sổ sẽ thật sự được ghi — từng đếm trên
+    ...    file thô, nói 4 mặt hàng rồi ghi 6. Huỷ ở hộp xác nhận thì sổ không đổi.
+    Mở Màn    /them/sao-luu
+    ${f}=    Sao Lưu Ra File
+    ${v4}=    Set Variable    ${DOWNLOAD_DIR}/xem-truoc-v4-menu-cu.json
+    ${văn_bản}=    Get File    ${f}
+    ${nội_dung}=    Thanh V4 Co Menu Cu    ${văn_bản}    Đồ uống
+    Create File    ${v4}    ${nội_dung}
+    ${món_trước}=    Đọc Bảng    items
+
+    Upload File By Selector    ${Ô_CHỌN_FILE}    ${v4}
+    Wait For Elements State    ${SHEET_CHẾ_ĐỘ}    visible
+    ${chế_độ}=    Get Text    ${SHEET_CHẾ_ĐỘ}
+    Should Contain    ${chế_độ}    · 6 mặt hàng ·    Hộp chọn chế độ chưa đếm hai món topping sẽ sinh từ menu cũ.
+    Click    ${SHEET_CHẾ_ĐỘ} >> css=button:text-is("Ghi đè")
+    Chờ Hộp Xác Nhận    Ghi đè toàn bộ dữ liệu?
+    Chờ Thấy Chữ    · 6 mặt hàng ·
+    Chờ Thấy Chữ    Đang có trên máy: 2 đơn · 4 mặt hàng
+    Bỏ Qua Hộp Xác Nhận
+    ${món_sau}=    Đọc Bảng    items
+    Should Be Equal    ${món_sau}    ${món_trước}    Huỷ ở hộp xác nhận mà sổ đã đổi.
+
 File v1 cũ: Gộp phải cảnh báo nhân đôi trước, và không chết vì mã đơn không chữ
     [Documentation]    File v1/v2 không có mã toàn cục và mã đơn chưa có chữ máy (PBH-YYMMDD-NNN). Gộp vào sổ đã có
     ...    chính dữ liệu đó phải qua cửa cảnh báo nhân đôi; Huỷ thì không ghi gì; Vẫn gộp thì không lỗi, số

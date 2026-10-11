@@ -261,8 +261,15 @@ describe('di trú menu cũ trên Worker', () => {
     expect((await push(event('itemGroups', groupGid, legacyGroup(groupGid)), OLD_CAPS)).status).toBe(201)
     await pullNew()
     const sameName = crypto.randomUUID()
-    expect((await push(event('items', sameName, itemRow(sameName, { name: 'Trân châu' }), { groupId: null }), OLD_CAPS)).status).toBe(201)
-    const topping = (await pullOld()).find((row) => row.entityKey === toppingGid)!.after!
+    // Máy cũ không thấy topping chỉ bán kèm: Worker bật nó thành bán riêng rồi để luật trùng tên hiện hành nối món mới.
+    const created = await push(event('items', sameName, itemRow(sameName, { name: 'Trân châu' }), { groupId: null }), OLD_CAPS)
+    expect(created.status).toBe(409)
+    await expect(created.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: toppingGid })
+    const topping = (await pullOld()).findLast((row) => row.entityKey === toppingGid)!.after!
+    expect(topping).toMatchObject({ isActive: 1, kind: 'topping' })
+    // Món đang nằm trong nhóm topping: lần xoá của máy cũ thành ghi lại bản đang lưu, không bị từ chối.
     expect((await push(event('items', toppingGid, null, { groupId: null }, 'delete', topping), OLD_CAPS)).status).toBe(201)
+    const last = (await pullOld()).findLast((row) => row.entityKey === toppingGid)!
+    expect(last).toMatchObject({ operation: 'put', after: topping })
   })
 })

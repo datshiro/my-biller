@@ -1,5 +1,6 @@
 import { cleanPriceRows, validateBackupIntegrity } from './backup'
 import { withDerivedPaid } from './backup-report'
+import { migrateBackupData } from './catalog-migration'
 import { ledgerTotals, type LedgerTotals } from './doi-soat'
 import { newGid } from './gid'
 import { buildOrderCode, nextSeqOfDay, orderCodeDatePart, parseOrderCode } from './order-code'
@@ -643,7 +644,9 @@ export function previewMerge(
     integrity: validateBackupIntegrity(main.merged),
     willAdd: {
       itemGroups: namesOnlyInFile(current.itemGroups, incoming.itemGroups),
-      items: namesOnlyInFile(current.items, incoming.items),
+      // Gộp xong sổ được di trú rồi mới ghi (`mergeAllDataAndRecalculate`), nên món topping sinh từ menu cũ cũng là món
+      // sẽ thêm. Mốc thời gian không ảnh hưởng tên món.
+      items: namesOnlyInFile(current.items, migrateBackupData(main.merged, 0).items),
       customers: namesOnlyInFile(current.customers, incoming.customers),
       expenseCategories: namesOnlyInFile(current.expenseCategories, incoming.expenseCategories),
       orders: main.summary.added.orders,

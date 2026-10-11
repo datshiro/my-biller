@@ -23,7 +23,15 @@ import {
   planCatalogMigration,
   type MigrationGroup,
   type MigrationItem,
+  type NewOptionGroup,
 } from '../../shared/catalog-migration'
+import {
+  planLegacyMenuEdit,
+  projectLegacyMenu,
+  sameLegacyMenu,
+  type LegacyMenu,
+  type LegacyMenuItem,
+} from '../../shared/legacy-menu'
 
 const INITIALIZED_KEY = 'initialized'
 const PAIR_TTL_MS = 5 * 60 * 1000
@@ -79,6 +87,7 @@ const SETTINGS_KEYS = new Set(['shop', 'app'])
 /** Máy khai báo khả năng này hiểu luồng danh mục; luật mới về nhóm lựa chọn chỉ từ chối máy đó, không bao giờ máy cũ. */
 const CATALOG_V2 = 'catalog-v2'
 const CATALOG_MIGRATED_KEY = 'catalogMigratedAt'
+const CATALOG_WARNINGS_KEPT = 50
 
 const CATALOG_SCHEMA = `
   CREATE TABLE IF NOT EXISTS catalogOplog (
@@ -101,6 +110,13 @@ const CATALOG_SCHEMA = `
   CREATE TABLE IF NOT EXISTS catalogMeta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS catalogWarnings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deviceId TEXT NOT NULL,
+    groupGid TEXT NOT NULL,
+    message TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
   );
 `
 
@@ -536,7 +552,14 @@ export class ShopDO extends DurableObject<Env> {
     // `seq` là alias của rowid nên MAX là một lần seek, không quét bảng — cùng câu lệnh activateDevice dùng.
     const latestSeq =
       Number(first(this.sql.exec<{ seq: number }>('SELECT MAX(seq) AS seq FROM oplog'))?.seq) || 0
-    return json({ devices, latestSeq })
+    const catalogWarnings = [...this.sql.exec<{ message: string; createdAt: number; deviceId: string }>(
+      'SELECT message, createdAt, deviceId FROM catalogWarnings ORDER BY id DESC LIMIT 20',
+    )].map((warning) => ({
+      message: warning.message,
+      createdAt: warning.createdAt,
+      deviceLabel: devices.find((device) => device.id === warning.deviceId)?.label ?? null,
+    }))
+    return json({ devices, latestSeq, catalogWarnings })
   }
 
   private async revokeDevice(request: Request, deviceId: string): Promise<Response> {
@@ -1233,10 +1256,14 @@ export class ShopDO extends DurableObject<Env> {
     countHiddenToppings: boolean,
   ): { existingGid: string; existingName: string } | null {
     if (event.table !== 'items' || event.operation === 'delete' || !event.after) return null
-    if (event.after.isActive !== 1) return null
+    // Với máy `catalog-v2`, món topping chỉ bán kèm cũng giữ tên: không thì nó tạo được topping ẩn trùng tên một món
+    // đang bán, và màn bán có hai món cùng tên mà không biết chọn món nào.
+    const holdsName = (row: Record<string, unknown>) =>
+      row.isActive === 1 || (countHiddenToppings && row.kind === 'topping')
+    if (!holdsName(event.after)) return null
     const key = itemNameKey(String(event.after.name))
     const stored = this.ledgerPayload('items', event.entityKey)?.after
-    const claims = !stored || stored.isActive !== 1 || itemNameKey(String(stored.name)) !== key
+    const claims = !stored || !holdsName(stored) || itemNameKey(String(stored.name)) !== key
     if (!claims) return null
     // `ORDER BY updatedSeq` để kết quả tất định: sổ có sẵn ≥2 món trùng tên từ trước thì luôn nối
     // vào món có lần ghi gần nhất cũ nhất, không tuỳ ý SQLite trả hàng theo thứ tự nào.
@@ -1245,8 +1272,7 @@ export class ShopDO extends DurableObject<Env> {
       event.entityKey,
     )) {
       const other = (JSON.parse(row.payload) as { after: { name: string; isActive: number; kind?: string } }).after
-      const claimed = other.isActive === 1 || (countHiddenToppings && other.kind === 'topping')
-      if (claimed && itemNameKey(other.name) === key) {
+      if (holdsName(other) && itemNameKey(other.name) === key) {
         return { existingGid: row.entityKey, existingName: other.name }
       }
     }
@@ -1376,12 +1402,14 @@ export class ShopDO extends DurableObject<Env> {
     try {
       const appended = this.ctx.storage.transactionSync(() => {
         if (this.catalogMigrated() === lazy) return null
+        const now = Date.now()
+        // Lượt ghép bỏ dở để lại admission đã hết hạn: dọn trước khi kiểm, không thì di trú hoãn tới request đẩy kế tiếp.
+        this.expireLedgerAdmission(now)
         const admission = first(this.sql.exec<{ expectedRows: number }>('SELECT expectedRows FROM ledgerAdmission LIMIT 1'))
         if (admission && admission.expectedRows > 0) return null
-        const now = Date.now()
         const result = this.migrateLegacyMenus(deviceId, now)
         if (lazy) this.sql.exec('INSERT INTO catalogMeta (key, value) VALUES (?, ?)', CATALOG_MIGRATED_KEY, String(now))
-        return result
+        return { ...result, seq: this.projectLegacyMenus(deviceId, now) ?? result.seq }
       })
       for (const socket of this.ctx.getWebSockets()) {
         if (appended?.seq) socket.send(JSON.stringify({ type: 'oplog', seq: appended.seq }))
@@ -1392,6 +1420,280 @@ export class ShopDO extends DurableObject<Env> {
     }
   }
 
+  private catalogGroups(): NewOptionGroup[] {
+    return [...this.sql.exec<LedgerRow>("SELECT payload FROM catalogLedger WHERE tableName = 'optionGroups'")].map(
+      (row) => (JSON.parse(row.payload) as { after: NewOptionGroup }).after,
+    )
+  }
+
+  private menuItems(): LegacyMenuItem[] {
+    return this.ledgerRows('items').map((row) => row.after as LegacyMenuItem)
+  }
+
+  private recordCatalogWarning(deviceId: string, groupGid: string, message: string): void {
+    this.sql.exec(
+      'INSERT INTO catalogWarnings (deviceId, groupGid, message, createdAt) VALUES (?, ?, ?, ?)',
+      deviceId,
+      groupGid,
+      message,
+      Date.now(),
+    )
+    this.sql.exec(
+      `DELETE FROM catalogWarnings WHERE id NOT IN (SELECT id FROM catalogWarnings ORDER BY id DESC LIMIT ${CATALOG_WARNINGS_KEPT})`,
+    )
+  }
+
+  /** Thực đơn của nhóm món đã về đúng mô hình mới (dịch xong, hoặc máy mới sửa) thì cảnh báo cũ của nó hết nghĩa. */
+  private clearCatalogWarnings(groupGid: string): void {
+    this.sql.exec('DELETE FROM catalogWarnings WHERE groupGid = ?', groupGid)
+  }
+
+  /**
+   * Worker là chủ của thực đơn kiểu cũ: nhóm món đã ở mô hình mới (có `optionGroupGids`) thì hai trường cũ luôn là
+   * phép chiếu của nhóm lựa chọn, để máy 2.19.0 bán đúng menu và đúng giá. Chỉ sinh event khi trường cũ thực sự đổi,
+   * nên chiếu lại sau event do chính phép chiếu sinh ra là no-op, không vòng lặp.
+   */
+  private projectLegacyMenus(deviceId: string, serverAt: number): number | null {
+    const groups = this.catalogGroups()
+    const items = this.menuItems()
+    let seq: number | null = null
+    for (const stored of this.ledgerRows('itemGroups')) {
+      const gids = stored.after.optionGroupGids
+      if (!Array.isArray(gids)) continue
+      const menu = projectLegacyMenu(gids as string[], groups, items)
+      if (sameLegacyMenu(stored.after as Partial<LegacyMenu>, menu)) continue
+      const entityKey = String(stored.after.gid)
+      try {
+        seq = this.appendEvent(
+          this.checkedSynthesizedEvent({
+            eventId: crypto.randomUUID(),
+            txId: crypto.randomUUID(),
+            txOrder: 0,
+            table: 'itemGroups',
+            entityKey,
+            entityGid: entityKey,
+            operation: 'put',
+            before: stored.after,
+            after: { ...stored.after, ...menu, updatedAt: serverAt },
+            refs: stored.refs,
+          }),
+          deviceId,
+          serverAt,
+        )
+      } catch (error) {
+        console.error('legacy-menu-projection-skipped', entityKey, error)
+      }
+    }
+    return seq
+  }
+
+  /** `optionGroupGids` của mọi món và nhóm món khác — nhóm lựa chọn có mặt ở đây là đang dùng chung. */
+  private otherAttachments(groupGid: string): string[][] {
+    return [...this.ledgerRows('itemGroups'), ...this.ledgerRows('items')]
+      .filter((row) => row.after.gid !== groupGid && Array.isArray(row.after.optionGroupGids))
+      .map((row) => row.after.optionGroupGids as string[])
+  }
+
+  /**
+   * Sửa thực đơn kiểu cũ trên một nhóm món đã ở mô hình mới (sheet của máy 2.19.0) thì dịch phần chênh sang nhóm lựa
+   * chọn và món topping, rồi đặt hai trường cũ về phép chiếu. Không bao giờ ném: vượt giới hạn hay lỗi bất ngờ thì
+   * nhận event nguyên trạng và để lại cảnh báo — từ chối event của máy cũ là cuộn mất mọi đơn nó làm sau đó.
+   * Mọi event tự sinh được kiểm xong hết rồi mới ghi, nên không bao giờ để lại một bản dịch dở dang.
+   */
+  private applyLegacyMenu(
+    event: SyncEvent,
+    deviceId: string,
+    serverAt: number,
+  ): { event: SyncEvent; seq: number | null; catalogSeq: number | null } {
+    const untouched = { event, seq: null, catalogSeq: null }
+    if (event.table !== 'itemGroups' || !event.after) return untouched
+    const storedGids = this.ledgerPayload('itemGroups', event.entityKey)?.after.optionGroupGids
+    let groups = this.catalogGroups()
+    let items = this.menuItems()
+    let after = event.after
+    const itemEvents: SyncEvent[] = []
+    const catalogEvents: CatalogEvent[] = []
+    try {
+      if (
+        event.operation === 'put' &&
+        event.before &&
+        Array.isArray(storedGids) &&
+        !sameLegacyMenu(event.before as Partial<LegacyMenu>, after as Partial<LegacyMenu>)
+      ) {
+        const plan = planLegacyMenuEdit({
+          group: { gid: event.entityKey, name: String(after.name), optionGroupGids: storedGids as string[] },
+          before: event.before as LegacyMenu,
+          after: after as LegacyMenu,
+          optionGroups: groups,
+          items,
+          otherAttachments: this.otherAttachments(event.entityKey),
+          now: serverAt,
+          newGid: () => crypto.randomUUID(),
+        })
+        if (plan.status === 'skipped') {
+          this.recordCatalogWarning(deviceId, event.entityKey, `Nhóm món “${String(after.name)}”: ${plan.reason} Sửa đổi này chưa được chuyển sang nhóm lựa chọn.`)
+          return untouched
+        }
+        if (plan.status === 'translated') {
+          const txId = crypto.randomUUID()
+          let txOrder = 0
+          const synthesize = (
+            operation: 'create' | 'put',
+            before: Record<string, unknown> | null,
+            payload: Record<string, unknown>,
+            refs: Record<string, string | null>,
+          ) => {
+            const entityKey = String(payload.gid)
+            itemEvents.push(
+              this.checkedSynthesizedEvent({
+                eventId: crypto.randomUUID(),
+                txId,
+                txOrder: txOrder++,
+                table: 'items',
+                entityKey,
+                entityGid: entityKey,
+                operation,
+                before,
+                after: payload,
+                refs,
+              }),
+            )
+          }
+          const itemsByGid = new Map(items.map((item) => [item.gid, item]))
+          for (const item of plan.createItems) {
+            synthesize('create', null, item, { groupId: null })
+            itemsByGid.set(item.gid, item)
+          }
+          for (const gid of plan.markToppings) {
+            const stored = this.ledgerPayload('items', gid)
+            if (!stored) continue
+            synthesize('put', stored.after, { ...stored.after, kind: 'topping', updatedAt: serverAt }, stored.refs)
+            itemsByGid.set(gid, { ...(stored.after as LegacyMenuItem), kind: 'topping' })
+          }
+          const groupsByGid = new Map(groups.map((group) => [group.gid, group]))
+          for (const edit of plan.optionGroups) {
+            const validated = this.validateCatalogEvent({
+              eventId: crypto.randomUUID(),
+              txId,
+              txOrder: txOrder++,
+              table: 'optionGroups',
+              entityKey: edit.after.gid,
+              entityGid: edit.after.gid,
+              operation: edit.before ? 'put' : 'create',
+              before: edit.before,
+              after: edit.after,
+              refs: {},
+            })
+            if ('problem' in validated) throw new Error(validated.problem)
+            catalogEvents.push(validated.event)
+            groupsByGid.set(edit.after.gid, edit.after)
+          }
+          groups = [...groupsByGid.values()]
+          items = [...itemsByGid.values()]
+          after = { ...after, optionGroupGids: plan.optionGroupGids }
+        }
+      }
+      if (!Array.isArray(after.optionGroupGids)) return untouched
+      const projected = this.validateEventPayloads({
+        ...event,
+        after: { ...after, ...projectLegacyMenu(after.optionGroupGids as string[], groups, items) },
+      })
+      if ('problem' in projected) throw new Error(projected.problem)
+
+      let seq: number | null = null
+      let catalogSeq: number | null = null
+      if (catalogEvents.length > 0) this.clearCatalogWarnings(event.entityKey)
+      for (const itemEvent of itemEvents) seq = this.appendEvent(itemEvent, deviceId, serverAt)
+      for (const catalogEvent of catalogEvents) catalogSeq = this.appendCatalogEvent(catalogEvent, deviceId, serverAt)
+      return { event: projected.event, seq, catalogSeq }
+    } catch (error) {
+      console.error('legacy-menu-translation-failed', event.entityKey, error)
+      this.recordCatalogWarning(
+        deviceId,
+        event.entityKey,
+        `Nhóm món “${String(event.after.name)}”: không chuyển được sửa đổi thực đơn từ máy bản cũ sang nhóm lựa chọn.`,
+      )
+      return untouched
+    }
+  }
+
+  /**
+   * Máy cũ không biết món nào đang là topping trong nhóm lựa chọn nên xoá nó là chuyện thường với nó, mà từ chối thì
+   * máy cũ cuộn mất mọi đơn làm sau. Biến lần xoá thành một lần ghi lại đúng bản đang lưu: món trở về máy cũ ở lượt kéo
+   * kế tiếp. Máy `catalog-v2` xoá món trong nhóm đang bật đã bị từ chối ở `toppingInUseProblem` trước bước này.
+   */
+  private keepToppingInUse(event: SyncEvent, caps: readonly unknown[]): SyncEvent {
+    if (caps.includes(CATALOG_V2) || !this.inAnyToppingGroup(event)) return event
+    const stored = this.ledgerPayload('items', event.entityKey)
+    // Hàng đã lưu lệch schema hiện tại thì ghi lại nó sẽ bị từ chối: thà nhận lần xoá như trước còn hơn chặn máy cũ.
+    if (!stored || !safeParseLedgerPayload('items', stored.after).success) return event
+    return { ...event, operation: 'put', before: stored.after, after: stored.after, refs: stored.refs }
+  }
+
+  /**
+   * Với máy cũ xét cả nhóm đang tắt: nó không biết nhóm nào tồn tại, và xoá món khỏi dưới chân một nhóm tắt là để lại
+   * `itemGid` treo mà bật lại nhóm sẽ bán kèm một món không còn.
+   */
+  private inAnyToppingGroup(event: SyncEvent): boolean {
+    if (event.table !== 'items' || event.operation !== 'delete') return false
+    return this.catalogGroups().some(
+      (group) => group.kind === 'topping' && group.toppings.some((topping) => topping.itemGid === event.entityKey),
+    )
+  }
+
+  /** Event sửa thực đơn kiểu cũ: trường thiếu hẳn (máy mới không gửi) tính là không đổi. */
+  private editsLegacyMenu(event: SyncEvent): boolean {
+    return (
+      event.table === 'itemGroups' &&
+      event.operation === 'put' &&
+      event.before !== null &&
+      event.after !== null &&
+      !sameLegacyMenu(event.before as Partial<LegacyMenu>, event.after as Partial<LegacyMenu>)
+    )
+  }
+
+  /**
+   * Máy cũ tạo món trùng tên một món topping chỉ bán kèm mà nó không nhìn thấy: không chặn bằng tên ẩn đó, mà bật
+   * món topping thành bán riêng — từ đây luật trùng tên hiện hành nối món mới của máy cũ vào nó như mọi món đang bán.
+   */
+  private activateHiddenTopping(
+    event: SyncEvent,
+    deviceId: string,
+    serverAt: number,
+  ): { seq: number; existingGid: string; existingName: string } | null {
+    if (event.table !== 'items' || event.operation !== 'create' || event.after?.isActive !== 1) return null
+    const key = itemNameKey(String(event.after.name))
+    for (const row of this.ledgerRows('items')) {
+      if (row.after.kind !== 'topping' || row.after.isActive === 1 || itemNameKey(String(row.after.name)) !== key) continue
+      const entityKey = String(row.after.gid)
+      let seq: number
+      try {
+        seq = this.appendEvent(
+          this.checkedSynthesizedEvent({
+            eventId: crypto.randomUUID(),
+            txId: event.txId,
+            txOrder: event.txOrder,
+            table: 'items',
+            entityKey,
+            entityGid: entityKey,
+            operation: 'put',
+            before: row.after,
+            after: { ...row.after, isActive: 1, updatedAt: serverAt },
+            refs: row.refs,
+          }),
+          deviceId,
+          serverAt,
+        )
+      } catch (error) {
+        // Hàng topping lệch schema hiện tại: nhận món của máy cũ theo luật cũ, không bao giờ 500.
+        console.error('hidden-topping-activation-skipped', entityKey, error)
+        return null
+      }
+      return { seq, existingGid: entityKey, existingName: String(row.after.name) }
+    }
+    return null
+  }
+
   private async acceptEvent(request: Request): Promise<Response> {
     const [tokenHash, body] = await Promise.all([this.requestTokenHash(request), readJson(request)])
     if (!tokenHash) return json({ error: 'unauthorized', message: 'Máy này chưa ghép hoặc đã bị thu hồi.' }, 401)
@@ -1399,7 +1701,9 @@ export class ShopDO extends DurableObject<Env> {
     const epoch = typeof body?.epoch === 'number' && Number.isInteger(body.epoch) ? body.epoch : 0
     const caps = Array.isArray(body?.caps) ? (body.caps as unknown[]) : []
     if (!parsed.success || epoch <= 0) return json({ error: 'invalid-request' }, 400)
-    if (caps.includes(CATALOG_V2)) {
+    // Máy cũ sửa thực đơn kiểu cũ cũng là lúc phải di trú, kể cả khi chưa máy nào lên bản mới: bản dịch chỉ làm việc
+    // trên nhóm món đã ở mô hình mới, dịch "phần chênh" lên một nhóm chưa di trú là mất phần còn lại của thực đơn.
+    if (caps.includes(CATALOG_V2) || this.editsLegacyMenu(parsed.data)) {
       const device = this.activeDeviceByTokenHash(tokenHash)
       if (device) this.runCatalogMigration(device.id, true)
     }
@@ -1407,13 +1711,20 @@ export class ShopDO extends DurableObject<Env> {
     const serverAt = Date.now()
     const proposed = this.stampServerTime(parsed.data, serverAt)
     const result = this.ctx.storage.transactionSync<
-      | { ok: true; seq: number; notifySeq: number; duplicate: boolean; deviceId?: string }
+      | { ok: true; seq: number; notifySeq: number; catalogSeq?: number | null; duplicate: boolean; deviceId?: string }
       | {
           ok: false
           error: 'unauthorized' | 'stale-leader' | 'business-rejected' | 'seed-in-progress'
           message: string
         }
-      | { ok: false; error: 'item-name-taken'; message: string; existingGid: string; existingName: string }
+      | {
+          ok: false
+          error: 'item-name-taken'
+          message: string
+          existingGid: string
+          existingName: string
+          notifySeq?: number
+        }
     >(() => {
       this.expireLedgerAdmission(serverAt)
       const device = this.activeDeviceByTokenHash(tokenHash)
@@ -1473,7 +1784,7 @@ export class ShopDO extends DurableObject<Env> {
       if (deleteProblem) {
         return { ok: false, error: 'business-rejected', message: deleteProblem }
       }
-      const canonical = this.canonicalizeEvent(referenced.event)
+      const canonical = this.canonicalizeEvent(this.keepToppingInUse(referenced.event, caps))
       if ('problem' in canonical) {
         return { ok: false, error: 'business-rejected', message: canonical.problem }
       }
@@ -1482,13 +1793,24 @@ export class ShopDO extends DurableObject<Env> {
         return { ok: false, error: 'business-rejected', message: optionGroupGidsProblem }
       }
       if (caps.includes('item-name-taken')) {
-        const taken = this.itemNameTaken(canonical.event, caps.includes('catalog-v2'))
+        const taken = this.itemNameTaken(canonical.event, caps.includes(CATALOG_V2))
         if (taken) {
           return {
             ok: false,
             error: 'item-name-taken',
             message: `Đã có món “${taken.existingName}” đang bán trong sổ chung.`,
             ...taken,
+          }
+        }
+        const activated = caps.includes(CATALOG_V2) ? null : this.activateHiddenTopping(canonical.event, device.id, serverAt)
+        if (activated) {
+          return {
+            ok: false,
+            error: 'item-name-taken',
+            message: `Đã có món “${activated.existingName}” đang bán trong sổ chung.`,
+            existingGid: activated.existingGid,
+            existingName: activated.existingName,
+            notifySeq: activated.seq,
           }
         }
       }
@@ -1513,8 +1835,12 @@ export class ShopDO extends DurableObject<Env> {
           serverAt,
         )
       }
-      const seq = this.appendEvent(canonical.event, device.id, serverAt)
+      const legacyMenu = this.applyLegacyMenu(canonical.event, device.id, serverAt)
+      const seq = this.appendEvent(legacyMenu.event, device.id, serverAt)
       let notifySeq = seq
+      if (canonical.event.table === 'items') {
+        notifySeq = this.projectLegacyMenus(device.id, serverAt) ?? notifySeq
+      }
       if (canonical.event.table === 'payments') {
         const affected = new Set(
           [previousPayment?.refs.allocatedOrderId, canonical.event.refs.allocatedOrderId].filter(
@@ -1526,7 +1852,7 @@ export class ShopDO extends DurableObject<Env> {
             this.refreshOrderFromPayments(orderGid, canonical.event, device.id, serverAt) ?? notifySeq
         }
       }
-      return { ok: true, seq, notifySeq, duplicate: false, deviceId: device.id }
+      return { ok: true, seq, notifySeq, catalogSeq: legacyMenu.catalogSeq, duplicate: false, deviceId: device.id }
     })
 
     if (!result.ok) {
@@ -1534,12 +1860,18 @@ export class ShopDO extends DurableObject<Env> {
       if (result.error === 'item-name-taken') {
         body.existingGid = result.existingGid
         body.existingName = result.existingName
+        if (result.notifySeq) {
+          for (const socket of this.ctx.getWebSockets()) {
+            socket.send(JSON.stringify({ type: 'oplog', seq: result.notifySeq }))
+          }
+        }
       }
       return json(body, result.error === 'unauthorized' ? 401 : 409)
     }
     if (!result.duplicate) {
       for (const socket of this.ctx.getWebSockets()) {
         socket.send(JSON.stringify({ type: 'oplog', seq: result.notifySeq }))
+        if (result.catalogSeq) socket.send(JSON.stringify({ type: 'catalog', seq: result.catalogSeq }))
       }
     }
     if (result.deviceId && proposed.table === 'itemGroups' && proposed.operation !== 'delete') {
@@ -1603,7 +1935,7 @@ export class ShopDO extends DurableObject<Env> {
 
     const serverAt = Date.now()
     const result = this.ctx.storage.transactionSync<
-      | { ok: true; seq: number; duplicate: boolean }
+      | { ok: true; seq: number; oplogSeq?: number | null; duplicate: boolean }
       | {
           ok: false
           error: 'unauthorized' | 'stale-leader' | 'business-rejected' | 'seed-in-progress'
@@ -1643,7 +1975,8 @@ export class ShopDO extends DurableObject<Env> {
       }
       const toppingProblem = this.catalogToppingProblem(validated.event)
       if (toppingProblem) return { ok: false, error: 'business-rejected', message: toppingProblem }
-      return { ok: true, seq: this.appendCatalogEvent(validated.event, device.id, serverAt), duplicate: false }
+      const seq = this.appendCatalogEvent(validated.event, device.id, serverAt)
+      return { ok: true, seq, oplogSeq: this.projectLegacyMenus(device.id, serverAt), duplicate: false }
     })
 
     if (!result.ok) {
@@ -1652,6 +1985,7 @@ export class ShopDO extends DurableObject<Env> {
     if (!result.duplicate) {
       for (const socket of this.ctx.getWebSockets()) {
         socket.send(JSON.stringify({ type: 'catalog', seq: result.seq }))
+        if (result.oplogSeq) socket.send(JSON.stringify({ type: 'oplog', seq: result.oplogSeq }))
       }
     }
     return json({ seq: result.seq, duplicate: result.duplicate }, result.duplicate ? 200 : 201)

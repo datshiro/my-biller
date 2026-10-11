@@ -1194,7 +1194,7 @@ describe('nhóm lựa chọn và món topping trên sổ chung', () => {
     expect(await pullAll()).toHaveLength(before)
   })
 
-  it('món topping đang ẩn vẫn giữ tên: máy catalog-v2 bị chặn, máy không khai báo catalog-v2 thì vẫn nhận', async () => {
+  it('món topping đang ẩn vẫn giữ tên: máy catalog-v2 bị chặn, máy cũ thì topping thành bán riêng rồi nối món vào nó', async () => {
     const toppingGid = crypto.randomUUID()
     expect((await push(event('items', toppingGid, toppingItem(toppingGid), { groupId: null }))).status).toBe(201)
 
@@ -1208,12 +1208,16 @@ describe('nhóm lựa chọn và món topping trên sổ chung', () => {
     await expect(blocked.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: toppingGid })
 
     const oldClientGid = crypto.randomUUID()
-    const accepted = await push(
+    const merged = await push(
       event('items', oldClientGid, { ...itemRow(oldClientGid), name: 'Trân châu', isActive: 1 }, { groupId: null }),
       1,
       ['item-name-taken'],
     )
-    expect(accepted.status).toBe(201)
+    expect(merged.status).toBe(409)
+    await expect(merged.json()).resolves.toMatchObject({ error: 'item-name-taken', existingGid: toppingGid })
+    const events = await pullAll()
+    expect(events.findLast((row) => row.entityKey === toppingGid)?.after).toMatchObject({ isActive: 1, kind: 'topping' })
+    expect(events.some((row) => row.entityKey === oldClientGid)).toBe(false)
   })
 
   it('món ngừng bán thường không được tính là tên đã chiếm, kể cả với máy catalog-v2', async () => {

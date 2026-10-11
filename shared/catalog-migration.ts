@@ -131,10 +131,10 @@ export type CatalogMigrationPlan = {
  * NFC chỉ trong di trú: cùng chữ "đá" gõ từ hai bàn phím có thể ra hai chuỗi mã khác nhau. Không đưa vào `itemNameKey`
  * dùng chung — đó là luật `item-name-taken` mà máy 2.19.0 cũng chịu, đổi nó là từ chối thêm event của máy cũ.
  */
-const itemNameKey = (name: string) => storedNameKey(name.normalize('NFC'))
+export const catalogNameKey = (name: string) => storedNameKey(name.normalize('NFC'))
 
 /** Cắt theo ký tự, không theo đơn vị UTF-16 (khỏi để nửa emoji), nhưng vẫn trong giới hạn `.length` của schema. */
-function label(value: string): string {
+export function catalogLabel(value: string): string {
   let out = ''
   for (const char of value.trim()) {
     if (out.length + char.length > LABEL_MAX) break
@@ -146,7 +146,7 @@ function label(value: string): string {
 /** Nhóm Đá chung/Đá riêng là hằng có sẵn cho mọi món, không di trú; nhóm "Đá" chủ quán tự đặt thì vẫn di trú. */
 const ICE_CHOICES = new Set(['Đá chung', 'Đá riêng'])
 const isIceConstant = (group: LegacyOptionGroup) =>
-  itemNameKey(group.name) === 'đá' && group.choices.every((choice) => ICE_CHOICES.has(choice.normalize('NFC').trim()))
+  catalogNameKey(group.name) === 'đá' && group.choices.every((choice) => ICE_CHOICES.has(choice.normalize('NFC').trim()))
 
 /**
  * Nhóm đã có trường `optionGroupGids` (kể cả `[]`) là đã di trú hoặc chủ quán đã chọn gỡ hết — chỉ nhóm THIẾU hẳn
@@ -195,7 +195,7 @@ export function planCatalogMigration(input: {
   const before = (a: MigrationItem, b: MigrationItem) =>
     rank(a) - rank(b) || (a.createdAt ?? 0) - (b.createdAt ?? 0) || a.gid.localeCompare(b.gid)
   for (const item of input.items) {
-    const key = itemNameKey(item.name)
+    const key = catalogNameKey(item.name)
     const current = itemsByKey.get(key)
     if (!current || before(item, current) < 0) itemsByKey.set(key, item)
   }
@@ -203,9 +203,9 @@ export function planCatalogMigration(input: {
   const toppingNames = new Map<string, { name: string; prices: number[] }>()
   for (const group of groups) {
     for (const topping of group.toppingMenu ?? []) {
-      const name = label(topping.name)
+      const name = catalogLabel(topping.name)
       if (!name) continue
-      const key = itemNameKey(name)
+      const key = catalogNameKey(name)
       const entry = toppingNames.get(key) ?? { name, prices: [] }
       entry.prices.push(topping.price)
       toppingNames.set(key, entry)
@@ -268,7 +268,7 @@ export function planCatalogMigration(input: {
   for (const group of groups) {
     const toppings: { itemGid: string; price: number | null }[] = []
     for (const topping of group.toppingMenu ?? []) {
-      const item = toppingItem.get(itemNameKey(label(topping.name)))
+      const item = toppingItem.get(catalogNameKey(catalogLabel(topping.name)))
       if (!item || toppings.some((entry) => entry.itemGid === item.gid)) continue
       toppings.push({ itemGid: item.gid, price: topping.price === item.unitPrice ? null : topping.price })
     }
@@ -279,11 +279,11 @@ export function planCatalogMigration(input: {
     for (const legacy of group.optionGroups ?? []) {
       if (gids.length >= choiceSlots) break
       if (isIceConstant(legacy)) continue
-      const name = label(legacy.name)
-      const choices = [...new Set(legacy.choices.map(label).filter(Boolean))].slice(0, GROUP_ITEMS_MAX)
+      const name = catalogLabel(legacy.name)
+      const choices = [...new Set(legacy.choices.map(catalogLabel).filter(Boolean))].slice(0, GROUP_ITEMS_MAX)
       if (!name || choices.length === 0) continue
       const gid = addGroup({
-        gid: deterministicGid(`choice:${group.gid}:${itemNameKey(name)}`),
+        gid: deterministicGid(`choice:${group.gid}:${catalogNameKey(name)}`),
         name,
         kind: 'choice',
         choices,
@@ -294,7 +294,7 @@ export function planCatalogMigration(input: {
     if (toppings.length > 0) {
       const gid = addGroup({
         gid: deterministicGid(`toppings:${group.gid}`),
-        name: label(`Topping ${group.name}`),
+        name: catalogLabel(`Topping ${group.name}`),
         kind: 'topping',
         toppings: toppings.slice(0, GROUP_ITEMS_MAX),
         maxSelect: null,

@@ -46,6 +46,9 @@ export type ShopDevice = {
   current: boolean
 }
 
+/** Sửa đổi thực đơn làm trên máy bản cũ mà Worker không chuyển được sang nhóm lựa chọn. */
+export type CatalogWarning = { message: string; createdAt: number; deviceLabel: string | null }
+
 export class SyncApiError extends Error {
   constructor(
     message: string,
@@ -124,7 +127,7 @@ export function createPairCode(
 export function listShopDevices(
   connection: DeviceConnection,
   options: { signal?: AbortSignal } = {},
-): Promise<{ devices: ShopDevice[]; latestSeq?: number }> {
+): Promise<{ devices: ShopDevice[]; latestSeq?: number; catalogWarnings?: CatalogWarning[] }> {
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/devices`, {
     headers: authHeaders(connection),
     signal: options.signal,

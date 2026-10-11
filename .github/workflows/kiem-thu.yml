@@ -155,7 +155,8 @@ jobs:
   robot-shard:
     name: Robot shard (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # hai-may-b còn dựng bản app phát hành cũ (robot/may-cu.sh) cho các ca tương thích ngược.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:

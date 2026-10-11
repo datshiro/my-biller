@@ -3,10 +3,11 @@ Documentation       Hai máy bán hàng dùng chung một Durable Object thật.
 ...                 IndexedDB ở cả A và B; không đưa token hay mã ghép vào log Robot.
 Resource            ../resources/hai-may.resource
 Resource            ../resources/sao-luu.resource
+Resource            ../resources/may-cu.resource
 Library             OperatingSystem
 Library             String
 Suite Setup         Mở Trình Duyệt Cho Suite
-Suite Teardown      Đóng Trình Duyệt Cuối Suite
+Suite Teardown      Run Keywords    Tắt Máy Cũ    AND    Đóng Trình Duyệt Cuối Suite
 Test Setup          Mở Hai Máy Đã Ghép
 Test Teardown       Đóng Hai Máy
 Test Tags           hai-may    regression
@@ -1105,7 +1106,117 @@ Menu topping cũ cài trên máy đã ghép thành đúng một món topping m�
     Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
     Hai Bảng Phải Hội Tụ    orders
 
+Máy bản 2.19.0 bán topping từ menu Worker chiếu ra, thêm topping được và bán theo giá máy mới vừa đổi
+    [Documentation]    Tương thích ngược hai chiều, kiểm bằng bản 2.19.0 thật: máy cũ chỉ đọc thực đơn kiểu cũ trên nhóm
+    ...    món, nên Worker phải chiếu nó từ nhóm lựa chọn; máy cũ sửa thực đơn thì Worker dịch sang mô hình mới. Đơn
+    ...    của máy cũ phải lên sổ chung với đúng giá topping lúc bán — đối chiếu bằng IndexedDB của máy A.
+    Chọn Máy A
+    Cài Thực Đơn Đồ Uống
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    optionGroups    2    ${MÁY_A_PAGE}
+    Ghép Máy Cũ
+    Menu Topping Trên Máy Phải Là    ${MÁY_CŨ_PAGE}    Đồ uống    ${{ [('Trân châu', 5000), ('Thạch', 3000)] }}
+
+    # Topping chỉ bán kèm (`isActive` 0) không lên lưới bán của máy cũ.
+    Mở Màn Máy Cũ    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Cà phê sữa")    visible
+    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trân châu")    ==    0
+
+    Máy Cũ Bán Cà Phê Sữa Kèm Topping    Trân châu
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Wait Until Keyword Succeeds    80x    500ms    Dòng Topping Trên Máy A Phải Có    Trân châu    5000    25000
+
+    # Máy cũ thêm "Pudding" trong sheet của nó: máy mới thấy một món topping chỉ bán kèm nằm trong nhóm topping.
+    Máy Cũ Thêm Topping Vào Nhóm Đồ Uống    Pudding    7000
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Wait Until Keyword Succeeds    80x    500ms    Menu Topping Trên Máy Phải Là    ${MÁY_A_PAGE}    Đồ uống
+    ...    ${{ [('Trân châu', 5000), ('Thạch', 3000), ('Pudding', 7000)] }}
+    ${món}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${pudding}=    Evaluate    [(m['kind'], m['isActive'], m['unitPrice']) for m in $món if m['name'] == 'Pudding']
+    Should Be Equal    ${pudding}    ${{ [('topping', 0, 7000)] }}    Pudding phải thành đúng một món topping chỉ bán kèm.
+    ${pudding_gid}=    Evaluate    [m['gid'] for m in $món if m['name'] == 'Pudding'][0]
+    ${nhóm_lc}=    Đọc Bảng    optionGroups    ${MÁY_A_PAGE}
+    ${trong_nhóm}=    Evaluate    [(g['name'], t['price']) for g in $nhóm_lc if g['kind'] == 'topping' for t in g['toppings'] if t['itemGid'] == $pudding_gid]
+    Should Be Equal    ${trong_nhóm}    ${{ [('Topping Đồ uống', None)] }}
+
+    # Máy mới đổi giá món topping Trân châu: máy cũ nhận menu mới và bán đúng giá mới.
+    Chọn Máy A
+    Mở Màn    /them/mat-hang
+    Click    css=button:has-text("Trân châu")
+    Điền Ô    Giá bán *    6000
+    Bấm Nút    LƯU MẶT HÀNG
+    Wait For Condition    Url    ==    ${BASE_URL}/them/mat-hang
+    Wait Until Keyword Succeeds    80x    500ms    Menu Topping Trên Máy Phải Là    ${MÁY_CŨ_PAGE}    Đồ uống
+    ...    ${{ [('Trân châu', 6000), ('Thạch', 3000), ('Pudding', 7000)] }}
+    Máy Cũ Bán Cà Phê Sữa Kèm Topping    Trân châu
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Wait Until Keyword Succeeds    80x    500ms    Dòng Topping Trên Máy A Phải Có    Trân châu    6000    26000
+
+Máy bản 2.19.0 xoá topping đang dùng hay sửa menu quá giới hạn thì không bị từ chối, máy mới thấy cảnh báo
+    [Documentation]    Sổ chung không được từ chối event của máy cũ: bản cũ cuộn ngược cả các đơn làm sau event bị từ
+    ...    chối. Xoá món đang là topping thành ghi lại bản đang lưu (món quay về máy cũ); tên topping dài quá giới hạn
+    ...    của bản mới thì không dịch, để lại cảnh báo ở màn Máy của bản mới. Đơn bán sau đó vẫn lên sổ.
+    Chọn Máy A
+    Cài Thực Đơn Đồ Uống
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    optionGroups    2    ${MÁY_A_PAGE}
+    Ghép Máy Cũ
+
+    Mở Màn Máy Cũ    /them/mat-hang
+    Click    css=button:has-text("Thạch")
+    Bấm Nút    Xoá hẳn
+    Xác Nhận Trong Hộp    Xoá
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Wait Until Keyword Succeeds    80x    500ms    Món Phải Có Trên Máy    Thạch    ${MÁY_CŨ_PAGE}
+    Món Phải Có Trên Máy    Thạch    ${MÁY_A_PAGE}
+
+    Máy Cũ Thêm Topping Vào Nhóm Đồ Uống    Trân châu hoàng kim nướng than hoa loại đặc biệt    9000
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Chọn Máy A
+    Mở Màn    /ghep-may
+    Chờ Thấy Chữ    MENU SỬA TRÊN MÁY BẢN CŨ
+    Chờ Thấy Chữ    dài quá 40 ký tự
+    Chờ Thấy Chữ    Quầy cũ ·
+
+    Máy Cũ Bán Cà Phê Sữa Kèm Topping    Thạch
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Wait Until Keyword Succeeds    80x    500ms    Dòng Topping Trên Máy A Phải Có    Thạch    3000    23000
+
+Menu cũ do máy 2.19.0 cài trước khi có máy bản mới được di trú khi máy bản mới đầu tiên ghép vào
+    [Documentation]    Đường di trú lười với dữ liệu do bản cũ thật ghi: sổ chưa từng thấy máy `catalog-v2`, máy bản mới
+    ...    đầu tiên ghép vào thì Worker di trú cả sổ một lần — mỗi topping thành đúng một món chỉ bán kèm, nhóm món gắn
+    ...    nhóm lựa chọn — còn máy cũ vẫn giữ nguyên thực đơn kiểu cũ và không bị từ chối event nào.
+    [Setup]    Mở Quán Bằng Máy Cũ
+    Máy Cũ Tạo Nhóm Đồ Uống Có Thực Đơn
+    Máy Cũ Không Bị Từ Chối Event Nào
+    Ghép Máy Mới Vào Quán Của Máy Cũ
+
+    Wait Until Keyword Succeeds    80x    500ms    Bảng Máy Phải Có Số Dòng    optionGroups    2    ${MÁY_A_PAGE}
+    ${món}=    Đọc Bảng    items    ${MÁY_A_PAGE}
+    ${topping}=    Evaluate    sorted((m['name'], m['unitPrice'], m['isActive']) for m in $món if m.get('kind') == 'topping')
+    Should Be Equal    ${topping}    ${{ [('Thạch', 3000, 0), ('Trân châu', 5000, 0)] }}
+    ...    Mỗi topping trong menu cũ phải thành đúng một món chỉ bán kèm.
+    ${nhóm_lc}=    Đọc Bảng    optionGroups    ${MÁY_A_PAGE}
+    ${đồ_uống}=    Nhóm Món Trên Máy    ${MÁY_A_PAGE}    Đồ uống
+    Should Be Equal    ${{ sorted($đồ_uống['optionGroupGids']) }}    ${{ sorted(g['gid'] for g in $nhóm_lc) }}
+
+    Wait Until Keyword Succeeds    80x    500ms    Món Phải Có Trên Máy    Trân châu    ${MÁY_CŨ_PAGE}
+    Menu Topping Trên Máy Phải Là    ${MÁY_CŨ_PAGE}    Đồ uống    ${{ [('Trân châu', 5000), ('Thạch', 3000)] }}
+    ${nhóm_c}=    Nhóm Món Trên Máy    ${MÁY_CŨ_PAGE}    Đồ uống
+    Should Be Equal    ${nhóm_c}[optionGroups]    ${{ [{'name': 'Đường', 'choices': ['Ít đường', 'Không đường']}] }}
+    Mở Màn Máy Cũ    /
+    Get Element Count    ${LƯỚI_MẶT_HÀNG} >> css=button:has-text("Trân châu")    ==    0
+    Máy Cũ Không Bị Từ Chối Event Nào
+
 *** Keywords ***
+Dòng Topping Trên Máy A Phải Có
+    [Documentation]    Đơn máy cũ bán đã lên sổ chung và về máy A: một dòng cà phê sữa kèm đúng một phần topping với
+    ...    giá lúc bán và thành tiền đúng. Đọc IndexedDB của máy A, không tin con số trên màn máy cũ.
+    [Arguments]    ${topping}    ${giá}    ${thành_tiền}
+    ${dòng}=    Đọc Bảng    orderLines    ${MÁY_A_PAGE}
+    ${khớp}=    Evaluate
+    ...    [d for d in $dòng if d['name'] == 'Cà phê sữa' and [(t['name'], t['unitPrice'], t['qty']) for t in d.get('toppings', [])] == [($topping, int($giá), 1)]]
+    Length Should Be    ${khớp}    1    Máy A chưa có dòng cà phê sữa kèm ${topping} giá ${giá}.
+    Should Be Equal As Integers    ${khớp}[0][amount]    ${thành_tiền}
+
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
     Hai Bảng Phải Cùng Gid Và Nội Dung    orderLines

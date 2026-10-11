@@ -35,12 +35,16 @@ import {
   isOperationallyEmpty,
 } from '@/domain/backup'
 import { findPaymentConflicts, isLegacyFile, MergeReviewError, type PaymentChoice } from '@/domain/backup-merge'
+import { migrateBackupData } from '@/domain/catalog-migration'
 import type { BackupData, BackupFile } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { ConfirmDialog } from '@/ui/confirm-dialog'
 import { ScreenHeader } from '@/ui/screen-header'
 import { Sheet } from '@/ui/sheet'
 import { requestFullResync } from '@/db/sync/applier'
+
+/** Đếm trên sổ sẽ thật sự được ghi: file v1–v4 còn menu cũ được di trú trước khi ghi, sinh thêm món topping. */
+const fileCounts = (data: BackupData) => countRecords(migrateBackupData(data, Date.now()))
 
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Không xong. Thử lại.')
 const SHARE_TARGET_LIFETIME_MS = 10 * 60 * 1000
@@ -502,7 +506,7 @@ export function SaoLuuPage() {
       {step?.phase === 'mode' ? (
         <Sheet title="Khôi phục từ file" onClose={() => setStep(null)}>
           <p className="text-[15px]">
-            File “{step.sourceName}” có {describeCounts(countRecords(step.file.data))}.
+            File “{step.sourceName}” có {describeCounts(fileCounts(step.file.data))}.
           </p>
           <div className="mt-4 flex flex-col gap-3">
             <Button variant="danger" onClick={() => void chooseOverwrite(step)}>
@@ -595,7 +599,7 @@ export function SaoLuuPage() {
       {step?.phase === 'confirm' ? (
         <ConfirmDialog
           title="Ghi đè toàn bộ dữ liệu?"
-          message={`File có ${describeCounts(countRecords(step.file.data))}.${describeDroppedPrices(step.file.data)} Đang có trên máy: ${describeCounts(step.current)}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế — mất phần chưa có trong file. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
+          message={`File có ${describeCounts(fileCounts(step.file.data))}.${describeDroppedPrices(step.file.data)} Đang có trên máy: ${describeCounts(step.current)}. Toàn bộ dữ liệu đang có trên máy sẽ bị thay thế — mất phần chưa có trong file. App sẽ tải một file sao lưu của dữ liệu hiện tại về máy trước.`}
           confirmLabel="Tải file an toàn"
           onConfirm={() => void saveSafetyCopy(step)}
           onCancel={() => setStep(null)}

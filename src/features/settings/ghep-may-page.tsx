@@ -23,6 +23,7 @@ import {
   pairDevice,
   revokeShopDevice,
   SyncApiError,
+  type CatalogWarning,
   type ShopDevice,
 } from '@/db/sync/client'
 import { SYNC_WAKE_EVENT } from '@/db/sync/runner'
@@ -256,6 +257,7 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
   const anchor = useSyncAnchor()
   const [leaving, setLeaving] = useState(false)
   const [devices, setDevices] = useState<ShopDevice[] | null>(null)
+  const [catalogWarnings, setCatalogWarnings] = useState<CatalogWarning[]>([])
   const [pairCode, setPairCode] = useState<{ code: string; expiresAt: number } | null>(null)
   const [revoke, setRevoke] = useState<ShopDevice | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -266,7 +268,9 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
   const load = async () => {
     if (!connection) return
     try {
-      setDevices((await listShopDevices(connection)).devices)
+      const listed = await listShopDevices(connection)
+      setDevices(listed.devices)
+      setCatalogWarnings(listed.catalogWarnings ?? [])
     } catch (caught) {
       if (caught instanceof SyncApiError && caught.status === 401) {
         await markDeviceRevoked(connection.token)
@@ -280,8 +284,10 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
     if (!connection) return
     let active = true
     void listShopDevices(connection)
-      .then(({ devices: rows }) => {
-        if (active) setDevices(rows)
+      .then(({ devices: rows, catalogWarnings: warnings }) => {
+        if (!active) return
+        setDevices(rows)
+        setCatalogWarnings(warnings ?? [])
       })
       .catch(async (caught: unknown) => {
         if (!active) return
@@ -425,6 +431,31 @@ function PairedView({ onLeft }: { onLeft: (droppedOperations: number) => void })
             ))}
         </div>
       </section>
+
+      {catalogWarnings.length > 0 ? (
+        <section className="border-t border-line px-4 py-5">
+          <h2 className="label-xs text-muted">MENU SỬA TRÊN MÁY BẢN CŨ</h2>
+          <p className="mt-2 text-[13px] text-muted">
+            Các sửa đổi dưới đây chưa chuyển được sang nhóm lựa chọn. Hãy sửa lại thực đơn của nhóm món đó trên máy này.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {catalogWarnings.map((warning, index) => (
+              <li key={`${warning.createdAt}-${index}`} className="rounded-card border border-danger bg-danger-tint p-3">
+                <p className="text-[14px]">{warning.message}</p>
+                <p className="mt-1 text-[13px] text-muted">
+                  {warning.deviceLabel ?? 'Máy đã thu hồi'} ·{' '}
+                  {new Date(warning.createdAt).toLocaleString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                  })}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="border-t border-line px-4 py-5">
         <h2 className="label-xs text-muted">RỜI SỔ CHUNG</h2>

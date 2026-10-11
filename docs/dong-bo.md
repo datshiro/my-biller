@@ -159,6 +159,65 @@ không đẩy từng event qua pusher.
   và trên sổ sắp ghi khi khôi phục hoặc gộp file sao lưu (`migrateBackupData`), để báo cáo đối chiếu tính trên đúng sổ
   đã di trú. Ghép làm máy nạp sổ thì ảnh sổ mang sẵn kết quả, Worker quét lại không ra gì.
 
+## Máy bản cũ: chiếu và dịch menu cũ
+
+Máy 2.19.0 chỉ đọc thực đơn kiểu cũ trên nhóm món và không biết nhóm lựa chọn hay món topping. Nó vẫn bán, sửa menu và
+đẩy đơn bình thường nhờ ba cơ chế của Worker (`shared/legacy-menu.ts`, `worker/src/shop-do.ts`).
+
+- **Worker là chủ của trường menu cũ.** Nhóm món nào đã có `optionGroupGids` thì `optionGroups`/`toppingMenu` luôn là
+  phép chiếu `projectLegacyMenu`:
+  - nhóm `choice` đang bật thành `{ name, choices }`;
+  - phần tử của nhóm `topping` đang bật thành `{ name: tên món, price: giá riêng ?? giá món }`;
+  - xếp theo `sortOrder`; trùng tên thì nhóm có `sortOrder` nhỏ hơn thắng;
+  - nhóm tắt, nhóm mất, và topping trỏ món không còn hoặc không còn là `kind: 'topping'` đều bị bỏ.
+
+  Mọi event `itemGroups`, từ máy cũ hay máy mới, đều bị ghi đè hai trường này trước khi ghi. Sau mỗi event `items`, mỗi
+  event luồng danh mục và mỗi lượt di trú (kể cả sau `/seed`), Worker chiếu lại mọi nhóm món. Nó chỉ sinh event
+  `itemGroups` khi trường cũ thật sự đổi, nên không có vòng lặp. Máy chưa ghép không chiếu, vì không có máy cũ nào đọc.
+- **Dịch sửa đổi từ sheet menu cũ.** Event `itemGroups` `put` có trường cũ đổi (`before` khác `after`) trên một nhóm món
+  đã ở mô hình mới thì được dịch bằng `planLegacyMenuEdit`, rồi mới chiếu. Diff ba chiều tính theo từng phần tử: chỉ
+  phần tử mà `before` khác `after` **và** `before` còn khớp phép chiếu hiện tại mới được dịch. Máy khác vừa sửa phần tử
+  đó thì sổ thắng.
+  - Topping thêm: dùng món cùng tên bất kể `kind` (đặt `kind: 'topping'`, giữ `isActive`); chưa có thì tạo món chỉ bán
+    kèm. Món được thêm vào nhóm topping riêng của nhóm món (gid tất định `toppings:<gid nhóm>`, tạo nếu chưa có).
+  - Topping bỏ hoặc đổi giá: áp lên mọi nhóm topping đang bật gắn vào nhóm món. Nhóm hết phần tử thì được gỡ khỏi nhóm
+    món.
+  - Lựa chọn: sửa nhóm `choice` cùng tên; nhóm mới thì tạo `choice` với `maxSelect: 1`; nhóm bị bỏ thì gỡ khỏi nhóm món.
+  - Nhóm lựa chọn còn gắn ở món hay nhóm món khác thì **sao-khi-ghi**: nhóm món đang sửa nhận một bản sao đã sửa, nơi
+    khác giữ bản cũ.
+  - Bản dịch làm sạch `defaultChoice` và `maxSelect` để luôn qua schema mới.
+
+  Event như vậy kích hoạt di trú lười trước, kể cả khi chưa máy bản mới nào chạm sổ. Phần vượt giới hạn (tên trên 40 ký
+  tự, trên 30 phần tử, trên 20 nhóm gắn) và lỗi bất ngờ thì không dịch: event được nhận nguyên trạng, không chiếu, và
+  Worker ghi một dòng vào bảng `catalogWarnings` (giữ 50 dòng mới nhất). `GET /devices` trả 20 dòng mới nhất, và màn
+  Máy của bản mới hiện chúng. Cảnh báo của một nhóm món tự xoá khi sửa đổi sau đó của nhóm ấy dịch được. Trong lúc
+  dịch, mọi event tự sinh được kiểm hết rồi mới ghi, nên không có bản dịch dở dang.
+
+  Bản dịch áp cho event của **mọi** máy, không riêng máy thiếu `catalog-v2`. Lý do: bản mới vẫn còn sheet menu cũ cho
+  tới khi màn cài nhóm lựa chọn thay nó, và sửa trên sheet đó cũng phải chảy sang mô hình mới. Máy mới đổi tên nhóm hay
+  đổi `optionGroupGids` thì gửi trường cũ không đổi, nên không bị dịch, chỉ được chiếu. Nhóm món tắt hoặc gỡ nhóm topping
+  riêng là quyết định của chủ quán: máy cũ thêm topping sau đó không hồi sinh nhóm đó, mà tạo một nhóm mới chỉ chứa
+  topping vừa thêm.
+- **Không luật mới nào từ chối máy cũ** (máy không gửi cap `catalog-v2`):
+
+  | Luật | Máy `catalog-v2` | Máy cũ |
+  |---|---|---|
+  | Xoá món đang nằm trong nhóm topping | Từ chối nếu nhóm đang bật | Thành `put` ghi lại đúng bản đang lưu (kể cả nhóm đang tắt, để không để lại `itemGid` treo); món trở về máy cũ ở lượt kéo sau |
+  | Kiểm tham chiếu `optionGroupGids` | Từ chối gid mới chưa có | Máy cũ không gửi trường này; Worker giữ bản đã lưu |
+  | Tên trùng với món topping chỉ bán kèm | `item-name-taken` (cả khi tạo hay sửa chính một topping ẩn) | Bật topping thành bán riêng (`isActive: 1`) rồi trả `item-name-taken` theo luật hiện hành, nên máy cũ nối món mới vào topping đó |
+  | Schema chặt cho `items`/`itemGroups` | Từ chối | Payload cũ không mang trường mới |
+
+- **Giới hạn được chấp nhận:**
+  - Máy cũ không thấy nhóm gắn thẳng vào món, và không có nhóm bắt buộc, lựa chọn mặc định hay chọn nhiều.
+  - Danh sách món của máy cũ hiện topping chỉ bán kèm là "Ngừng bán". Bật lại món đó thì nó thành món bán riêng.
+  - Sheet menu mở lâu trên máy cũ trong lúc máy khác sửa: phần tử máy khác vừa sửa được ưu tiên theo sổ.
+  - Máy cũ đổi giá một topping thì giá đó áp lên mọi nhóm topping gắn vào nhóm món, kể cả nhóm máy mới cố ý đặt giá
+    riêng khác.
+  - Luật bật topping thành bán riêng chỉ bắt lúc máy cũ **tạo** món. Máy cũ đổi tên hay bán lại một món cho trùng tên
+    topping chỉ bán kèm thì vẫn được nhận, và sổ có hai món cùng tên.
+  - Sửa đổi vượt giới hạn chỉ giữ cho tới lần chiếu sau. Máy cũ thấy sửa đổi của mình bị hoàn lại mà không có câu báo;
+    câu báo chỉ hiện trên màn Máy của bản mới.
+
 ## Ghép máy và nạp sổ ban đầu
 
 - Mỗi lần `POST /pair` được chấp nhận đều tạo một reservation pending trong 2 phút, kể cả máy không

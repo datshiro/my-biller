@@ -386,6 +386,28 @@ describe('mergeByGid — xung đột khoản thu', () => {
 })
 
 describe('previewMerge', () => {
+  it('file mang nhóm món còn menu cũ: danh sách món sẽ thêm có cả món topping sinh ra khi di trú sau gộp', () => {
+    const file = emptyLedger()
+    file.itemGroups.push({
+      id: 1,
+      gid: g(900),
+      name: 'Đồ uống',
+      sortOrder: 1,
+      optionGroups: [],
+      toppingMenu: [
+        { name: 'Trân châu', price: 5_000 },
+        { name: 'Thạch', price: 3_000 },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const preview = previewMerge(emptyLedger(), file, {}, 'A')
+    if (preview.blocked !== null) throw new Error('blocked')
+    expect([...preview.willAdd.items].sort()).toEqual(['Thạch', 'Trân châu'])
+    expect(preview.willAdd.itemGroups).toEqual(['Đồ uống'])
+  })
+
   it('một xung đột máy refunded / file pending ⇒ nợ theo file thấp hơn theo device đúng bằng amount; append tăng collected đúng amount', () => {
     const device = ledgerK()
     device.payments[0] = { ...device.payments[0]!, unallocatedStatus: 'refunded' }
