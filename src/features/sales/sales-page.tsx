@@ -8,6 +8,7 @@ import { ItemGrid } from './item-grid'
 import { LineEditSheet } from './line-edit-sheet'
 import { PaymentSheet, type PaymentChoice, type PayMethod } from './payment-sheet'
 import { useCart } from './use-cart'
+import { useSalesRank } from './use-sales-rank'
 import { buildPriceBook, listPriceBook } from '@/db/repositories/customer-prices'
 import { getCustomer } from '@/db/repositories/customers'
 import { createOrder } from '@/db/repositories/orders'
@@ -22,6 +23,7 @@ import { resolveUnitPrice, type PriceBook, type PriceMode } from '@/domain/whole
 import type { Item } from '@/domain/schema'
 import { Button } from '@/ui/button'
 import { EmptyState, ListSkeleton } from '@/ui/empty-state'
+import { tapHaptic } from '@/ui/haptic'
 import { SearchInput } from '@/ui/search-input'
 import { SelectChip } from '@/ui/chip'
 import { useSubmitOnce } from '@/ui/use-submit-once'
@@ -41,6 +43,7 @@ export function SalesPage() {
   const optionGroups = useOptionGroups()
   const deviceIdentity = useDeviceIdentity()
   const { cart, dispatch, reset, restored } = useCart()
+  const rank = useSalesRank()
 
   const [query, setQuery] = useState('')
   const [groupId, setGroupId] = useState<number | null>(null)
@@ -79,14 +82,21 @@ export function SalesPage() {
 
   const active = useMemo(() => (items ?? []).filter((item) => item.isActive === 1), [items])
 
+  const keyword = normalizeName(query)
+  /** Lưới "Tất cả" chờ thứ hạng thay vì vẽ theo tên rồi xếp lại — ô dưới ngón tay không được đổi món. */
+  const waitingRank = groupId === null && !keyword && rank === undefined
+
   const visible = useMemo(() => {
-    const keyword = normalizeName(query)
-    return active.filter(
+    const matched = active.filter(
       (item) =>
         (groupId === null || item.groupId === groupId) &&
         (!keyword || normalizeName(item.name).includes(keyword)),
     )
-  }, [active, groupId, query])
+    if (groupId !== null || keyword || !rank) return matched
+    const rankOf = (item: Item) => rank.get(item.id ?? -1) ?? rank.size
+    // `sort` ổn định nên món chưa bán giữ thứ tự tên của `listItems`.
+    return [...matched].sort((a, b) => rankOf(a) - rankOf(b))
+  }, [active, groupId, keyword, rank])
 
   const totals = cartTotals(cart)
   const count = cartCount(cart)
@@ -201,6 +211,9 @@ export function SalesPage() {
   const needsChoice = (itemId: number | null) =>
     optionsOf(itemId).filter((group) => isGroupMissing(group, defaultOptions(optionsOf(itemId)), []))
 
+  /** Ba đường thêm món (chạm lưới, THÊM của sheet, Enter ở ô tìm) đều rung: người bán biết món đã vào mà không cần nhìn. */
+  const onAdded = () => tapHaptic()
+
   const addItem = (item: Item) => {
     setQuery('')
     if (itemHasOptions(item)) {
@@ -208,6 +221,7 @@ export function SalesPage() {
       return
     }
     dispatch({ type: 'addItem', item, book })
+    onAdded()
   }
 
   // Giỏ hết dòng (gõ 0 hay Bỏ món dòng cuối) thì không còn gì để xem: đóng sheet đơn thay vì để một sheet rỗng.
@@ -254,6 +268,7 @@ export function SalesPage() {
     for (const line of lines) {
       dispatch({ type: 'addLine', line: { ...line, options: defaultOptions(optionsOf(line.itemId)) }, book })
     }
+    if (lines.length > 0) onAdded()
     // Cụm đọc không được ở lại trong ô, không bị xoá trắng theo phần đã thêm được: "1.000 pho bo"
     // là người bán định đặt một nghìn tô, im lặng bỏ nó đi là mất dòng không dấu vết nào.
     if (lines.length > 0 || ask) setQuery([...waiting.map((line) => `${formatQty(line.qty)} ${line.name}`), ...rejected].join(', '))
@@ -466,8 +481,9 @@ export function SalesPage() {
           </div>
         ) : null}
 
-        {/* Chờ đủ ba nguồn: món về trước nhóm lựa chọn thì chạm lúc đó là bỏ qua sheet, mặc định và nhóm bắt buộc. */}
-        {items === undefined || groups === undefined || optionGroups === undefined ? (
+        {/* Chờ đủ món, nhóm món, nhóm lựa chọn (chạm lúc còn thiếu nhóm lựa chọn là bỏ qua sheet, mặc định và nhóm bắt
+            buộc), và thứ hạng bán chạy của lưới "Tất cả". */}
+        {items === undefined || groups === undefined || optionGroups === undefined || (waitingRank && active.length > 0) ? (
           <ListSkeleton />
         ) : active.length === 0 ? (
           <EmptyState
@@ -682,6 +698,7 @@ export function SalesPage() {
               },
               book,
             })
+            onAdded()
             setAdding(null)
           }}
           onClose={() => setAdding(null)}
