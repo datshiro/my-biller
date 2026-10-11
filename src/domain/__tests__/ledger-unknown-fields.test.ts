@@ -25,3 +25,32 @@ describe('payload sổ cái bỏ trường lạ một cách im lặng', () => {
     // đẩy trường đó lên Worker cũ thì mất vĩnh viễn, kể cả trên máy gốc khi kéo lại từ đầu.
   })
 })
+
+describe('trường ghim của món', () => {
+  const item = {
+    gid: GID,
+    name: 'Trà sữa',
+    groupId: null,
+    unit: 'ly',
+    unitPrice: 25_000,
+    costPrice: null,
+    isActive: 1,
+    note: '',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  it('hàng thiếu pinned đi qua schema không sinh khoá — "không biết" phải còn là không biết để Worker giữ ghim', () => {
+    const parsed = safeParseLedgerPayload('items', item)
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data).not.toHaveProperty('pinned')
+  })
+
+  it('pinned 0/1 được giữ nguyên qua schema', () => {
+    for (const pinned of [0, 1]) {
+      const parsed = safeParseLedgerPayload('items', { ...item, pinned })
+      expect(parsed.success && parsed.data).toMatchObject({ pinned })
+    }
+  })
+})

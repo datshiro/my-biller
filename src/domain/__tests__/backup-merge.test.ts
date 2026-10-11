@@ -828,3 +828,31 @@ describe('gộp file bản cũ vào máy có món topping', () => {
     expect(result.items[0]).toMatchObject({ kind: 'item', optionGroupGids: [g(9)] })
   })
 })
+
+describe('gộp file bản cũ vào máy có món đã ghim', () => {
+  const deviceWithPinned = () => ({ ...emptyLedger(), items: [mk.item(1, 5, { pinned: 1, unitPrice: 5_000, updatedAt: 10 })] })
+
+  it('file mới hơn thiếu pinned (bản 2.19.0 sửa giá) không gỡ ghim của máy', () => {
+    const incoming: BackupData = { ...emptyLedger(), items: [omit(mk.item(1, 5, { unitPrice: 12_000, updatedAt: 20 }), 'pinned')] }
+
+    const { merged: result } = merged(mergeByGid(deviceWithPinned(), incoming, {}, 'A'))
+
+    expect(result.items[0]).toMatchObject({ unitPrice: 12_000, pinned: 1 })
+  })
+
+  it('file mới hơn ghi pinned: 0 tường minh thì bỏ ghim', () => {
+    const incoming: BackupData = { ...emptyLedger(), items: [mk.item(1, 5, { pinned: 0, updatedAt: 20 })] }
+
+    const { merged: result } = merged(mergeByGid(deviceWithPinned(), incoming, {}, 'A'))
+
+    expect(result.items[0]).toMatchObject({ pinned: 0 })
+  })
+
+  it('món chưa từng ghim ở cả hai phía thì không sinh khoá pinned', () => {
+    const incoming: BackupData = { ...emptyLedger(), items: [mk.item(1, 5, { updatedAt: 20 })] }
+
+    const { merged: result } = merged(mergeByGid({ ...emptyLedger(), items: [mk.item(1, 5, { updatedAt: 10 })] }, incoming, {}, 'A'))
+
+    expect(result.items[0]).not.toHaveProperty('pinned')
+  })
+})
