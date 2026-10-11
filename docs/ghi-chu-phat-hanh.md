@@ -1,5 +1,87 @@
 # Ghi chú phát hành
 
+## 2.21.0 — nhóm lựa chọn dùng chung và món topping, ghim món, thêm ly khác tuỳ chọn, hoàn lại khi sửa dòng (#87, #86) (11/10/2026)
+
+> **Deploy Worker TRƯỚC Pages/APK, và từ đó KHÔNG rollback Worker.** Worker 2.21.0 thêm luồng danh mục riêng
+> (`/catalog/*`), di trú menu cũ, chiếu menu cho máy 2.19.x và giữ các trường mới `items.kind`,
+> `items.optionGroupGids`, `itemGroups.optionGroupGids`, `items.pinned`. Worker cũ trả 404 cho `/catalog/*` và 400 cho
+> `/seed` có nhóm lựa chọn (ghép máy hỏng); rollback về Worker chưa biết các trường này làm mất dữ liệu trên sổ.
+> Pipeline `phat-hanh-production` đã deploy Worker trước Pages; chỉ cài APK 2.21.0 sau khi tag deploy xong.
+>
+> **Dexie lên `version(6)`; file sao lưu lên version 5** (file version 1–4 vẫn khôi phục được). Không khôi phục bản
+> Pages nào chưa có `version(6)` và không kích hoạt recovery schema v5 trên máy đã mở bản mới
+> ([`deploy.md`](./deploy.md#phục-hồi-schema-v5-cùng-origin)). Di trú không có cờ tắt; sự cố chỉ sửa tiến.
+>
+> **Máy đã ghép kéo lại sổ chung một lần khi mở bản mới.** Lần đầu mở cần có mạng. Tới khi kéo xong (cả sổ chính lẫn
+> luồng danh mục), máy hiện băng "App đang kéo lại toàn bộ sổ…", **không ghi được và không huỷ ghép được**. Đây là chủ
+> ý: chặn ghi để máy không đẩy hàng thiếu trường đè lên sổ. Máy 2.19.x khác trong quán vẫn bán bình thường trong lúc
+> đó. Nên cập nhật từng máy ngoài giờ bán.
+>
+> APK dựng lại với versionCode 19.
+
+### Người bán thấy gì
+
+- **Nhóm lựa chọn dùng chung (#87).** Màn mới **Thêm › Nhóm lựa chọn**:
+  - nhóm **Tuỳ chọn**: các lựa chọn, "Chọn tối đa" (lớn hơn 1 là ghi chú nhanh chọn nhiều mục), lựa chọn mặc định;
+  - nhóm **Topping**: chọn từ các món topping, giá riêng (để trống là giá món), giới hạn số loại topping;
+  - bắt buộc chọn, thứ tự hiển thị; ba mẫu Đường 0–100%, Mức đá, Ghi chú nhanh;
+  - gắn nhóm vào **nhóm mặt hàng** (sheet "Nhóm lựa chọn" thay sheet "Tuỳ chọn & topping" cũ) hoặc **thẳng vào món**.
+- **Món topping (#87).** Form món có "Là topping" và "Bán riêng được". Topping bán riêng lên lưới như món thường;
+  topping chỉ bán kèm không lên lưới và hiện "Chỉ bán kèm" trong danh sách món.
+- **Menu cũ tự chuyển.** Menu tuỳ chọn và topping kiểu cũ của từng nhóm món được di trú sang món topping và nhóm lựa
+  chọn: mỗi tên topping thành đúng một món. Quán đã ghép thì Worker di trú ở lượt đầu một máy bản mới chạm sổ; máy chưa
+  ghép di trú lúc mở app và khi khôi phục/gộp sao lưu.
+- **Màn bán (#87, #86).** Lựa chọn mặc định chọn sẵn khi thêm món. Nhóm bắt buộc chưa chọn khoá THÊM / XONG và chân
+  sheet ghi "Chưa chọn: …"; chọn xong một nhóm bắt buộc thì sheet cuộn tới nhóm bắt buộc kế tiếp. Ghi chú nhanh chọn
+  được nhiều mục tới đúng số tối đa. "Đá chung / Đá riêng" vẫn có cho mọi món.
+- **Ghim món (#102).** Form món có chip "Ghim lên đầu màn bán". Món ghim đứng đầu lưới "Tất cả" (trước món bán chạy),
+  có dấu ghim trên ô.
+- **Thêm ly khác tuỳ chọn (#103).** Sheet sửa dòng có nút "Thêm ly khác tuỳ chọn": đổi đường, đá, topping, ghi chú hay
+  giá rồi bấm thì giỏ thêm đúng một ly như vậy, dòng gốc giữ nguyên. Nút khoá khi chưa đổi gì. Đổi giá trong sheet thì
+  ly mới là giá riêng; bật SỈ không đổi giá ly đó. Máy rung như các đường thêm món khác.
+- **Hoàn lại khi sửa dòng (#104).** Sửa dòng bằng sheet hoặc gõ số lượng rồi rời ô đều có nút **Hoàn lại** đưa dòng
+  về như trước. Nút tự ẩn khi dòng đã đổi tiếp (chạm thêm, gộp dòng) để không xoá nhầm số lượng; cảnh báo giá vẫn hiện
+  cùng lúc. Nút −/+ không có hoàn tác (bấm nút ngược lại).
+- **Màn Máy** hiện cảnh báo khi máy 2.19.x sửa menu vượt giới hạn mô hình mới.
+
+### Máy chạy lẫn bản (2.19.x / 2.20.0 cùng 2.21.0)
+
+- Worker chiếu nhóm lựa chọn ngược về menu kiểu cũ cho máy cũ, và dịch sửa đổi từ sheet menu cũ sang mô hình mới.
+  Không luật mới nào từ chối event của máy cũ.
+- Từ lúc Worker lên, quán có máy cũ sửa menu sẽ được di trú dù chưa máy nào cài bản mới.
+- Máy cũ sửa giá món đã ghim không gỡ ghim; gộp file sao lưu từ máy cũ giữ ghim và loại món của máy.
+- Giới hạn trên máy cũ:
+  - topping chỉ bán kèm hiện "Ngừng bán" trong danh sách món;
+  - không thấy nhóm gắn thẳng vào món; không có nhóm bắt buộc, lựa chọn mặc định hay chọn nhiều;
+  - sửa menu vượt giới hạn (tên trên 40 ký tự, trên 30 phần tử, trên 20 nhóm gắn) bị hoàn lại ở lần chiếu sau mà máy
+    cũ không có câu báo; câu báo chỉ hiện ở màn Máy của bản mới;
+  - đổi giá một topping thì giá áp lên mọi nhóm topping gắn vào nhóm món đó;
+  - đổi tên hay bán lại một món cho trùng tên topping ẩn thì sổ có hai món cùng tên;
+  - tạo món trùng tên topping chỉ bán kèm (kể cả lúc mất mạng) thì topping đó thành bán riêng và máy cũ nối món vào nó;
+  - "Xoá hẳn" một topping đang dùng thì món được giữ lại, nhưng giá riêng theo khách bị xoá cùng lúc vẫn mất.
+
+### Kiểm sau deploy (canary)
+
+- Theo [`deploy.md`](./deploy.md#pipeline-phát-hành-production-2x): prompt cập nhật, service worker mới, đối chiếu
+  số liệu, thử offline.
+- Trên một máy đã ghép: băng "đang kéo lại toàn bộ sổ" tự tắt sau khi kéo xong; Cài đặt → Đối soát thấy "✓ Khớp sổ
+  chung" (thấy "cần cập nhật máy chủ" là Worker chưa lên bản mới).
+- Menu cũ của quán hiện thành món topping và nhóm lựa chọn, mỗi tên topping đúng một món.
+- Máy còn 2.19.x vẫn bán được món có topping, và đơn đó lên sổ đúng giá trên máy mới.
+- Ghim một món trên máy mới, sửa giá món đó trên máy 2.19.x: món vẫn ghim trên mọi máy.
+
+### Giới hạn đã biết
+
+- Gõ nhanh không chọn được nhóm bắt buộc: món còn nhóm bắt buộc chưa có mặc định ở lại trong ô tìm, phải chạm trên lưới.
+- Worker không kiểm nhãn trùng giữa các nhóm; hai máy cùng gắn hai nhóm trùng nhãn vào một món thì không ai báo (màn cài
+  đặt chặn trên từng máy).
+- Bỏ "Là topping" trên một topping chỉ bán kèm thì món thành món thường đang "Ngừng bán", phải bấm "Bán lại".
+- Ghim đến qua đồng bộ khi người bán đang ở màn bán làm món đó nhảy lên ô đầu.
+- Hoàn lại chỉ giữ thay đổi gần nhất, không hoàn tác nhiều bước.
+- Bấm "Bỏ đi" (bỏ nháp giỏ) chưa ẩn nút Hoàn lại; sẽ sửa ở bản sau.
+- "Thêm ly khác tuỳ chọn": dòng gốc có số lượng lẻ thì sheet ẩn topping chưa chọn; hai dòng chỉ khác giá mang cùng nhãn
+  "Sửa …"; nút hiện cả với món bán theo cân.
+
 ## 2.20.0 — xác nhận đơn trước khi tạo, lưới xếp theo bán chạy, rung khi thêm món, Tại chỗ / Mang về (#87, #86) (11/10/2026)
 
 > **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.20.0 sau khi tag đã deploy xong.** Đơn có thêm trường đồng bộ
