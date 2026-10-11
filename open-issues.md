@@ -531,7 +531,7 @@
   khi `busy`. Cả hai đều đổi hành vi của ✕, nên cần chủ app quyết định.
 
 ### ISSUE-037 — Máy có thể từng hiện "đã ghép sổ chung" dù APK chưa bao giờ ghép được
-- State: open
+- State: deferred
 - Severity: low
 - Raised by / Date: planner (#49) / 09/10/2026
 - Related task: #49, `src/db/sync/client.ts` (`resolveDefaultSyncUrl`), `src/features/settings/ghep-may-page.tsx`
@@ -539,6 +539,8 @@
   mã thì chưa APK nào ghép được. Chưa xác nhận trên S25 hay APK nào khác rằng Cài đặt › Máy bán hàng chưa từng hiện
   "đã ghép sổ chung".
 - Mitigation: nếu có máy như vậy, thu hồi máy đó từ máy khác rồi ghép lại bằng APK mới. Chờ chủ app kiểm trên máy thật.
+  Hoãn 11/10/2026: chỉ kiểm được trên máy thật của chủ app, không liên quan các phase đang làm; mở lại khi chủ app báo
+  máy nào từng hiện 'đã ghép sổ chung'.
 
 ### ISSUE-038 — Ghi chú riêng tư về nhịp báo chỉ có trong tài liệu, chưa có trong app
 - State: deferred

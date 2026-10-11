@@ -1,5 +1,57 @@
 # Ghi chú phát hành
 
+## 2.20.0 — xác nhận đơn trước khi tạo, lưới xếp theo bán chạy, rung khi thêm món, Tại chỗ / Mang về (#87, #86) (11/10/2026)
+
+> **Deploy Worker TRƯỚC Pages/APK; chỉ cài APK 2.20.0 sau khi tag đã deploy xong.** Đơn có thêm trường đồng bộ
+> `orders.serviceMode` (`dine-in` / `takeaway`). Trường không có giá trị mặc định và không index, nên không đổi schema
+> IndexedDB, không bump version Dexie và không đổi phiên bản file sao lưu. Worker mã nguồn không đổi: Worker 2.20.0
+> chỉ khác ở schema dùng chung. Nhưng Worker còn chạy 2.19.1 sẽ cắt `serviceMode` ở lượt tạo đơn, và đơn đó mất cờ
+> Mang về vĩnh viễn. Pipeline `phat-hanh-production` deploy Worker trước Pages, nên chỉ cần đừng cài APK hay mở bản
+> web mới trước khi tag deploy xong. **Không rollback Worker** về bản chưa biết trường; chỉ rollback Pages/APK. APK
+> dựng lại với versionCode 18 và thêm quyền `VIBRATE`.
+
+### Người bán thấy gì
+
+- **Xác nhận trước khi tạo đơn (#91).** Bấm THU TIỀN mở sheet **Xác nhận & thu tiền**. Sheet có tóm tắt chỉ đọc:
+  khách, từng dòng (tuỳ chọn, topping, ghi chú, số lượng, thành tiền), tiền hàng, giảm giá và phụ thu. **Sửa đơn**
+  quay về giỏ mà không ghi gì vào sổ. Nút tạo đơn duy nhất là **XÁC NHẬN TẠO ĐƠN · <tổng>**, thay cho
+  "XONG & XUẤT PHIẾU".
+- **BÁN ĐƠN MỚI (#91).** Phiếu vừa xuất có thanh đáy BÁN ĐƠN MỚI để về màn Bán với giỏ trống. Quay lại, Back trình
+  duyệt và Back phần cứng trên APK cũng về màn Bán với giỏ trống. Phiếu mở từ danh sách đơn không có nút này.
+- **Lưới xếp theo bán chạy (#92).** Lưới "Tất cả" khi ô tìm trống xếp món doanh thu cao nhất 14 ngày qua lên đầu,
+  cùng thước đo với bảng bán chạy của Báo cáo; món chưa bán đứng sau theo tên. Thứ hạng đọc một lần mỗi ngày nên lưới
+  đứng yên cả ca, không xếp lại sau mỗi đơn. Lần mở đầu ngày có khung giữ chỗ trong lúc đọc. Lọc nhóm hay gõ tìm vẫn
+  theo tên.
+- **Rung khi thêm món (#93).** Mỗi lần món vào giỏ, máy Android rung nhẹ 10 ms (PWA và APK): chạm món, nút THÊM
+  của sheet chọn tuỳ chọn, và Enter ở ô tìm ("2 phở, 1 trà" rung một lần). iPhone không rung.
+- **Tại chỗ / Mang về (#94).** Sheet xác nhận có công tắc Tại chỗ / Mang về, mặc định Tại chỗ. Cờ giữ qua Sửa đơn và
+  tải lại trang giữa đơn. Đơn Mang về in **MANG VỀ** dưới số phiếu (bản in và phiếu chữ) và ở đầu mọi tờ tem; số tem
+  không đổi. Cờ **không sửa được sau khi chốt đơn**: chọn nhầm thì huỷ đơn làm lại.
+
+### Đồng bộ và máy chạy lẫn bản
+
+- Máy 2.19.x không biết `serviceMode`, nên bỏ trường khi đọc rồi đẩy lại đơn thiếu trường khi thu tiền, huỷ hay sửa
+  ghi chú. Worker dựng lượt sửa đơn từ bản đã lưu và không nhận `serviceMode`, nên cờ vẫn giữ. Máy cũ không kẹt đồng bộ.
+- Gộp file sao lưu từ máy cũ (thiếu trường) giữ cờ của máy đang có.
+- Máy 2.19.x không có công tắc nên mọi đơn tạo từ đó là đơn không có cờ, không in MANG VỀ.
+
+### Kiểm sau deploy (canary)
+
+- Theo [`deploy.md`](./deploy.md#pipeline-phát-hành-production-2x): thấy prompt cập nhật, nhận service worker mới,
+  đối chiếu số liệu, thử offline; Cài đặt → Đối soát trên máy đã ghép phải thấy "✓ Khớp sổ chung".
+- Tạo một đơn **Mang về** trên máy đã ghép: phiếu in MANG VỀ; máy thứ hai kéo về cũng in MANG VỀ. Thấy máy thứ hai
+  mất cờ là Worker chưa lên 2.20.0.
+- **Kiểm tay trên APK release:** chạm một món không có thực đơn thì máy rung; Enter "2 phở" rung một lần. Quyền
+  `VIBRATE` chỉ có từ APK 2.20.0.
+
+### Giới hạn đã biết
+
+- Quán bán qua 00:00: đơn đầu tiên sau nửa đêm làm lưới đọc thứ hạng mới và xếp lại một lần giữa ca.
+- Ghép máy trong ngày không tải lại trang, nên lưới giữ thứ hạng của sổ cũ tới hết ngày. Chỉ ảnh hưởng thứ tự món.
+- Quán chưa đặt tên: MANG VỀ thành một hàng riêng ở đầu tem, nên ly có ghi chú dài sát ranh giới có thể thêm một tờ.
+- Xuất CSV và Báo cáo chưa có cột Tại chỗ / Mang về.
+- Build có cảnh báo kích thước chunk của Vite (> 500 kB); không phải lỗi.
+
 ## 2.19.1 — Worker trả 404 thay vì lỗi máy chủ khi đường có mã % sai dạng (#80) (10/10/2026)
 
 > **Chỉ Worker đổi hành vi**: không đổi schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay định dạng
