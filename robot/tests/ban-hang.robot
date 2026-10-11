@@ -885,6 +885,49 @@ Tuỳ chọn và topping của nhóm món xuống sổ: giá ly cộng topping, 
     Should Be Equal As Integers    ${đơn}[subtotal]    66000
     Should Be Equal As Integers    ${đơn}[total]    66000    Tổng đơn lệch tổng các dòng.
 
+Thêm ly khác tuỳ chọn từ sheet sửa dòng: dòng gốc giữ nguyên, ly mới 1 ly, đổi giá thì thành giá riêng
+    [Documentation]    2 ly cà phê Ít đường + trân châu (25.000/ly). Sửa dòng, nhích ô số lượng rồi đổi Không đường và
+    ...    bấm "Thêm ly khác tuỳ chọn": dòng gốc vẫn 2 ly (ô số lượng là của dòng gốc, không được lan sang), thêm 1 ly
+    ...    Không đường giữ giá ly và giá topping lúc bán. Mở lại không đổi gì thì nút khoá. Lần hai chỉ đổi giá
+    ...    18.000: thêm 1 ly giá riêng. Đọc thẳng `orderLines`: 50.000 + 25.000 + 23.000 = 98.000.
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Chọn Món    Cà phê sữa
+    Click    ${SHEET} >> css=button[aria-label="Thêm một"]
+    Chọn Chip    Ít đường
+    Click    css=button[aria-label="Thêm Trân châu"]
+    Bấm Thêm Vào Đơn
+    Chờ Thấy Chữ    Xem đơn · 2 món
+
+    Sửa Dòng    Cà phê sữa (Ít đường, + Trân châu)
+    Nút Phải Bị Khoá    Thêm ly khác tuỳ chọn
+    Click    ${SHEET} >> css=button[aria-label="Thêm một"]
+    Nút Phải Bị Khoá    Thêm ly khác tuỳ chọn
+    Chọn Chip    Không đường
+    Bấm Nút    Thêm ly khác tuỳ chọn
+    Chờ Thấy Chữ    Xem đơn · 3 món
+
+    Sửa Dòng    Cà phê sữa (Ít đường, + Trân châu)
+    Nút Phải Bị Khoá    Thêm ly khác tuỳ chọn
+    Bấm Nút    Đổi giá
+    Điền Ô    Đơn giá riêng cho đơn này    18000
+    Bấm Nút    Thêm ly khác tuỳ chọn
+    Chờ Thấy Chữ    Xem đơn · 4 món
+
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+    ${đơn}=    Đơn Mới Nhất
+    ${dòng}=    Đọc Bảng    orderLines
+    ${của_đơn}=    Evaluate
+    ...    sorted([(d['qty'], d['options'], d['unitPrice'], [(t['name'], t['unitPrice'], t['qty']) for t in d['toppings']], d['amount']) for d in $dòng if d['orderId'] == ${đơn}[id]], key=lambda d: -d[4])
+    ${trân_châu}=    Set Variable    ${{ [('Trân châu', 5000, 1)] }}
+    ${mong_đợi}=    Create List
+    ...    ${{ (2, ['Ít đường'], 20000, $trân_châu, 50000) }}
+    ...    ${{ (1, ['Không đường'], 20000, $trân_châu, 25000) }}
+    ...    ${{ (1, ['Ít đường'], 18000, $trân_châu, 23000) }}
+    Should Be Equal    ${của_đơn}    ${mong_đợi}    Dòng gốc bị đổi, hoặc ly mới sai số lượng, giá hay topping.
+    Should Be Equal As Integers    ${đơn}[total]    98000    Tổng đơn lệch tổng các dòng.
+
 Món có thực đơn riêng: chạm là mở sheet chọn, đóng sheet mà không THÊM thì món không vào đơn
     [Documentation]    Món thuộc nhóm có tuỳ chọn hay topping (Đồ uống) hỏi trước rồi mới vào giỏ; món của
     ...    nhóm không có thực đơn riêng (Cơm tấm, nhóm Đồ ăn) vẫn một chạm là vào. Đóng sheet là đổi ý,

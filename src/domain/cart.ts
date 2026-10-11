@@ -78,6 +78,18 @@ export type CartAction =
       toppings: LineTopping[]
       note: string
     }
+  /**
+   * "Thêm ly khác tuỳ chọn": thêm MỘT ly mang lựa chọn mới, dòng `key` giữ nguyên. Cố ý không mang `qty` và không
+   * đi qua `addLine` — `addLine` tính lại giá theo chế độ giá nên dòng giá riêng sẽ mất giá riêng.
+   */
+  | {
+      type: 'duplicateLine'
+      key: string
+      unitPrice: number
+      options: string[]
+      toppings: LineTopping[]
+      note: string
+    }
   | { type: 'removeLine'; key: string }
   | { type: 'setCustomer'; customerId: number | null; customerName: string }
   | { type: 'setDiscount'; discount: number }
@@ -120,13 +132,14 @@ export const emptyCart = (): Cart => ({
  */
 const lineKey = (
   line: Pick<CartLine, 'itemId' | 'name' | 'unitPrice' | 'priceSource' | 'options' | 'toppings' | 'note'>,
-) => {
-  const extras = JSON.stringify([
+) => `${line.itemId ?? `x:${line.name}`}@${line.unitPrice}#${line.priceSource}+${extrasKey(line)}~${line.note}`
+
+/** Phần tuỳ chọn và topping của khoá dòng. Sheet sửa dòng dùng chung để nút "Thêm ly khác tuỳ chọn" khoá đúng lúc reducer coi là chưa đổi. */
+export const extrasKey = (line: Pick<CartLine, 'options' | 'toppings'>): string =>
+  JSON.stringify([
     [...line.options].sort(),
     line.toppings.map((t) => JSON.stringify([t.name, t.unitPrice, t.qty])).sort(),
   ])
-  return `${line.itemId ?? `x:${line.name}`}@${line.unitPrice}#${line.priceSource}+${extras}~${line.note}`
-}
 
 function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const at = lines.findIndex((line) => line.key === incoming.key)
@@ -315,6 +328,18 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
           qty: action.qty,
         })),
       }
+    }
+
+    case 'duplicateLine': {
+      const source = cart.lines.find((line) => line.key === action.key)
+      if (!source) return cart
+      const copy = {
+        ...withPrice({ ...source, options: action.options, toppings: action.toppings, note: action.note }, action.unitPrice),
+        qty: 1,
+      }
+      // Không đổi gì thì khoá trùng chính dòng nguồn: `upsert` sẽ cộng một ly vào dòng gốc, trái điều người bán vừa bấm.
+      if (copy.key === source.key) return cart
+      return { ...cart, lines: upsert(cart.lines, copy) }
     }
 
     case 'removeLine':

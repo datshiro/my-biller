@@ -114,6 +114,22 @@ describe('rung khi món vào giỏ ở màn Bán hàng', () => {
     expect(vibrate).toHaveBeenCalledWith(10)
   })
 
+  it('Thêm ly khác tuỳ chọn trong sheet sửa dòng thì rung một lần', async () => {
+    await seedItems()
+    renderSales()
+
+    await tapGrid('Trà đá')
+    await userEvent.click(await screen.findByRole('button', { name: /Xem đơn/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Sửa Trà đá' }))
+    vibrate.mockClear()
+    await userEvent.click(dialog().getByRole('button', { name: 'Đá riêng' }))
+    await userEvent.click(dialog().getByRole('button', { name: 'Thêm ly khác tuỳ chọn' }))
+
+    expect(await screen.findByRole('button', { name: /Sửa Trà đá \(Đá riêng\)/ })).toBeDefined()
+    expect(vibrate).toHaveBeenCalledTimes(1)
+    expect(vibrate).toHaveBeenCalledWith(10)
+  })
+
   it('gõ chữ không đọc được rồi Enter thì không rung', async () => {
     await seedItems()
     renderSales()

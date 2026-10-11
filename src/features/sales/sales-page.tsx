@@ -211,7 +211,7 @@ export function SalesPage() {
   const needsChoice = (itemId: number | null) =>
     optionsOf(itemId).filter((group) => isGroupMissing(group, defaultOptions(optionsOf(itemId)), []))
 
-  /** Ba đường thêm món (chạm lưới, THÊM của sheet, Enter ở ô tìm) đều rung: người bán biết món đã vào mà không cần nhìn. */
+  /** Mọi đường thêm món (chạm lưới, THÊM của sheet, Enter ở ô tìm, Thêm ly khác tuỳ chọn) đều rung: người bán biết món đã vào mà không cần nhìn. */
   const onAdded = () => tapHaptic()
 
   const addItem = (item: Item) => {
@@ -655,6 +655,11 @@ export function SalesPage() {
             // "Bỏ món" nằm sát XONG ở chân sheet — đúng kiểu bề mặt LỠ TAY mà lối Hoàn lại sinh ra để đỡ,
             // nên đi chung đường với gõ `0` và nút −.
             setQtyWithUndo(editing.key, 0)
+            setEditing(null)
+          }}
+          onDuplicate={({ unitPrice, options, toppings, note }) => {
+            dispatch({ type: 'duplicateLine', key: editing.key, unitPrice, options, toppings, note })
+            onAdded()
             setEditing(null)
           }}
           onClose={() => setEditing(null)}

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { CartLine } from '@/domain/cart'
+import { extrasKey, type CartLine } from '@/domain/cart'
 import {
   hasNotePhrase,
   isGroupMissing,
@@ -94,6 +94,7 @@ export function LineEditSheet({
   subtitle,
   onApply,
   onRemove,
+  onDuplicate,
   onClose,
 }: {
   line: CartLine
@@ -109,6 +110,8 @@ export function LineEditSheet({
     note: string
   }) => void
   onRemove?: () => void
+  /** Chỉ ở chế độ sửa: thêm một ly với lựa chọn đang chọn, dòng gốc giữ nguyên. Không mang số lượng. */
+  onDuplicate?: (patch: { unitPrice: number; options: string[]; toppings: LineTopping[]; note: string }) => void
   onClose: () => void
 }) {
   const adding = mode === 'add'
@@ -182,6 +185,17 @@ export function LineEditSheet({
     onApply({ qty, unitPrice, options, toppings, note: note.trim() })
   }
 
+  // Ô số lượng là của dòng gốc nên không tính: ly mới luôn là 1 ly. Khoá khi chưa đổi gì vì bấm lúc đó chỉ là nhân bản
+  // y hệt dòng gốc — muốn thêm ly giống hệt thì tăng số lượng.
+  const unchanged =
+    unitPrice === line.unitPrice && note.trim() === line.note && extrasKey({ options, toppings }) === extrasKey(line)
+  const cannotDuplicate = unitPrice === null || missing.length > 0 || unchanged
+
+  const duplicate = () => {
+    if (unitPrice === null || !onDuplicate) return
+    onDuplicate({ unitPrice, options, toppings, note: note.trim() })
+  }
+
   const amount =
     qty !== null && qty > 0 && unitPrice !== null ? calcLineAmount({ unitPrice, qty, toppings }) : null
 
@@ -212,14 +226,21 @@ export function LineEditSheet({
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Button variant="danger" className="shrink-0" onClick={onRemove}>
-                Bỏ món
-              </Button>
-              <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
-                XONG
-              </Button>
-            </div>
+            <>
+              {onDuplicate ? (
+                <Button variant="secondary" disabled={cannotDuplicate} onClick={duplicate}>
+                  Thêm ly khác tuỳ chọn
+                </Button>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <Button variant="danger" className="shrink-0" onClick={onRemove}>
+                  Bỏ món
+                </Button>
+                <Button size="cta" className="flex-1 px-3" disabled={invalid} onClick={apply}>
+                  XONG
+                </Button>
+              </div>
+            </>
           )}
         </div>
       }

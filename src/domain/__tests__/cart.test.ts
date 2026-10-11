@@ -796,3 +796,93 @@ describe('tuỳ chọn và topping trên dòng giỏ', () => {
     expect(cartReducer(restored, { type: 'addItem', item: cafe(), book: RONG }).lines).toHaveLength(1)
   })
 })
+
+describe('thêm ly khác tuỳ chọn từ một dòng có sẵn', () => {
+  const traSua = () => item({ id: 3, name: 'Trà sữa', unit: 'ly', unitPrice: 30_000 })
+  const tranChau = { name: 'Trân châu', unitPrice: 5_000, qty: 1 }
+  const SI = (giá: number): PriceBook => new Map([[3, giá]])
+
+  const gốc = (patch: { options?: string[]; toppings?: CartLine['toppings']; qty?: number } = {}) => {
+    const cart = run([{ type: 'addItem', item: traSua(), qty: patch.qty ?? 2, book: RONG }])
+    return cartReducer(cart, {
+      type: 'updateLine',
+      key: cart.lines[0]?.key ?? '',
+      qty: patch.qty ?? 2,
+      unitPrice: 30_000,
+      options: patch.options ?? ['Đường 100%'],
+      toppings: patch.toppings ?? [],
+      note: '',
+    })
+  }
+  const chép = (
+    cart: Cart,
+    patch: { key?: string; unitPrice?: number; options?: string[]; toppings?: CartLine['toppings']; note?: string },
+  ) => {
+    const nguồn = cart.lines[0] as CartLine
+    return cartReducer(cart, {
+      type: 'duplicateLine',
+      key: patch.key ?? nguồn.key,
+      unitPrice: patch.unitPrice ?? nguồn.unitPrice,
+      options: patch.options ?? nguồn.options,
+      toppings: patch.toppings ?? nguồn.toppings,
+      note: patch.note ?? nguồn.note,
+    })
+  }
+
+  it('dòng gốc giữ nguyên số ly, dòng mới đúng 1 ly mang lựa chọn vừa đổi', () => {
+    const cart = gốc()
+    const nguồn = cart.lines[0] as CartLine
+
+    const gio = chép(cart, { options: ['Đường 50%'] })
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines[0]).toEqual(nguồn)
+    expect(gio.lines[1]).toMatchObject({ qty: 1, options: ['Đường 50%'], unitPrice: 30_000, priceSource: 'catalog' })
+    expect(cartTotals(gio).total).toBe(90_000)
+  })
+
+  it('không đổi gì thì giỏ không đổi — không lặng lẽ cộng thêm một ly vào dòng gốc', () => {
+    const cart = gốc()
+    expect(chép(cart, {})).toBe(cart)
+  })
+
+  it('đổi giá trong sheet thì dòng mới là giá riêng, bật SỈ không đụng tới nó', () => {
+    const gio = chép(gốc(), { unitPrice: 25_000 })
+    expect(gio.lines[1]).toMatchObject({ qty: 1, unitPrice: 25_000, priceSource: 'manual' })
+
+    const bậtSỈ = cartReducer(gio, { type: 'applyPriceMode', mode: 'wholesale', book: SI(22_000) })
+    expect(bậtSỈ.lines.find((line) => line.priceSource === 'manual')).toMatchObject({ unitPrice: 25_000, qty: 1 })
+    expect(bậtSỈ.lines.find((line) => line.priceSource === 'catalog')).toMatchObject({ unitPrice: 22_000, qty: 2 })
+  })
+
+  it('chép một dòng đã giá riêng thì dòng mới giữ giá riêng, không rơi về giá danh mục', () => {
+    const cart = gốc()
+    const giáRiêng = cartReducer(cart, { type: 'setUnitPrice', key: cart.lines[0]?.key ?? '', unitPrice: 27_000 })
+
+    const gio = chép(giáRiêng, { options: ['Đường 50%'] })
+
+    expect(gio.lines[1]).toMatchObject({ qty: 1, unitPrice: 27_000, priceSource: 'manual', options: ['Đường 50%'] })
+    expect(cartTotals(gio).total).toBe(3 * 27_000)
+  })
+
+  it('topping gửi kèm được chép nguyên giá lúc bán, không tra lại thực đơn', () => {
+    const gio = chép(gốc({ toppings: [tranChau] }), { options: ['Đường 50%'] })
+
+    expect(gio.lines[1]?.toppings).toEqual([tranChau])
+    expect(cartTotals(gio).total).toBe(3 * 35_000)
+  })
+
+  it('trùng một dòng khác thì dòng đó thêm 1 ly, dòng nguồn vẫn nguyên', () => {
+    const cart = chép(gốc(), { options: ['Đường 50%'] })
+    const gio = chép(cart, { options: ['Đường 50%'] })
+
+    expect(gio.lines).toHaveLength(2)
+    expect(gio.lines[0]?.qty).toBe(2)
+    expect(gio.lines[1]).toMatchObject({ qty: 2, options: ['Đường 50%'] })
+  })
+
+  it('khoá không còn trong giỏ thì không làm gì', () => {
+    const cart = gốc()
+    expect(chép(cart, { key: 'không-có', options: ['Đường 50%'] })).toBe(cart)
+  })
+})
