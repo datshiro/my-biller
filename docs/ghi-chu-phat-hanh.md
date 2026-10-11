@@ -1,5 +1,21 @@
 # Ghi chú phát hành
 
+## 2.19.1 — Worker trả 404 thay vì lỗi máy chủ khi đường có mã % sai dạng (#80) (10/10/2026)
+
+> **Chỉ Worker đổi hành vi**: không đổi schema IndexedDB, schema SQL của Durable Object, hợp đồng đồng bộ hay định dạng
+> file sao lưu; không thêm route, secret hay binding. Deploy theo thứ tự thường. APK dựng lại với versionCode 17 chỉ để
+> số phiên bản khớp; không đổi hành vi.
+
+### Người bán thấy gì
+
+- Không thấy gì khác. App luôn gửi mã sổ và mã máy hợp lệ, nên đồng bộ của máy thật không đổi.
+
+### Worker
+
+- Đường `/shop/{id}/...` có mã % sai dạng (ví dụ `/shop/%E0/epoch`) và thu hồi máy `/shop/{id}/devices/{id}/revoke`
+  với mã máy sai dạng nay trả **404** như mọi mã sổ/mã máy không tồn tại, thay vì ném lỗi và trả lỗi máy chủ. Nhánh
+  `/admin/shops/...` đã làm vậy từ 2.19.0.
+
 ## 2.19.0 — khu /admin chỉ đọc, nhịp báo máy chưa ghép, APK ghép được sổ chung (#49) (10/10/2026)
 
 > **Đổi Worker**: thêm route, thêm D1 `ADMIN_DB`, secret `ADMIN_VIEW_SECRET` và rate limiter `HEARTBEAT_RATE_LIMITER`.

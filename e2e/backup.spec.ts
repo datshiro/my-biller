@@ -152,7 +152,7 @@ test('mất mạng vẫn lên được đơn và ghi vào máy', async ({ page, 
   const grid = page.getByRole('group', { name: 'Mặt hàng' })
   await grid.getByRole('button', { name: /Phở bò/ }).click()
   await page.getByRole('button', { name: /THU TIỀN/ }).click()
-  await page.getByRole('button', { name: /XONG & XUẤT PHIẾU/ }).click()
+  await page.getByRole('button', { name: /XÁC NHẬN TẠO ĐƠN/ }).click()
   await page.waitForURL(/\/don\/\d+\/phieu/)
 
   await expect(page.getByRole('heading', { name: 'PHIẾU BÁN HÀNG', exact: true })).toBeVisible()

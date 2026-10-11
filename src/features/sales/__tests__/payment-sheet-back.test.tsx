@@ -9,6 +9,12 @@ afterEach(cleanup)
 function renderPaymentSheet({ submitting, onClose }: { submitting: boolean; onClose: () => void }) {
   return render(
     <PaymentSheet
+      lines={[]}
+      count={0}
+      customerName="Khách lẻ"
+      subtotal={55_000}
+      discount={0}
+      surcharge={0}
       total={55_000}
       hasCustomer={false}
       method="cash"
@@ -17,6 +23,7 @@ function renderPaymentSheet({ submitting, onClose }: { submitting: boolean; onCl
       onGivenChange={() => {}}
       onConfirm={() => {}}
       onPickCustomer={() => {}}
+      onEditOrder={() => {}}
       onClose={onClose}
       submitting={submitting}
       error={null}
