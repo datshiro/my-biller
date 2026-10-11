@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import type { DeviceConnection } from '@/domain/schema'
 import type { ServerEvent, SyncEvent } from '@shared/sync-events'
+import type { CatalogEvent, CatalogServerEvent } from '@shared/catalog-events'
 
 declare const __MY_BILLER_REMOTE_SYNC_URL__: string
 
@@ -149,6 +150,12 @@ export function claimServerEpoch(connection: DeviceConnection, epoch: number): P
   })
 }
 
+/**
+ * `catalog-v2`: máy hiểu luồng danh mục, nên Worker được áp luật nhóm lựa chọn và giữ tên của món topping chỉ bán kèm
+ * cho máy này. Máy cũ không gửi cap nên không bao giờ bị luật mới từ chối.
+ */
+export const SYNC_CAPS = ['item-name-taken', 'catalog-v2']
+
 export function pushEvent(
   connection: DeviceConnection,
   epoch: number,
@@ -157,13 +164,25 @@ export function pushEvent(
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/events`, {
     method: 'POST',
     headers: { ...authHeaders(connection), 'content-type': 'application/json' },
-    body: JSON.stringify({ epoch, event, caps: ['item-name-taken'] }),
+    body: JSON.stringify({ epoch, event, caps: SYNC_CAPS }),
+  })
+}
+
+export function pushCatalogEvent(
+  connection: DeviceConnection,
+  epoch: number,
+  event: CatalogEvent,
+): Promise<{ seq: number; duplicate: boolean }> {
+  return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/catalog/events`, {
+    method: 'POST',
+    headers: { ...authHeaders(connection), 'content-type': 'application/json' },
+    body: JSON.stringify({ epoch, event, caps: SYNC_CAPS }),
   })
 }
 
 export function activatePairedDevice(
   connection: DeviceConnection,
-  events: readonly SyncEvent[],
+  events: readonly (Omit<SyncEvent, 'table'> & { table: SyncEvent['table'] | CatalogEvent['table'] })[],
 ): Promise<{ activated: true; lastSeq: number }> {
   return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/seed`, {
     method: 'POST',
@@ -176,7 +195,16 @@ export function pullEvents(
   connection: DeviceConnection,
   since: number,
 ): Promise<{ events: ServerEvent[]; hasMore: boolean }> {
-  return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/oplog?since=${since}`, {
+  return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/oplog?since=${since}&caps=catalog-v2`, {
+    headers: authHeaders(connection),
+  })
+}
+
+export function pullCatalogEvents(
+  connection: DeviceConnection,
+  since: number,
+): Promise<{ events: CatalogServerEvent[]; hasMore: boolean }> {
+  return jsonRequest(`${connection.syncUrl}/shop/${connection.shopId}/catalog/oplog?since=${since}`, {
     headers: authHeaders(connection),
   })
 }

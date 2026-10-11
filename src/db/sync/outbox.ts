@@ -1,14 +1,14 @@
 import Dexie, { type Table, type Transaction } from 'dexie'
 import type { BillerDb } from '../db'
 import { db } from '../db'
-import {
-  LEDGER_TABLE_NAMES,
-  type LedgerTableName,
-  type SyncEvent,
-  type SyncOperation,
-} from '@shared/sync-events'
+import type { LedgerTableName, SyncEvent, SyncOperation } from '@shared/sync-events'
+import { SYNCED_TABLE_NAMES, type CatalogTableName } from '@shared/catalog-events'
 
-export type OutboxRow = SyncEvent & {
+type SyncedTableName = LedgerTableName | CatalogTableName
+
+/** Một hàng đợi cho cả hai luồng: thứ tự `id` là thứ tự đẩy, nhóm lựa chọn lên trước món trỏ tới nó. */
+export type OutboxRow = Omit<SyncEvent, 'table'> & {
+  table: SyncedTableName
   id?: number
   localId: number | string | null
   status: 'pending'
@@ -31,7 +31,7 @@ const clone = (value: Record<string, unknown> | null) =>
   value === null ? null : structuredClone(value)
 
 function entityOf(
-  table: LedgerTableName,
+  table: SyncedTableName,
   row: Record<string, unknown> | null,
 ): { entityKey: string; entityGid: string | null } | null {
   if (!row) return null
@@ -50,7 +50,7 @@ function withoutLocalId(row: Record<string, unknown> | null): Record<string, unk
 
 async function gidFor(
   transaction: Transaction,
-  table: LedgerTableName,
+  table: SyncedTableName,
   id: unknown,
 ): Promise<string | null> {
   if (id === null || id === undefined || id === 0) return null
@@ -60,7 +60,7 @@ async function gidFor(
 
 async function refsFor(
   transaction: Transaction,
-  table: LedgerTableName,
+  table: SyncedTableName,
   row: Record<string, unknown> | null,
 ): Promise<Record<string, string | null>> {
   if (!row) return {}
@@ -105,7 +105,7 @@ function applyModifications(
 
 function capture(
   transaction: Transaction,
-  table: LedgerTableName,
+  table: SyncedTableName,
   operation: SyncOperation,
   before: Record<string, unknown> | null,
   after: Record<string, unknown> | null,
@@ -141,7 +141,7 @@ export function installOutboxHooks(database: BillerDb): void {
   if (installed.has(database)) return
   installed.add(database)
 
-  for (const tableName of LEDGER_TABLE_NAMES) {
+  for (const tableName of SYNCED_TABLE_NAMES) {
     const table = database.table(tableName) as Table<Record<string, unknown>, unknown>
     table.hook('creating', (key, object, transaction) => {
       capture(transaction, tableName, 'create', null, clone(object), (key as number | string | undefined) ?? null)
@@ -163,7 +163,7 @@ export function installOutboxHooks(database: BillerDb): void {
 }
 
 export async function syncTransaction<T>(callback: () => Promise<T> | T): Promise<T> {
-  const ledgerTables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const ledgerTables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   let notifyRunner = false
   const result = await db.transaction(
     'rw',
@@ -222,7 +222,7 @@ export async function stageExistingLedger(transaction: Transaction): Promise<num
   await transaction.table('outbox').clear()
   const txId = crypto.randomUUID()
   let txOrder = 0
-  for (const tableName of LEDGER_TABLE_NAMES) {
+  for (const tableName of SYNCED_TABLE_NAMES) {
     // Thô, cùng lẽ với sao lưu: mặc định điền lúc đọc không được lên sổ chung như giá trị thật.
     const rows = (await transaction.table(tableName).toCollection().raw().toArray()) as Record<string, unknown>[]
     for (const row of rows) {
@@ -248,4 +248,31 @@ export async function stageExistingLedger(transaction: Transaction): Promise<num
     }
   }
   return txOrder
+}
+
+/** Một thay đổi do chính bộ đồng bộ sinh ra trong transaction không có ngữ cảnh chụp; xếp cuối hàng đợi, lần ghi riêng. */
+export async function enqueueOutboxRow(
+  transaction: Transaction,
+  table: SyncedTableName,
+  operation: SyncOperation,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+  localId: number | string | null,
+): Promise<void> {
+  const entity = entityOf(table, after ?? before)
+  if (!entity) throw new Error(`Không tìm thấy gid/key để đồng bộ bảng ${table}.`)
+  await transaction.table('outbox').add({
+    eventId: crypto.randomUUID(),
+    txId: crypto.randomUUID(),
+    txOrder: 0,
+    table,
+    ...entity,
+    operation,
+    before: withoutLocalId(before),
+    after: withoutLocalId(after),
+    refs: await refsFor(transaction, table, after ?? before),
+    localId,
+    status: 'pending',
+    createdAt: Date.now(),
+  })
 }

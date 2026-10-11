@@ -60,10 +60,11 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   lưới vì lọc theo `isActive`.
 - Bảng `optionGroups` (nhóm lựa chọn: `kind: 'choice'` với `choices`, hoặc `kind: 'topping'` với
   `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
-  bộ khi gặp bảng lạ, nên bảng này sẽ đi luồng danh mục riêng. Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
+  bộ khi gặp bảng lạ, nên bảng này đi luồng danh mục riêng (mục "Luồng danh mục" bên dưới). Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
   máy đã ghép để dựng lại bản sao (hàng đã đi qua zod của bản cũ bị cắt `kind`/`optionGroupGids`). Tham chiếu theo
   gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó; lúc
-  đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. File sao lưu lên `version: 5` có bảng `optionGroups`
+  đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. Hai luồng không có thứ tự chung giữa các máy, nên món
+  có thể về trước nhóm nó trỏ tới — gid treo là trạng thái hợp lệ, không phải lỗi. File sao lưu lên `version: 5` có bảng `optionGroups`
   (file 1–4 được bù mảng rỗng; file 5 thiếu bảng là file hỏng); gộp file của máy cũ giữ `kind`/`optionGroupGids` của
   phía có trường.
 - Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
@@ -106,6 +107,34 @@ Cloudflare.
 
 Đường trên dành cho máy đã kích hoạt. Lần nạp sổ đầu tiên khi ghép máy dùng admission nguyên tử riêng,
 không đẩy từng event qua pusher.
+
+## Luồng danh mục
+
+- Nhóm lựa chọn đi oplog thứ hai trên cùng Durable Object: bảng `catalogOplog` (seq riêng, bắt đầu từ 1) và
+  `catalogLedger`, qua `POST /shop/:id/catalog/events` và `GET /shop/:id/catalog/oplog?since=`. Cùng xác thực máy,
+  epoch, chống gửi trùng theo `eventId` và chặn `seed-in-progress` như sổ chính. Hợp đồng event ở
+  `shared/catalog-events.ts` (`refs` luôn rỗng: danh mục trỏ nhau bằng gid trong payload). Sổ chính không bao giờ có
+  event `optionGroups`, nên seq sổ chính vẫn liền mạch cho máy bản cũ.
+- Client giữ **một** outbox cho cả hai luồng; pusher đẩy theo `id` và chọn endpoint theo bảng, nên nhóm lựa chọn lên
+  trước món trỏ tới nó và một lần từ chối vẫn cuộn ngược cả đuôi như sổ chính. `deviceState.sync` có thêm
+  `catalogLastSeq` (hàng cũ thiếu khoá đọc là 0); puller kéo sổ chính trước rồi luồng danh mục, mỗi luồng đòi seq liền
+  nhau trên con trỏ của mình. `resetReadReplica` luôn xoá và kéo lại **cả hai** luồng.
+- Luật tham chiếu ở Worker, chỉ xét phần tử **mới** so với bản đang lưu: nhóm topping đang bật chỉ nhận `itemGid` là
+  món `kind: 'topping'` có trong sổ chính (nhóm tắt không kiểm, để nhóm bị gỡ hết topping khi nối món trùng tên vẫn lên
+  được); với máy gửi cap `catalog-v2`, `optionGroupGids` mới phải có trong `catalogLedger` và xoá món còn nằm trong nhóm
+  topping đang bật bị từ chối. Máy bản cũ không gửi cap nên không luật nào trong số này từ chối nó.
+- Client mới gửi `caps: ['item-name-taken', 'catalog-v2']` ở mọi lần đẩy và `?caps=catalog-v2` khi kéo sổ chính.
+  Với cap này Worker giữ cả tên của món topping chỉ bán kèm; nối một món mới đang bán vào món đó thì client bật món
+  topping thành bán riêng và xếp lần bật vào cuối hàng đợi, không để món vừa thêm biến khỏi lưới. Nối món trùng tên
+  cũng ánh xạ lại `toppings[].itemGid` trong payload nhóm còn chờ đẩy.
+- Ghép máy: client đếm và nạp `optionGroups` cùng ảnh sổ (sau các bảng sổ chính); `/seed` nhận cả hai loại event, áp
+  danh mục sau sổ chính và chỉ kiểm hình dạng. "Sổ chung đã có dữ liệu" (`merge-required`) và số dòng promote đếm cả
+  `catalogLedger`. Máy ghép sau kéo cả hai luồng từ 0.
+- Worker phải lên **trước** Pages/APK: Worker cũ trả 404 cho `/catalog/*` và 400 cho `/seed` có event danh mục (ghép
+  máy hỏng). Lượt kéo luồng danh mục lỗi chỉ được ghi log, không chặn bước đẩy đơn phía sau; con trỏ đứng yên nên lượt
+  sau kéo lại.
+  Màn admin đọc bảng danh mục bằng `table=optionGroups` (con trỏ trang là seq danh mục); màn Đối soát đếm thêm dòng
+  "Nhóm lựa chọn", còn số `#` trên neo vẫn là seq sổ chính.
 
 ## Ghép máy và nạp sổ ban đầu
 

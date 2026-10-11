@@ -13,7 +13,7 @@ import {
 import { createGroup, createItem, deleteGroup, updateItem } from '../../repositories/items'
 import { createOrder } from '../../repositories/orders'
 import { requestFullResync } from '../applier'
-import { safeParseLedgerPayload } from '@shared/ledger-schemas'
+import { safeParseLedgerPayload, type LedgerTableName } from '@shared/ledger-schemas'
 
 beforeEach(async () => {
   await db.open()
@@ -179,7 +179,7 @@ describe('outbox giao dịch', () => {
       for (const payload of [canonical(row.before), canonical(row.after)]) {
         if (payload === null) continue
         expect(
-          safeParseLedgerPayload(row.table, payload).success,
+          safeParseLedgerPayload(row.table as LedgerTableName, payload).success,
           `${row.table}:${row.operation}`,
         ).toBe(true)
       }

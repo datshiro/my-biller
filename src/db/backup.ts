@@ -246,11 +246,6 @@ export async function mergeAllDataAndRecalculate(
   })
 }
 
-/** Nhóm lựa chọn không nằm trong số đếm của Đối soát (chưa đồng bộ qua sổ chính) nên báo cáo sau khôi phục đếm riêng. */
-export function countOptionGroups(): Promise<number> {
-  return db.optionGroups.count()
-}
-
 /** Khoản thu còn trừ vào đơn đã huỷ — bất biến sau `recalcAll` là 0; báo cáo sau khôi phục kiểm số này. */
 export async function countPaymentsOnVoidOrders(): Promise<number> {
   return db.transaction('r', db.orders, db.payments, async () => {

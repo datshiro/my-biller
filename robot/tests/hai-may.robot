@@ -1025,6 +1025,50 @@ Huỷ ghép máy cuối cùng của quán thì hộp xác nhận cảnh báo nh�
     ${khoá_sau}=    Evaluate    [row['key'] for row in $device_sau]
     Should Not Contain    ${khoá_sau}    connection    Máy cuối cùng đã huỷ ghép vẫn còn khoá connection.
 
+Nhóm lựa chọn tạo ở máy A tới máy B qua luồng danh mục, sổ chính không thêm event và đơn vẫn lên
+    [Tags]    -regression
+    [Documentation]    Nhóm lựa chọn đi oplog thứ hai (seq riêng) để máy bản cũ — đòi seq sổ chính liền nhau và kẹt khi
+    ...    gặp bảng lạ — không bao giờ thấy nó. Bằng chứng: tạo nhóm thì `catalogLastSeq` của cả hai máy tiến còn
+    ...    `lastSeq` sổ chính đứng yên; gắn nhóm vào món thì chỉ event món lên sổ chính. Chưa có màn cài nhóm, nên ca
+    ...    gọi đúng hàm repository của app đang chạy (cùng module Vite) thay vì bấm nút; khung chạy app 2.19.0 thật
+    ...    chưa có nên phần "máy cũ không kẹt" được chứng bằng sổ chính không đổi, không bằng máy cũ thật.
+    ...    Đơn bán trên B vẫn lên A (đối chiếu bằng `Đọc Bảng`), và màn Đối soát của B đếm dòng "Nhóm lựa chọn".
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Wait Until Keyword Succeeds    40x    500ms    Hai Máy Phải Cùng lastSeq
+    ${seq_trước}=    Con Trỏ Đồng Bộ Máy    ${MÁY_A_PAGE}    lastSeq
+
+    Chọn Máy A
+    ${gid}=    Tạo Nhóm Lựa Chọn Trên Máy Hiện Tại    Mức đường
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Hai Bảng Phải Hội Tụ    optionGroups
+    FOR    ${page}    IN    ${MÁY_A_PAGE}    ${MÁY_B_PAGE}
+        Wait Until Keyword Succeeds    40x    500ms    Con Trỏ Máy Phải Là    ${page}    catalogLastSeq    1
+        Con Trỏ Máy Phải Là    ${page}    lastSeq    ${seq_trước}
+    END
+    ${nhóm_b}=    Đọc Bảng    optionGroups    ${MÁY_B_PAGE}
+    Should Be Equal    ${nhóm_b}[0][gid]    ${gid}
+    Should Be Equal    ${nhóm_b}[0][name]    Mức đường
+
+    Chọn Máy A
+    Gắn Nhóm Lựa Chọn Vào Món Trên Máy Hiện Tại    Trà đá    ${gid}
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_A_PAGE}
+    Hai Bảng Phải Hội Tụ    items
+    ${seq_sau_gắn}=    Evaluate    ${seq_trước} + 1
+    Wait Until Keyword Succeeds    40x    500ms    Con Trỏ Máy Phải Là    ${MÁY_B_PAGE}    lastSeq    ${seq_sau_gắn}
+    Con Trỏ Máy Phải Là    ${MÁY_B_PAGE}    catalogLastSeq    1
+    ${món_b}=    Đọc Bảng    items    ${MÁY_B_PAGE}
+    ${trà_đá}=    Evaluate    [row for row in $món_b if row['name'] == 'Trà đá'][0]
+    Should Be Equal    ${trà_đá}[optionGroupGids]    ${{ [$gid] }}
+
+    Chọn Máy B
+    Bán Nhanh    Phở bò
+    Wait Until Keyword Succeeds    80x    500ms    Hàng Đợi Máy Phải Rỗng    ${MÁY_B_PAGE}
+    Hai Bảng Phải Hội Tụ    orders
+    Hai Bảng Phải Hội Tụ    payments
+
+    Mở Màn Trên Máy    ${MÁY_B_PAGE}    /them/doi-soat
+    Wait For Elements State    xpath=//span[normalize-space()="Nhóm lựa chọn"]/following-sibling::span[normalize-space()="1"]    visible
+
 *** Keywords ***
 Ba Bảng Đơn Phải Cùng Gid Và Nội Dung
     Hai Bảng Phải Cùng Gid Và Nội Dung    orders
@@ -1233,3 +1277,41 @@ Mã Sổ Rút Gọn Trên Máy
     ${shop_id}=    Set Variable    ${connection}[0][shopId]
     ${rút_gọn}=    Evaluate    $shop_id[:4] + '…' + $shop_id[-3:]
     RETURN    ${rút_gọn}
+
+Con Trỏ Đồng Bộ Máy
+    [Documentation]    `lastSeq` (sổ chính) hoặc `catalogLastSeq` (luồng danh mục) của hàng `sync`; thiếu khoá đọc là 0.
+    [Arguments]    ${page}    ${khoá}
+    ${state}=    Đọc Bảng    deviceState    ${page}
+    ${giá_trị}=    Evaluate    [row for row in $state if row['key'] == 'sync'][0].get($khoá, 0)
+    RETURN    ${giá_trị}
+
+Con Trỏ Máy Phải Là
+    [Arguments]    ${page}    ${khoá}    ${mong_đợi}
+    ${giá_trị}=    Con Trỏ Đồng Bộ Máy    ${page}    ${khoá}
+    Should Be Equal As Integers    ${giá_trị}    ${mong_đợi}    ${khoá} của máy là ${giá_trị}, mong đợi ${mong_đợi}.
+
+Tạo Nhóm Lựa Chọn Trên Máy Hiện Tại
+    [Documentation]    Gọi `createOptionGroup` của chính app đang chạy (Vite dev phục vụ cùng một module), nên đi
+    ...    đúng `syncTransaction` và outbox như màn cài nhóm sẽ đi. Trả về gid của nhóm.
+    [Arguments]    ${tên}
+    ${gid}=    Evaluate JavaScript    ${None}
+    ...    async (name) => {
+    ...        const { createOptionGroup } = await import('/src/db/repositories/option-groups.ts')
+    ...        const { db } = await import('/src/db/db.ts')
+    ...        const id = await createOptionGroup({ kind: 'choice', name, required: 0, maxSelect: 1,
+    ...            defaultChoice: null, sortOrder: 1, isActive: 1, choices: ['Ít đường', 'Không đường'] })
+    ...        return (await db.optionGroups.get(id)).gid
+    ...    }
+    ...    arg=${tên}
+    RETURN    ${gid}
+
+Gắn Nhóm Lựa Chọn Vào Món Trên Máy Hiện Tại
+    [Arguments]    ${tên_món}    ${gid}
+    Evaluate JavaScript    ${None}
+    ...    async ({ name, gid }) => {
+    ...        const { updateItem } = await import('/src/db/repositories/items.ts')
+    ...        const { db } = await import('/src/db/db.ts')
+    ...        const item = await db.items.where('name').equals(name).first()
+    ...        await updateItem(item.id, { optionGroupGids: [gid] })
+    ...    }
+    ...    arg=${{ {'name': $tên_món, 'gid': $gid} }}

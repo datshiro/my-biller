@@ -7,6 +7,7 @@ import type {
   UnpairedPage,
 } from '@shared/admin-contract'
 import type { LedgerTableName } from '@shared/ledger-schemas'
+import type { CatalogTableName } from '@shared/catalog-events'
 
 export const SHOPS_PAGE_SIZE = 20
 export const DATA_PAGE_SIZE = 50
@@ -42,7 +43,7 @@ export function createAdminClient(secret: string, onUnauthorized: () => void) {
         ...(cursor ? { cursor } : {}),
       }),
     loadShop: (shopId: string) => get<ShopDetail>(shopPath(shopId)),
-    loadData: (shopId: string, table: LedgerTableName, after = 0) =>
+    loadData: (shopId: string, table: LedgerTableName | CatalogTableName, after = 0) =>
       get<AdminDataPage>(`${shopPath(shopId)}/data`, {
         table,
         after: String(after),

@@ -67,7 +67,7 @@ describe('nhóm lựa chọn: ghi qua repository', () => {
     const toppingGid = (await db.items.get(toppingId))!.gid
 
     await expect(createOptionGroup(toppingInput(plainGid))).rejects.toThrow(/không phải món topping/)
-    await expect(createOptionGroup(toppingInput(testGid(999)))).rejects.toThrow(/không phải món topping/)
+    await expect(createOptionGroup(toppingInput(testGid(999)))).rejects.toThrow(/món topping đã bị xoá/)
     expect(await db.optionGroups.count()).toBe(0)
 
     const id = await createOptionGroup(toppingInput(toppingGid))

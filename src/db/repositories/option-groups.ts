@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { syncTransaction } from '../sync/outbox'
 import { newGid } from '@/domain/gid'
 import { OptionGroupRowSchema, type OptionGroupRow } from '@/domain/schema'
 
@@ -16,13 +17,17 @@ export function listOptionGroups(): Promise<OptionGroupRow[]> {
 async function toppingProblem(row: OptionGroupRow): Promise<string | null> {
   if (row.kind !== 'topping') return null
   const items = await db.items.where('gid').anyOf(row.toppings.map((topping) => topping.itemGid)).toArray()
-  const toppings = new Set(items.filter((item) => item.kind === 'topping').map((item) => item.gid))
-  const missing = row.toppings.find((topping) => !toppings.has(topping.itemGid))
-  return missing ? `Nhóm “${row.name}” trỏ tới một món không phải món topping.` : null
+  const byGid = new Map(items.map((item) => [item.gid, item]))
+  const missing = row.toppings.find((topping) => byGid.get(topping.itemGid)?.kind !== 'topping')
+  if (!missing) return null
+  // Nhóm đang tắt vẫn có thể giữ món đã bị xoá; bật/sửa lại nhóm đó phải nói rõ là món đã xoá, không phải "sai loại".
+  return byGid.has(missing.itemGid)
+    ? `Nhóm “${row.name}” trỏ tới một món không phải món topping.`
+    : `Nhóm “${row.name}” còn một món topping đã bị xoá; gỡ món đó khỏi nhóm rồi lưu lại.`
 }
 
 async function writeOptionGroup(row: OptionGroupRow): Promise<number> {
-  return db.transaction('rw', db.optionGroups, db.items, async () => {
+  return syncTransaction(async () => {
     const problem = await toppingProblem(row)
     if (problem) throw new Error(problem)
     return db.optionGroups.put(row)

@@ -3,11 +3,11 @@ import { db, verbatimWrites } from '../db'
 import { getDeviceSyncState } from '../repositories/device-state'
 import { assertLeadership, type LeaderToken } from './leader'
 import { restoreRow } from './pusher'
-import type { OutboxRow } from './outbox'
+import { enqueueOutboxRow, type OutboxRow } from './outbox'
 import { formatVnd } from '@/domain/money'
-import { remapToppingItems } from '@/domain/option-groups'
+import { remapToppingGroup } from '@/domain/option-groups'
 import { DeviceNoticeSchema } from '@/domain/schema'
-import { LEDGER_TABLE_NAMES } from '@shared/sync-events'
+import { SYNCED_TABLE_NAMES } from '@shared/catalog-events'
 
 type ItemRow = { id: number; gid: string; name: string; unitPrice: number; isActive: 0 | 1; kind?: string }
 type CustomerPriceRow = { id: number; gid: string; customerId: number; itemId: number; unitPrice: number }
@@ -37,6 +37,7 @@ async function resolveDLocalId(dGid: string): Promise<number | null> {
 }
 
 async function resolveCreate(
+  transaction: Transaction,
   rejected: OutboxRow,
   existing: ItemRow,
   existingName: string,
@@ -100,9 +101,19 @@ async function resolveCreate(
     }
   }
 
-  // 5-6. Mọi dòng outbox/cục bộ còn trỏ tới D (gid hoặc id cục bộ) thì nối sang `existing`.
+  // 5-6. Mọi dòng outbox/cục bộ còn trỏ tới D (gid hoặc id cục bộ) thì nối sang `existing`. Nhóm topping trỏ D
+  // trong payload (luồng danh mục): không nối thì Worker từ chối nhóm và cuộn mất cả các đơn xếp sau nó.
+  const toppingTarget = existing.kind === 'topping' ? existing.gid : null
   const outboxAfterPrices = (await db.outbox.toArray()) as OutboxRow[]
   for (const row of outboxAfterPrices) {
+    if (row.table === 'optionGroups') {
+      const before = row.before && remapToppingGroup(row.before, dGid, toppingTarget)
+      const after = row.after && remapToppingGroup(row.after, dGid, toppingTarget)
+      if ((before !== row.before || after !== row.after) && row.id !== undefined) {
+        await db.outbox.update(row.id, { before, after })
+      }
+      continue
+    }
     let changed = false
     const refs = { ...row.refs }
     if (refs.itemId === dGid) {
@@ -127,6 +138,7 @@ async function resolveCreate(
   }
 
   const detachedFrom = await remapToppingItem(dGid, existing)
+  const soldAlone = await sellHiddenToppingAlone(transaction, laterItemPuts.at(-1)?.after ?? rejected.after, existing)
 
   if (dLocalId !== null) {
     await db.orderLines.where('itemId').equals(dLocalId).modify({ itemId: existing.id })
@@ -162,7 +174,29 @@ async function resolveCreate(
   if (restoredDeleted) {
     parts.push(`Món “${existingName}” đã bị xoá trên máy này nên được khôi phục lại để giữ các đơn đã bán.`)
   }
+  if (soldAlone) {
+    parts.push(`Món topping “${existingName}” trước chỉ bán kèm, nay bán riêng được trên lưới.`)
+  }
   await notice(parts.join(' '))
+}
+
+/**
+ * Sổ chung giữ tên của cả món topping chỉ bán kèm (`isActive: 0`) cho máy `catalog-v2`. Người bán vừa thêm một món
+ * đang bán trùng tên đó: nối vào món ẩn mà không bật nó là món vừa thêm biến khỏi lưới. Bật món có sẵn và đẩy lần
+ * bật như một thay đổi riêng ở cuối hàng đợi. Đọc thô để mặc định lúc đọc không lên sổ chung như giá trị thật.
+ */
+async function sellHiddenToppingAlone(
+  transaction: Transaction,
+  finalD: Record<string, unknown> | null,
+  existing: ItemRow,
+): Promise<boolean> {
+  if (existing.kind !== 'topping' || finalD?.isActive !== 1) return false
+  const raw = (await db.items.where('gid').equals(existing.gid).raw().first()) as Record<string, unknown> | undefined
+  if (!raw || raw.isActive !== 0) return false
+  const after = { ...raw, isActive: 1, updatedAt: Date.now() }
+  await db.table('items').put(after)
+  await enqueueOutboxRow(transaction, 'items', 'put', raw, after, existing.id)
+  return true
 }
 
 /**
@@ -173,19 +207,12 @@ async function resolveCreate(
 async function remapToppingItem(fromGid: string, existing: ItemRow): Promise<string[]> {
   const detachedFrom: string[] = []
   for (const group of await db.optionGroups.toArray()) {
-    if (group.kind !== 'topping' || !group.toppings.some((topping) => topping.itemGid === fromGid)) continue
-    if (existing.kind === 'topping') {
-      const toppings = remapToppingItems(group.toppings, (gid) => (gid === fromGid ? existing.gid : gid))
-      await db.optionGroups.put({ ...group, toppings, updatedAt: Date.now() })
-      continue
-    }
-    detachedFrom.push(group.name)
-    const toppings = group.toppings.filter((topping) => topping.itemGid !== fromGid)
-    await db.optionGroups.put(
-      toppings.length > 0
-        ? { ...group, toppings, updatedAt: Date.now() }
-        : { ...group, isActive: 0, updatedAt: Date.now() },
-    )
+    const next = remapToppingGroup(group, fromGid, existing.kind === 'topping' ? existing.gid : null)
+    if (next === group) continue
+    if (existing.kind !== 'topping') detachedFrom.push(group.name)
+    // Giữ `updatedAt`: payload outbox của nhóm được nối bằng cùng phép này, nên hàng cục bộ phải khớp `after` cuối
+    // để lần cuộn ngược sau đó (nếu có) không bị coi là xung đột rồi bắt kéo lại cả sổ.
+    await db.optionGroups.put(next)
   }
   return detachedFrom
 }
@@ -265,9 +292,9 @@ export async function resolveItemNameTaken(
   leader: LeaderToken,
 ): Promise<'resolved' | 'deferred'> {
   if (rejected.table !== 'items' || existingGid === rejected.entityKey) return 'deferred'
-  const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const tables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   try {
-    return await db.transaction('rw', [...tables, db.optionGroups, db.outbox, db.deviceState], async (transaction) => {
+    return await db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
       await assertLeadership(db, leader)
       verbatimWrites.add(transaction)
 
@@ -276,7 +303,7 @@ export async function resolveItemNameTaken(
         const restoredDeleted = !existing
         existing ??= await restoreLocallyDeleted(transaction, existingGid)
         if (!existing) return 'deferred'
-        await resolveCreate(rejected, existing, existingName, restoredDeleted)
+        await resolveCreate(transaction, rejected, existing, existingName, restoredDeleted)
       } else {
         await resolvePut(transaction, rejected, existingName)
       }

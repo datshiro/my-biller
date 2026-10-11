@@ -4,6 +4,14 @@ import { assertLeadership, type LeaderToken } from './leader'
 import { getDeviceSyncState } from '../repositories/device-state'
 import { LEDGER_TABLE_NAMES, ServerEventSchema, type LedgerTableName, type ServerEvent } from '@shared/sync-events'
 import { safeParseLedgerPayload, safeParseLedgerRow } from '@shared/ledger-schemas'
+import {
+  CATALOG_TABLE_NAMES,
+  CatalogServerEventSchema,
+  safeParseCatalogPayload,
+  safeParseCatalogRow,
+  SYNCED_TABLE_NAMES,
+  type CatalogServerEvent,
+} from '@shared/catalog-events'
 
 const parentTableByField: Record<string, LedgerTableName> = {
   groupId: 'itemGroups',
@@ -104,8 +112,62 @@ export async function applyEvents(events: readonly ServerEvent[], leader: Leader
   })
 }
 
+function parseCatalogServerEvent(raw: CatalogServerEvent): CatalogServerEvent {
+  const event = CatalogServerEventSchema.parse(raw)
+  const parsePayload = (payload: Record<string, unknown> | null) =>
+    payload === null ? { success: true as const, data: null } : safeParseCatalogPayload(event.table, payload)
+  const before = parsePayload(event.before)
+  const after = parsePayload(event.after)
+  const requiredPayload = event.operation === 'delete' ? before : after
+  if (!before.success || !after.success || !requiredPayload.success || requiredPayload.data === null) {
+    throw new Error(`Dữ liệu bảng ${event.table} từ sổ chung không hợp lệ.`)
+  }
+  return { ...event, before: before.data, after: after.data }
+}
+
+/** Luồng danh mục: cùng luật seq liền nhau như sổ chính nhưng trên con trỏ `catalogLastSeq` riêng. */
+export async function applyCatalogEvents(events: readonly CatalogServerEvent[], leader: LeaderToken): Promise<void> {
+  if (events.length === 0) return
+  const parsed = events.map(parseCatalogServerEvent).sort((a, b) => a.seq - b.seq)
+  const tables = CATALOG_TABLE_NAMES.map((name) => db.table(name))
+
+  await db.transaction('rw', [...tables, db.deviceState], async (transaction) => {
+    await assertLeadership(db, leader)
+    const sync = await getDeviceSyncState()
+    let catalogLastSeq = sync.catalogLastSeq
+    let changed = false
+    for (const event of parsed) {
+      if (event.seq <= catalogLastSeq) continue
+      if (event.seq !== catalogLastSeq + 1) {
+        throw new Error(`Thiếu sự kiện danh mục giữa seq ${catalogLastSeq} và ${event.seq}.`)
+      }
+      const table = transaction.table(event.table)
+      const existing = (await table.where('gid').equals(event.entityKey).first()) as { id?: number } | undefined
+      if (event.operation === 'delete') {
+        if (existing?.id !== undefined) await table.delete(existing.id)
+      } else {
+        const row = safeParseCatalogRow(event.table, event.after)
+        if (!row.success) throw new Error(`Dữ liệu bảng ${event.table} từ sổ chung không hợp lệ.`)
+        await table.put(existing?.id === undefined ? row.data : { ...row.data, id: existing.id })
+      }
+      catalogLastSeq = event.seq
+      changed = true
+    }
+    await assertLeadership(db, leader)
+    if (changed) {
+      await db.deviceState.put({
+        ...sync,
+        catalogLastSeq,
+        revision: sync.revision + 1,
+        lastConnectedAt: Date.now(),
+      })
+    }
+  })
+}
+
+/** Luôn dựng lại cả hai luồng cùng lúc: một con trỏ còn, một con trỏ về 0 là hai bản sao lệch nhau. */
 export async function resetReadReplica(leader: LeaderToken): Promise<void> {
-  const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
+  const tables = SYNCED_TABLE_NAMES.map((name) => db.table(name))
   await db.transaction('rw', [...tables, db.deviceState, db.outbox], async () => {
     await assertLeadership(db, leader)
     if ((await db.outbox.count()) > 0) {
@@ -116,6 +178,7 @@ export async function resetReadReplica(leader: LeaderToken): Promise<void> {
     await db.deviceState.put({
       ...sync,
       lastSeq: 0,
+      catalogLastSeq: 0,
       revision: sync.revision + 1,
       resyncRequired: false,
     })

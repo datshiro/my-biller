@@ -345,8 +345,8 @@ describe('khóa ghi đè sổ khi ghép máy', () => {
 
     expect(await countAllRecords()).toBe(beforeCount)
     expect(await db.outbox.count()).toBe(staged)
-    // Nhóm lựa chọn chưa thuộc sổ chính nên lúc ghép không được xếp vào outbox; chỉ đếm dòng của sổ chính.
-    expect(staged).toBe(beforeCount - (await db.optionGroups.count()))
+    // Nhóm lựa chọn lên sổ chung qua luồng danh mục, nhưng lúc ghép vẫn nạp cùng ảnh sổ như mọi bảng khác.
+    expect(staged).toBe(beforeCount)
     expect(await db.deviceState.get('pairing')).toMatchObject({ connectionSaved: true })
   })
 })

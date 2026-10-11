@@ -10,6 +10,24 @@ export function remapToppingItems(toppings: readonly Topping[], targetOf: (itemG
     .filter((topping) => !seen.has(topping.itemGid) && seen.add(topping.itemGid))
 }
 
+/**
+ * Nối phần tử topping `fromGid` sang `toGid` (món có sẵn cũng là món topping) hoặc gỡ hẳn (`toGid: null`). Schema không
+ * cho nhóm rỗng nên nhóm hết topping thì giữ danh sách cũ và tắt nhóm; `maxSelect` hạ theo số phần tử còn lại. Không
+ * đụng tới nhóm thì trả lại đúng đối tượng cũ.
+ */
+export function remapToppingGroup<T extends Record<string, unknown>>(group: T, fromGid: string, toGid: string | null): T {
+  if (group.kind !== 'topping' || !Array.isArray(group.toppings)) return group
+  const toppings = group.toppings as Topping[]
+  if (!toppings.some((topping) => topping.itemGid === fromGid)) return group
+  const next =
+    toGid === null
+      ? toppings.filter((topping) => topping.itemGid !== fromGid)
+      : remapToppingItems(toppings, (gid) => (gid === fromGid ? toGid : gid))
+  if (next.length === 0) return { ...group, isActive: 0 }
+  const maxSelect = typeof group.maxSelect === 'number' ? Math.min(group.maxSelect, next.length) : group.maxSelect
+  return { ...group, toppings: next, maxSelect }
+}
+
 export type ResolvedTopping = { item: Item; price: number }
 
 export type ResolvedOptionGroup =

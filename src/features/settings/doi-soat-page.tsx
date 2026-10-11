@@ -99,6 +99,7 @@ const TABLE_LABELS: Record<CountedTable, string> = {
   payments: 'Khoản thu',
   expenseCategories: 'Nhóm chi phí',
   expenses: 'Chi phí',
+  optionGroups: 'Nhóm lựa chọn',
 }
 
 function Section({ title, note, children }: { title: string; note: string; children: ReactNode }) {

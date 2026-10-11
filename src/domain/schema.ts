@@ -68,6 +68,8 @@ export const DeviceConnectionSchema = z.object({
 export const DeviceSyncStateSchema = z.object({
   key: z.literal('sync'),
   lastSeq: z.number().int().nonnegative(),
+  /** Con trỏ luồng danh mục (`shared/catalog-events.ts`); hàng ghi trước khi có luồng này đọc là 0. */
+  catalogLastSeq: z.number().int().nonnegative().optional(),
   revision: z.number().int().nonnegative(),
   resyncRequired: z.boolean(),
   lastConnectedAt: Timestamp.nullable(),
