@@ -24,6 +24,7 @@ const ledgerTables = () => [
   db.payments,
   db.expenseCategories,
   db.expenses,
+  db.optionGroups,
 ]
 
 /**
@@ -43,10 +44,12 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       payments,
       expenseCategories,
       expenses,
+      optionGroups,
     ] = await Promise.all([
       db.settings.toArray(),
-      db.itemGroups.toArray(),
-      db.items.toArray(),
+      // Thô, không qua hook đọc: mặc định điền lúc đọc mà vào file thì nhập lại thành giá trị thật trong máy.
+      db.itemGroups.toCollection().raw().toArray(),
+      db.items.toCollection().raw().toArray(),
       db.customers.toArray(),
       db.customerPrices.toArray(),
       db.orders.toArray(),
@@ -54,6 +57,7 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       db.payments.toArray(),
       db.expenseCategories.toArray(),
       db.expenses.toArray(),
+      db.optionGroups.toArray(),
     ])
 
     // `satisfies` là hàng rào duy nhất ở đây: `file as BackupFile` bên dưới cố ý khoan dung, nên quên
@@ -70,6 +74,7 @@ export function collectBackup(exportedAt: number): Promise<BackupFile> {
       payments,
       expenseCategories,
       expenses,
+      optionGroups,
     } satisfies Record<keyof BackupData, unknown[]>
 
     const file = {
@@ -164,6 +169,7 @@ async function replaceLedger(data: BackupData): Promise<void> {
     db.payments.bulkPut(data.payments),
     db.expenseCategories.bulkPut(data.expenseCategories),
     db.expenses.bulkPut(data.expenses),
+    db.optionGroups.bulkPut(data.optionGroups),
   ])
 }
 
@@ -238,6 +244,11 @@ export async function mergeAllDataAndRecalculate(
     // Cùng luật với `replaceLedger`: dòng giá mồ côi bị bỏ khi ghi, nên bản kỳ vọng cũng bỏ — không thì báo LỆCH giả.
     return { expected: expectedAfterReplace(outcome.merged), summary: outcome.summary }
   })
+}
+
+/** Nhóm lựa chọn không nằm trong số đếm của Đối soát (chưa đồng bộ qua sổ chính) nên báo cáo sau khôi phục đếm riêng. */
+export function countOptionGroups(): Promise<number> {
+  return db.optionGroups.count()
 }
 
 /** Khoản thu còn trừ vào đơn đã huỷ — bất biến sau `recalcAll` là 0; báo cáo sau khôi phục kiểm số này. */

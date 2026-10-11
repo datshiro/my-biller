@@ -1,0 +1,49 @@
+import { db } from '../db'
+import { newGid } from '@/domain/gid'
+import { OptionGroupRowSchema, type OptionGroupRow } from '@/domain/schema'
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
+export type OptionGroupInput = DistributiveOmit<OptionGroupRow, 'id' | 'gid' | 'createdAt' | 'updatedAt'>
+
+const now = () => Date.now()
+
+export function listOptionGroups(): Promise<OptionGroupRow[]> {
+  return db.optionGroups.orderBy('sortOrder').toArray()
+}
+
+/** Topping phải trỏ tới món có thật và đã là món topping; không thì nhóm bán kèm một thứ không ai sửa giá được. */
+async function toppingProblem(row: OptionGroupRow): Promise<string | null> {
+  if (row.kind !== 'topping') return null
+  const items = await db.items.where('gid').anyOf(row.toppings.map((topping) => topping.itemGid)).toArray()
+  const toppings = new Set(items.filter((item) => item.kind === 'topping').map((item) => item.gid))
+  const missing = row.toppings.find((topping) => !toppings.has(topping.itemGid))
+  return missing ? `Nhóm “${row.name}” trỏ tới một món không phải món topping.` : null
+}
+
+async function writeOptionGroup(row: OptionGroupRow): Promise<number> {
+  return db.transaction('rw', db.optionGroups, db.items, async () => {
+    const problem = await toppingProblem(row)
+    if (problem) throw new Error(problem)
+    return db.optionGroups.put(row)
+  })
+}
+
+export async function createOptionGroup(input: OptionGroupInput): Promise<number> {
+  const stamp = now()
+  return writeOptionGroup(OptionGroupRowSchema.parse({ ...input, gid: newGid(), createdAt: stamp, updatedAt: stamp }))
+}
+
+export async function updateOptionGroup(id: number, patch: Partial<OptionGroupInput>): Promise<void> {
+  const current = await db.optionGroups.get(id)
+  if (!current) throw new Error(`Không tìm thấy nhóm lựa chọn #${id}`)
+  await writeOptionGroup(OptionGroupRowSchema.parse({ ...current, ...patch, id, updatedAt: now() }))
+}
+
+/** Nhóm topping đang bật có chứa món này; xoá món khi còn nhóm dùng là để lại một phần tử trỏ vào chỗ trống. */
+export async function activeGroupsUsingTopping(itemGid: string): Promise<OptionGroupRow[]> {
+  const groups = await db.optionGroups.where('isActive').equals(1).toArray()
+  return groups.filter(
+    (group) => group.kind === 'topping' && group.toppings.some((topping) => topping.itemGid === itemGid),
+  )
+}

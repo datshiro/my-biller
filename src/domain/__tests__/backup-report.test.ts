@@ -22,6 +22,7 @@ function actualOf(data: ReturnType<typeof ledgerK>): RestoreActual {
       payments: data.payments.length,
       expenseCategories: data.expenseCategories.length,
       expenses: data.expenses.length,
+      optionGroups: data.optionGroups.length,
     },
     debtTotal: ledgerTotals(derived).debtTotal,
   }
@@ -158,6 +159,29 @@ describe('buildRestoreReport', () => {
     data.payments.push(mk.payment(9, 29, 4, 60_000))
 
     expect(buildRestoreReport(withDerivedPaid(data), actualOf(data)).overpaidOrders).toBe(1)
+  })
+
+  it('nhóm lựa chọn mất khi khôi phục thì hiện đúng dòng "Nhóm lựa chọn" và báo chưa khớp', () => {
+    const data = ledgerK()
+    data.optionGroups.push(mk.choiceGroup(1, 51))
+    const actual = actualOf(data)
+    actual.counts.optionGroups = 0
+
+    const report = buildRestoreReport(withDerivedPaid(data), actual)
+
+    expect(report.ok).toBe(false)
+    expect(report.rows.find((row) => row.key === 'optionGroups')).toMatchObject({
+      label: 'Nhóm lựa chọn',
+      expected: 1,
+      actual: 0,
+      matches: false,
+    })
+  })
+
+  it('không có nhóm lựa chọn ở cả hai phía thì không hiện dòng của bảng đó', () => {
+    const report = buildRestoreReport(withDerivedPaid(ledgerK()), actualOf(ledgerK()))
+
+    expect(report.rows.map((row) => row.key)).not.toContain('optionGroups')
   })
 })
 

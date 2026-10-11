@@ -11,7 +11,7 @@ import {
 } from '@/domain/line-extras'
 import { formatAmount, parseQtyInput, formatQty } from '@/domain/money'
 import { calcLineAmount, calcUnitPriceWithToppings } from '@/domain/order-total'
-import type { LineTopping, OptionGroup, ToppingMenuItem } from '@/domain/schema'
+import type { LineTopping, LegacyOptionGroup, ToppingMenuItem } from '@/domain/schema'
 import { listRecentLineNotes } from '@/db/repositories/orders'
 import { Button } from '@/ui/button'
 import { SelectChip } from '@/ui/chip'
@@ -87,7 +87,7 @@ export function LineEditSheet({
 }: {
   line: CartLine
   /** Thực đơn tuỳ chọn và topping của nhóm món chứa món này; `undefined` là món chưa phân nhóm. */
-  menu: { optionGroups: readonly OptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined
+  menu: { optionGroups: readonly LegacyOptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined
   mode?: 'add' | 'edit'
   subtitle?: string
   onApply: (patch: {

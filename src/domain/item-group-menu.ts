@@ -1,11 +1,11 @@
 import { ICE_OPTION_GROUP } from './line-extras'
-import type { OptionGroup, ToppingMenuItem } from './schema'
+import type { LegacyOptionGroup, ToppingMenuItem } from './schema'
 
 export type OptionGroupDraft = { name: string; choicesText: string }
 export type ToppingDraft = { name: string; price: number | null }
 
 type MenuResult =
-  | { ok: true; optionGroups: OptionGroup[]; toppingMenu: ToppingMenuItem[] }
+  | { ok: true; optionGroups: LegacyOptionGroup[]; toppingMenu: ToppingMenuItem[] }
   | { ok: false; error: string }
 
 const key = (text: string) => text.trim().toLocaleLowerCase('vi')
@@ -23,7 +23,7 @@ const splitChoices = (text: string): string[] =>
  * giữa hai nhóm thì bấm nhóm này sẽ gỡ nhầm lựa chọn của nhóm kia.
  */
 export function buildMenu(optionDrafts: readonly OptionGroupDraft[], toppingDrafts: readonly ToppingDraft[]): MenuResult {
-  const optionGroups: OptionGroup[] = []
+  const optionGroups: LegacyOptionGroup[] = []
   const seenGroups = new Set([key(ICE_OPTION_GROUP.name)])
   const seenChoices = new Set(ICE_OPTION_GROUP.choices.map(key))
 
@@ -59,7 +59,7 @@ export function buildMenu(optionDrafts: readonly OptionGroupDraft[], toppingDraf
   return { ok: true, optionGroups, toppingMenu }
 }
 
-export const toOptionDrafts = (groups: readonly OptionGroup[]): OptionGroupDraft[] =>
+export const toOptionDrafts = (groups: readonly LegacyOptionGroup[]): OptionGroupDraft[] =>
   groups.map((group) => ({ name: group.name, choicesText: group.choices.join(', ') }))
 
 export const toToppingDrafts = (menu: readonly ToppingMenuItem[]): ToppingDraft[] =>

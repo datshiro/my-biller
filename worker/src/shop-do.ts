@@ -937,7 +937,22 @@ export class ShopDO extends DurableObject<Env> {
     const stored = this.ledgerPayload('itemGroups', event.entityKey)?.after
     if (!stored) return event
     const after = { ...event.after }
-    for (const field of ['optionGroups', 'toppingMenu']) {
+    for (const field of ['optionGroups', 'toppingMenu', 'optionGroupGids']) {
+      if (!(field in raw.after) && field in stored) after[field] = stored[field]
+    }
+    return { ...event, after }
+  }
+
+  /**
+   * Máy bản cũ không biết món topping: sửa giá món topping là đẩy lên bản ghi thiếu `kind` và `optionGroupGids`.
+   * Ghi đè theo last-write-wins thì món topping thành món thường và mất nhóm lựa chọn trên mọi máy.
+   */
+  private preserveItemCatalog(raw: SyncEvent, event: SyncEvent): SyncEvent {
+    if (event.table !== 'items' || !event.after || !raw.after) return event
+    const stored = this.ledgerPayload('items', event.entityKey)?.after
+    if (!stored) return event
+    const after = { ...event.after }
+    for (const field of ['kind', 'optionGroupGids']) {
       if (!(field in raw.after) && field in stored) after[field] = stored[field]
     }
     return { ...event, after }
@@ -976,7 +991,10 @@ export class ShopDO extends DurableObject<Env> {
     const checked = this.validateEventPayloads(event)
     if ('problem' in checked) return checked
     const validated = {
-      event: this.preserveShopBranding(event, this.preserveItemGroupMenu(event, checked.event)),
+      event: this.preserveShopBranding(
+        event,
+        this.preserveItemCatalog(event, this.preserveItemGroupMenu(event, checked.event)),
+      ),
     }
     const identityProblem = this.identityProblem(validated.event)
     if (identityProblem) return { problem: identityProblem }
@@ -1097,8 +1115,13 @@ export class ShopDO extends DurableObject<Env> {
   /**
    * Chỉ áp cho máy có khai báo khả năng `item-name-taken`: máy cũ không biết mã này sẽ nuốt lỗi
    * hoặc cuộn ngược đuôi hàng đợi, nên luật chỉ bật khi `acceptEvent` biết chắc máy hiểu được.
+   * Món topping chỉ bán kèm (`isActive: 0`) cũng giữ tên của nó, nhưng chỉ với máy `catalog-v2`: máy cũ không
+   * thấy món đó trên lưới nên trả `item-name-taken` cho nó là chặn một tên nó không có cách nào nhìn ra.
    */
-  private itemNameTaken(event: SyncEvent): { existingGid: string; existingName: string } | null {
+  private itemNameTaken(
+    event: SyncEvent,
+    countHiddenToppings: boolean,
+  ): { existingGid: string; existingName: string } | null {
     if (event.table !== 'items' || event.operation === 'delete' || !event.after) return null
     if (event.after.isActive !== 1) return null
     const key = itemNameKey(String(event.after.name))
@@ -1111,8 +1134,9 @@ export class ShopDO extends DurableObject<Env> {
       "SELECT entityKey, payload FROM ledger WHERE tableName = 'items' AND entityKey != ? ORDER BY updatedSeq ASC",
       event.entityKey,
     )) {
-      const other = (JSON.parse(row.payload) as { after: { name: string; isActive: number } }).after
-      if (other.isActive === 1 && itemNameKey(other.name) === key) {
+      const other = (JSON.parse(row.payload) as { after: { name: string; isActive: number; kind?: string } }).after
+      const claimed = other.isActive === 1 || (countHiddenToppings && other.kind === 'topping')
+      if (claimed && itemNameKey(other.name) === key) {
         return { existingGid: row.entityKey, existingName: other.name }
       }
     }
@@ -1199,7 +1223,7 @@ export class ShopDO extends DurableObject<Env> {
         return { ok: false, error: 'business-rejected', message: canonical.problem }
       }
       if (caps.includes('item-name-taken')) {
-        const taken = this.itemNameTaken(canonical.event)
+        const taken = this.itemNameTaken(canonical.event, caps.includes('catalog-v2'))
         if (taken) {
           return {
             ok: false,

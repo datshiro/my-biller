@@ -19,6 +19,7 @@ export function emptyLedger(): BackupData {
     payments: [],
     expenseCategories: [],
     expenses: [],
+    optionGroups: [],
   }
 }
 
@@ -51,6 +52,10 @@ export const mk = {
   expense: (id: number, gid: number, categoryId: number | null, amount: number, over: Partial<Row<'expenses'>> = {}): Row<'expenses'> => ({
     id, gid: g(gid), categoryId, amount, note: '', spentAt: at, createdAt: 1, updatedAt: 1, ...over,
   }),
+  choiceGroup: (id: number, gid: number, over: Partial<Row<'optionGroups'>> = {}): Row<'optionGroups'> => ({
+    id, gid: g(gid), kind: 'choice', name: `Nhóm ${gid}`, required: 0, maxSelect: 1, defaultChoice: null,
+    choices: ['Ít đường', 'Không đường'], sortOrder: 1, isActive: 1, createdAt: 1, updatedAt: 1, ...over,
+  } as Row<'optionGroups'>),
 }
 
 /**
@@ -77,6 +82,7 @@ export function shiftIds(data: BackupData, offset: number): BackupData {
     })),
     expenseCategories: data.expenseCategories.map((row) => ({ ...row, id: s(row.id) })),
     expenses: data.expenses.map((row) => ({ ...row, id: s(row.id), categoryId: sn(row.categoryId) })),
+    optionGroups: data.optionGroups.map((row) => ({ ...row, id: s(row.id) })),
   }
 }
 

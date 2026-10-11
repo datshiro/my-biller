@@ -17,6 +17,7 @@ import { rollbackRejectedTail } from '../pusher'
 import { resolveItemNameTaken } from '../item-name-taken'
 import type { OutboxRow } from '../outbox'
 import type { ServerEvent } from '@shared/sync-events'
+import type { OptionGroupRow } from '@/domain/schema'
 
 let leader: NonNullable<Awaited<ReturnType<typeof claimLeadership>>>
 
@@ -40,7 +41,11 @@ beforeEach(async () => {
 })
 
 /** Mô phỏng món E đã có trên sổ chung, do máy khác tạo — áp thẳng bằng applyEvents, không qua outbox. */
-async function seedExistingItem(name: string, unitPrice: number): Promise<{ gid: string; id: number }> {
+async function seedExistingItem(
+  name: string,
+  unitPrice: number,
+  kind?: 'topping',
+): Promise<{ gid: string; id: number }> {
   const gid = crypto.randomUUID()
   const event: ServerEvent = {
     eventId: crypto.randomUUID(),
@@ -57,6 +62,7 @@ async function seedExistingItem(name: string, unitPrice: number): Promise<{ gid:
     after: {
       gid,
       name,
+      ...(kind ? { kind } : {}),
       groupId: null,
       unit: 'Ly',
       unitPrice,
@@ -206,6 +212,53 @@ describe('resolveItemNameTaken — nối món (operation: create)', () => {
     const notice = (await db.deviceState.get('notice')) as { message: string } | undefined
     expect(notice?.message).toContain('đã được đổi tên thành “Flan nhà làm”')
     expect(notice?.message).toContain('vẫn được gộp')
+  })
+
+  it('D là topping mà E là món thường: D bị gỡ khỏi các nhóm, nhóm hết topping thì tắt, câu báo nêu tên các nhóm', async () => {
+    const existing = await seedExistingItem('Bánh flan', 15_000)
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1, kind: 'topping' })
+    const dGid = (await db.items.get(dId))!.gid
+    const [dCreate] = await outboxRowsOf('items', dGid)
+    const otherGid = crypto.randomUUID()
+    const emptiedId = await db.optionGroups.add({
+      gid: crypto.randomUUID(), kind: 'topping', name: 'Topping trà sữa', required: 0, maxSelect: null, defaultChoice: null,
+      sortOrder: 1, isActive: 1, createdAt: 1, updatedAt: 1, toppings: [{ itemGid: dGid, price: null }],
+    } as OptionGroupRow)
+    const keptId = await db.optionGroups.add({
+      gid: crypto.randomUUID(), kind: 'topping', name: 'Topping trà đá', required: 0, maxSelect: null, defaultChoice: null,
+      sortOrder: 2, isActive: 1, createdAt: 1, updatedAt: 1, toppings: [{ itemGid: dGid, price: 2_000 }, { itemGid: otherGid, price: null }],
+    } as OptionGroupRow)
+
+    const outcome = await resolveItemNameTaken(dCreate!, existing.gid, 'Bánh flan', leader)
+    expect(outcome).toBe('resolved')
+
+    expect(await db.optionGroups.get(emptiedId)).toMatchObject({ isActive: 0, toppings: [{ itemGid: dGid, price: null }] })
+    expect(await db.optionGroups.get(keptId)).toMatchObject({ isActive: 1, toppings: [{ itemGid: otherGid, price: null }] })
+    const notice = (await db.deviceState.get('notice')) as { message: string } | undefined
+    expect(notice?.message).toContain('“Bánh flan” không phải món topping nên đã được gỡ khỏi nhóm')
+    expect(notice?.message).toContain('“Topping trà sữa”')
+    expect(notice?.message).toContain('“Topping trà đá”')
+  })
+
+  it('nhóm topping trỏ tới D được trỏ sang E; nhóm có cả D lẫn E chỉ còn một dòng E, giữ giá của dòng đứng trước', async () => {
+    const existing = await seedExistingItem('Bánh flan', 15_000, 'topping')
+    const dId = await createItem({ name: 'Bánh flan', groupId: null, unit: 'Ly', unitPrice: 16_000, costPrice: null, isActive: 1, kind: 'topping' })
+    const dGid = (await db.items.get(dId))!.gid
+    const [dCreate] = await outboxRowsOf('items', dGid)
+    const toppingGroup = (gid: string, toppings: { itemGid: string; price: number | null }[]): OptionGroupRow =>
+      ({ gid, kind: 'topping', name: 'Topping', required: 0, maxSelect: null, defaultChoice: null, sortOrder: 1, isActive: 1, createdAt: 1, updatedAt: 1, toppings }) as OptionGroupRow
+    const withD = await db.optionGroups.add(toppingGroup(crypto.randomUUID(), [{ itemGid: dGid, price: 2_000 }, { itemGid: existing.gid, price: null }]))
+    const onlyD = await db.optionGroups.add(toppingGroup(crypto.randomUUID(), [{ itemGid: dGid, price: null }]))
+
+    const outcome = await resolveItemNameTaken(dCreate!, existing.gid, 'Bánh flan', leader)
+    expect(outcome).toBe('resolved')
+
+    const toppingsOf = async (id: number) => {
+      const row = await db.optionGroups.get(id)
+      return row?.kind === 'topping' ? row.toppings : null
+    }
+    expect(await toppingsOf(withD)).toEqual([{ itemGid: existing.gid, price: 2_000 }])
+    expect(await toppingsOf(onlyD)).toEqual([{ itemGid: existing.gid, price: null }])
   })
 
   it('giá riêng: E chưa có giá cho K thì giá của D chuyển sang E', async () => {

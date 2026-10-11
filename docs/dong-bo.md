@@ -50,6 +50,22 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   không có đường nào đổi được nó. Gộp sao lưu giữ cờ của phía nào có, vì file của máy cũ thiếu trường. Worker phải
   lên TRƯỚC Pages/APK: Worker cũ cắt trường ở `create` vĩnh viễn, và applier đặt lại nguyên hàng từ event phát
   lại nên chính máy vừa tạo đơn cũng mất cờ. Không rollback Worker về bản chưa biết trường.
+- Món topping và nhóm lựa chọn dùng chung: `items.kind` (`item`/`topping`), `items.optionGroupGids` và
+  `itemGroups.optionGroupGids` (gid của nhóm lựa chọn, tối đa 20, không trùng). Cả ba **không có `.default`**, cùng lẽ
+  với `serviceMode`: applier parse hàng kéo về trước khi lưu, mặc định ở schema sẽ biến "không biết" thành giá trị thật.
+  Mặc định (`kind: 'item'`, `[]`) chỉ điền lúc đọc Dexie; `updateItem`/`updateGroup` chỉ ghi các trường này khi đang
+  sửa chúng hoặc hàng gốc đã có (cùng guard với thực đơn nhóm món). Worker chép giá trị đang lưu vào bản ghi thiếu
+  trường (`preserveItemCatalog`, `preserveItemGroupMenu`), nên máy 2.19.0 sửa giá món topping hay đổi tên nhóm không
+  làm mất chúng. Món topping `isActive: 1` bán riêng được như món thường; `isActive: 0` chỉ bán kèm, app cũ tự ẩn khỏi
+  lưới vì lọc theo `isActive`.
+- Bảng `optionGroups` (nhóm lựa chọn: `kind: 'choice'` với `choices`, hoặc `kind: 'topping'` với
+  `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
+  bộ khi gặp bảng lạ, nên bảng này sẽ đi luồng danh mục riêng. Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
+  máy đã ghép để dựng lại bản sao (hàng đã đi qua zod của bản cũ bị cắt `kind`/`optionGroupGids`). Tham chiếu theo
+  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó; lúc
+  đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. File sao lưu lên `version: 5` có bảng `optionGroups`
+  (file 1–4 được bù mảng rỗng; file 5 thiếu bảng là file hỏng); gộp file của máy cũ giữ `kind`/`optionGroupGids` của
+  phía có trường.
 - Máy **chưa ghép** gửi nhịp báo (`POST /heartbeat`) khi mở app (nếu lần gửi trước đã quá 15 phút), mỗi 6 giờ khi app
   đang mở, và ngay sau khi tự huỷ ghép hoặc chuyển thành máy chưa ghép. Nhịp báo chỉ gồm mã cài đặt, tên quán, phiên
   bản, nền tảng, số đơn, số khách và tổng nợ; **không** có đơn, khách hay tên khách. Máy đã ghép không gửi nhịp báo.
@@ -160,6 +176,8 @@ không đẩy từng event qua pusher.
   với một món khác đang `isActive` bị từ chối `item-name-taken`. Luật chỉ áp cho máy gửi `caps` kèm
   `item-name-taken` trong request; máy ở bản cũ hơn chưa gửi `caps` không bị ảnh hưởng, đơn của máy đó
   không bao giờ bị hoàn lại vì lý do này.
+- Máy gửi thêm `catalog-v2` trong `caps` thì món topping chỉ bán kèm (`isActive: 0`) cũng giữ tên của nó. Máy cũ
+  không thấy món đó trên lưới nên với máy cũ luật giữ như trên.
 - Khi bị từ chối lúc tạo mới, máy không hoàn tác mà nối (merge) dữ liệu vừa tạo sang món có sẵn trong
   sổ chung — đơn hàng, giá riêng theo khách và các thay đổi khác của món đó được trỏ lại sang
   `entityKey` của món có sẵn, không cuộn đuôi tên để thử lại.

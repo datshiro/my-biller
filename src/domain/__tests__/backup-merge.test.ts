@@ -760,3 +760,49 @@ describe('mergeByGid — Tại chỗ / Mang về', () => {
     expect(orders.find((o) => o.gid === g(11))).not.toHaveProperty('serviceMode')
   })
 })
+
+describe('gộp file bản cũ vào máy có món topping', () => {
+  const deviceWithTopping = () => ({
+    ...emptyLedger(),
+    items: [mk.item(1, 5, { kind: 'topping', optionGroupGids: [g(9)], unitPrice: 5_000, updatedAt: 10 })],
+  })
+
+  const v4FileOf = (items: BackupData['items']) => {
+    const data: Partial<BackupData> = { ...emptyLedger(), items }
+    delete data.optionGroups
+    return parseBackupFile(
+      JSON.stringify({
+        app: 'my-biller',
+        version: 4,
+        appVersion: '2.19.0',
+        exportedAt: '2026-10-01T03:00:00.000Z',
+        data,
+      }),
+    ).data
+  }
+
+  it('file v4 có món mới hơn nhưng thiếu kind và optionGroupGids thì món vẫn là topping và giữ nhóm lựa chọn', () => {
+    const incoming = v4FileOf([omit(mk.item(1, 5, { unitPrice: 12_000, updatedAt: 20 }), 'kind', 'optionGroupGids')])
+
+    const { merged: result } = merged(mergeByGid(deviceWithTopping(), incoming, {}, 'A'))
+
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({ gid: g(5), unitPrice: 12_000, kind: 'topping', optionGroupGids: [g(9)] })
+  })
+
+  it('file có món cũ hơn thiếu kind thì máy giữ nguyên kind và nhóm lựa chọn của mình', () => {
+    const incoming = v4FileOf([omit(mk.item(1, 5, { unitPrice: 1_000, updatedAt: 2 }), 'kind', 'optionGroupGids')])
+
+    const { merged: result } = merged(mergeByGid(deviceWithTopping(), incoming, {}, 'A'))
+
+    expect(result.items[0]).toMatchObject({ unitPrice: 5_000, kind: 'topping', optionGroupGids: [g(9)] })
+  })
+
+  it('file mới hơn có kind rõ ràng thì lấy kind của file, còn nhóm lựa chọn vắng thì vẫn lấy của máy', () => {
+    const incoming: BackupData = { ...emptyLedger(), items: [mk.item(1, 5, { kind: 'item', updatedAt: 20 })] }
+
+    const { merged: result } = merged(mergeByGid(deviceWithTopping(), incoming, {}, 'A'))
+
+    expect(result.items[0]).toMatchObject({ kind: 'item', optionGroupGids: [g(9)] })
+  })
+})

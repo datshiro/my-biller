@@ -6,10 +6,12 @@ import {
   ExpenseCategorySchema,
   ExpenseSchema,
   ItemGroupSchema,
+  ItemKindSchema,
   ItemSchema,
   LabelWatermarkSchema,
+  LegacyOptionGroupSchema,
   LineToppingSchema,
-  OptionGroupSchema,
+  OptionGroupRowSchema,
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
@@ -25,10 +27,12 @@ export {
   ExpenseCategorySchema,
   ExpenseSchema,
   ItemGroupSchema,
+  ItemKindSchema,
   ItemSchema,
   LabelWatermarkSchema,
+  LegacyOptionGroupSchema,
   LineToppingSchema,
-  OptionGroupSchema,
+  OptionGroupRowSchema,
   OrderLineSchema,
   OrderSchema,
   PaymentSchema,
@@ -135,6 +139,7 @@ export const BackupDataSchema = z.object({
   payments: z.array(PaymentSchema.extend({ id: Id })),
   expenseCategories: z.array(ExpenseCategorySchema.extend({ id: Id })),
   expenses: z.array(ExpenseSchema.extend({ id: Id })),
+  optionGroups: z.array(OptionGroupRowSchema.and(z.object({ id: Id }))),
 })
 
 /**
@@ -143,13 +148,13 @@ export const BackupDataSchema = z.object({
  * bị lược mất bảng giá, và khi đó `version` chỉ còn là chữ trang trí.
  */
 function migrateLegacyBackup(raw: unknown): unknown {
-  const file = raw as { version?: unknown; data?: Record<string, unknown> } | null
+  const file = withOptionGroups(raw) as { version?: unknown; data?: Record<string, unknown> } | null
   if (
     (file?.version !== 1 && file?.version !== 2 && file?.version !== 3) ||
     typeof file.data !== 'object' ||
     file.data === null
   ) {
-    return raw
+    return file
   }
 
   const dataWithPriceBook = file.version === 1 ? { customerPrices: [], ...file.data } : file.data
@@ -206,6 +211,14 @@ function migrateLegacyBackup(raw: unknown): unknown {
   }
 }
 
+/** File trước `version: 5` ra đời trước nhóm lựa chọn dùng chung; file v5 thiếu bảng này là file hỏng. */
+function withOptionGroups(raw: unknown): unknown {
+  const file = raw as { version?: unknown; data?: Record<string, unknown> } | null
+  const legacy = file?.version === 1 || file?.version === 2 || file?.version === 3 || file?.version === 4
+  if (!legacy || typeof file.data !== 'object' || file.data === null) return raw
+  return { ...file, data: { optionGroups: [], ...file.data } }
+}
+
 /**
  * Đúng 5 trường này — Phase 9 dùng lại y nguyên.
  * Khi đổi schema sau này, `version` là chỗ rẽ nhánh để file sao lưu cũ vẫn nhập được.
@@ -214,7 +227,7 @@ export const BackupFileSchema = z.preprocess(
   migrateLegacyBackup,
   z.object({
     app: z.literal('my-biller'),
-    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
     appVersion: z.string(),
     exportedAt: z.string(),
     data: BackupDataSchema,
@@ -239,7 +252,9 @@ export type CustomerPrice = z.infer<typeof CustomerPriceSchema>
 export type Order = z.infer<typeof OrderSchema>
 export type OrderLine = z.infer<typeof OrderLineSchema>
 export type LineTopping = z.infer<typeof LineToppingSchema>
-export type OptionGroup = z.infer<typeof OptionGroupSchema>
+export type LegacyOptionGroup = z.infer<typeof LegacyOptionGroupSchema>
+export type OptionGroupRow = z.infer<typeof OptionGroupRowSchema>
+export type ItemKind = z.infer<typeof ItemKindSchema>
 export type ToppingMenuItem = z.infer<typeof ToppingMenuItemSchema>
 export type Payment = z.infer<typeof PaymentSchema>
 export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>

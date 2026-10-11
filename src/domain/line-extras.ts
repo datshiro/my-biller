@@ -1,12 +1,12 @@
-import type { LineTopping, OptionGroup, ToppingMenuItem } from './schema'
+import type { LineTopping, LegacyOptionGroup, ToppingMenuItem } from './schema'
 
 /**
  * Nhóm tuỳ chọn có sẵn cho MỌI món, không phải một hàng thực đơn phải seed và đồng bộ cho từng nhóm món.
  * Hai nhãn đá loại trừ nhau: một ly không thể vừa đá chung vừa đá riêng, muốn cả hai kiểu thì đó là hai dòng.
  */
-export const ICE_OPTION_GROUP: OptionGroup = { name: 'Đá', choices: ['Đá chung', 'Đá riêng'] }
+export const ICE_OPTION_GROUP: LegacyOptionGroup = { name: 'Đá', choices: ['Đá chung', 'Đá riêng'] }
 
-export const optionGroupsFor = (menu: { optionGroups: readonly OptionGroup[] } | undefined): OptionGroup[] => [
+export const optionGroupsFor = (menu: { optionGroups: readonly LegacyOptionGroup[] } | undefined): LegacyOptionGroup[] => [
   ICE_OPTION_GROUP,
   ...(menu?.optionGroups ?? []),
 ]
@@ -15,13 +15,13 @@ export const optionGroupsFor = (menu: { optionGroups: readonly OptionGroup[] } |
  * Bật/tắt một lựa chọn: bấm lựa chọn khác trong cùng nhóm thì THAY, bấm lại lựa chọn đang chọn thì gỡ.
  * Nhãn của nhóm khác giữ nguyên thứ tự.
  */
-export function toggleOption(options: readonly string[], group: OptionGroup, choice: string): string[] {
+export function toggleOption(options: readonly string[], group: LegacyOptionGroup, choice: string): string[] {
   const others = options.filter((option) => !group.choices.includes(option))
   return options.includes(choice) ? others : [...others, choice]
 }
 
 /** Nhãn đã chọn mà thực đơn không còn nhóm nào chứa (nhóm bị xoá, hoặc đơn cũ). Vẫn phải gỡ được. */
-export const orphanOptions = (options: readonly string[], groups: readonly OptionGroup[]): string[] =>
+export const orphanOptions = (options: readonly string[], groups: readonly LegacyOptionGroup[]): string[] =>
   options.filter((option) => !groups.some((group) => group.choices.includes(option)))
 
 /**
@@ -50,7 +50,7 @@ export const toppingAmount = (topping: Pick<LineTopping, 'unitPrice' | 'qty'>): 
  * tính: tính nó thì món nào chạm vào cũng bật sheet hỏi, và Trà đá mất đường một chạm là vào đơn.
  */
 export const hasOwnMenu = (
-  menu: { optionGroups: readonly OptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined,
+  menu: { optionGroups: readonly LegacyOptionGroup[]; toppingMenu: readonly ToppingMenuItem[] } | undefined,
 ): boolean => (menu?.optionGroups.length ?? 0) > 0 || (menu?.toppingMenu.length ?? 0) > 0
 
 /**

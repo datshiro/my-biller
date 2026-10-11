@@ -28,7 +28,7 @@ async function currentRow(transaction: Transaction, row: OutboxRow) {
   const table = transaction.table(row.table)
   return row.table === 'settings'
     ? table.get(row.entityKey)
-    : table.where('gid').equals(row.entityKey).first()
+    : table.where('gid').equals(row.entityKey).raw().first()
 }
 
 export async function restoreRow(transaction: Transaction, row: OutboxRow): Promise<boolean> {

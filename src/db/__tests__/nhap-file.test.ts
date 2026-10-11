@@ -159,6 +159,25 @@ describe('applyItemImport — chính sách bỏ qua/cập nhật', () => {
     expect(event.operation).toBe('put')
   })
 
+  it("'update' trên món ghi trước khi có kind: hàng thô và sự kiện put không có kind hay optionGroupGids", async () => {
+    await pairDevice()
+    const id = await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_000, costPrice: null, isActive: 1 })
+    const gid = (await db.items.where(':id').equals(id).raw().first())!.gid
+    await db.outbox.clear()
+
+    await applyItemImport([itemRow({ name: 'Trà đá', unitPrice: 4_000 })], 'update')
+
+    const stored = await db.items.where(':id').equals(id).raw().first()
+    expect(stored).toMatchObject({ unitPrice: 4_000 })
+    expect(stored).not.toHaveProperty('kind')
+    expect(stored).not.toHaveProperty('optionGroupGids')
+    const puts = ((await db.outbox.toArray()) as OutboxRow[]).filter((row) => row.entityKey === gid && row.operation === 'put')
+    expect(puts).toHaveLength(1)
+    expect(puts[0]!.after).toMatchObject({ unitPrice: 4_000 })
+    expect(puts[0]!.after).not.toHaveProperty('kind')
+    expect(puts[0]!.after).not.toHaveProperty('optionGroupGids')
+  })
+
   it("trùng một món đang ngừng bán, 'update': giá đổi nhưng isActive vẫn 0, duplicatesInactive đếm đúng", async () => {
     const id = await createItem({ name: 'Trà đá', groupId: null, unit: 'Ly', unitPrice: 3_000, costPrice: null, isActive: 0 })
 

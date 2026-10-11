@@ -223,7 +223,8 @@ export async function stageExistingLedger(transaction: Transaction): Promise<num
   const txId = crypto.randomUUID()
   let txOrder = 0
   for (const tableName of LEDGER_TABLE_NAMES) {
-    const rows = (await transaction.table(tableName).toArray()) as Record<string, unknown>[]
+    // Thô, cùng lẽ với sao lưu: mặc định điền lúc đọc không được lên sổ chung như giá trị thật.
+    const rows = (await transaction.table(tableName).toCollection().raw().toArray()) as Record<string, unknown>[]
     for (const row of rows) {
       const entity = entityOf(tableName, row)
       if (!entity) throw new Error(`Không tìm thấy gid/key khi nạp bảng ${tableName}.`)

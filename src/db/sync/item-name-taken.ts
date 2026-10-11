@@ -5,10 +5,11 @@ import { assertLeadership, type LeaderToken } from './leader'
 import { restoreRow } from './pusher'
 import type { OutboxRow } from './outbox'
 import { formatVnd } from '@/domain/money'
+import { remapToppingItems } from '@/domain/option-groups'
 import { DeviceNoticeSchema } from '@/domain/schema'
 import { LEDGER_TABLE_NAMES } from '@shared/sync-events'
 
-type ItemRow = { id: number; gid: string; name: string; unitPrice: number; isActive: 0 | 1 }
+type ItemRow = { id: number; gid: string; name: string; unitPrice: number; isActive: 0 | 1; kind?: string }
 type CustomerPriceRow = { id: number; gid: string; customerId: number; itemId: number; unitPrice: number }
 
 async function notice(message: string): Promise<void> {
@@ -125,6 +126,8 @@ async function resolveCreate(
     }
   }
 
+  const detachedFrom = await remapToppingItem(dGid, existing)
+
   if (dLocalId !== null) {
     await db.orderLines.where('itemId').equals(dLocalId).modify({ itemId: existing.id })
     const remainingLocalPrices = (await db.customerPrices
@@ -151,10 +154,40 @@ async function resolveCreate(
       `Món này đã được đổi tên thành “${tenCuoi}” trên máy nhưng vẫn được gộp vào “${existingName}” vì lúc tạo nó trùng tên.`,
     )
   }
+  if (detachedFrom.length > 0) {
+    parts.push(
+      `“${existingName}” không phải món topping nên đã được gỡ khỏi nhóm ${detachedFrom.map((name) => `“${name}”`).join(', ')}.`,
+    )
+  }
   if (restoredDeleted) {
     parts.push(`Món “${existingName}” đã bị xoá trên máy này nên được khôi phục lại để giữ các đơn đã bán.`)
   }
   await notice(parts.join(' '))
+}
+
+/**
+ * Nhóm topping trỏ theo gid nên phải nối sang món có sẵn như mọi tham chiếu khác; nhóm đã có món đó thì bỏ bản trùng.
+ * Món có sẵn không phải món topping thì không nối được (nhóm sẽ trỏ một món bán thường): gỡ khỏi nhóm, nhóm không
+ * còn topping nào thì tắt. Trả về tên các nhóm bị gỡ để câu báo nói ra.
+ */
+async function remapToppingItem(fromGid: string, existing: ItemRow): Promise<string[]> {
+  const detachedFrom: string[] = []
+  for (const group of await db.optionGroups.toArray()) {
+    if (group.kind !== 'topping' || !group.toppings.some((topping) => topping.itemGid === fromGid)) continue
+    if (existing.kind === 'topping') {
+      const toppings = remapToppingItems(group.toppings, (gid) => (gid === fromGid ? existing.gid : gid))
+      await db.optionGroups.put({ ...group, toppings, updatedAt: Date.now() })
+      continue
+    }
+    detachedFrom.push(group.name)
+    const toppings = group.toppings.filter((topping) => topping.itemGid !== fromGid)
+    await db.optionGroups.put(
+      toppings.length > 0
+        ? { ...group, toppings, updatedAt: Date.now() }
+        : { ...group, isActive: 0, updatedAt: Date.now() },
+    )
+  }
+  return detachedFrom
 }
 
 class RestoreConflict extends Error {}
@@ -234,7 +267,7 @@ export async function resolveItemNameTaken(
   if (rejected.table !== 'items' || existingGid === rejected.entityKey) return 'deferred'
   const tables = LEDGER_TABLE_NAMES.map((name) => db.table(name))
   try {
-    return await db.transaction('rw', [...tables, db.outbox, db.deviceState], async (transaction) => {
+    return await db.transaction('rw', [...tables, db.optionGroups, db.outbox, db.deviceState], async (transaction) => {
       await assertLeadership(db, leader)
       verbatimWrites.add(transaction)
 

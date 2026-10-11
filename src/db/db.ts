@@ -9,19 +9,20 @@ import type {
   ExpenseCategory,
   Item,
   ItemGroup,
+  OptionGroupRow,
   Order,
   OrderLine,
   Payment,
   SettingRow,
 } from '@/domain/schema'
-import { DeviceSchemaStateSchema } from '@/domain/schema'
+import { DeviceSchemaStateSchema, type DeviceSyncState } from '@/domain/schema'
 import type { OutboxRow } from './sync/outbox'
 import { installOutboxHooks } from './sync/outbox'
 
 type Stamped = { createdAt?: number; updatedAt?: number }
 type MigratedRow = { id?: number; gid?: string; createdAt?: number; updatedAt?: number }
 
-export const CURRENT_SCHEMA_GEN = 5
+export const CURRENT_SCHEMA_GEN = 6
 
 async function backfillGids(
   transaction: Transaction,
@@ -86,10 +87,16 @@ function stampTimestamps<T extends Stamped>(table: Table<T, number>): void {
  */
 function defaultArrayFields<T extends object>(table: Table<T, number>, fields: readonly (keyof T & string)[]): void {
   table.hook('reading', (obj) => {
-    const row = obj as Record<string, unknown>
+    const row = obj as Record<string, unknown> | undefined
+    if (!row) return obj
     const missing = fields.filter((field) => !Array.isArray(row[field]))
     return missing.length === 0 ? obj : { ...obj, ...Object.fromEntries(missing.map((field) => [field, []])) }
   })
+}
+
+/** Món ghi trước khi có món topping là món thường; thiếu trường không được đọc thành `undefined`. */
+function defaultItemKind(table: Table<Item, number>): void {
+  table.hook('reading', (obj) => (obj && obj.kind === undefined ? { ...obj, kind: 'item' as const } : obj))
 }
 
 export class BillerDb extends Dexie {
@@ -104,6 +111,7 @@ export class BillerDb extends Dexie {
   payments!: Table<Payment, number>
   expenseCategories!: Table<ExpenseCategory, number>
   expenses!: Table<Expense, number>
+  optionGroups!: Table<OptionGroupRow, number>
   outbox!: Table<OutboxRow, number>
 
   constructor(name = 'my-biller') {
@@ -197,6 +205,23 @@ export class BillerDb extends Dexie {
           .put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: 5 })),
       )
 
+    // Hàng `items`/`itemGroups` mà bản cũ đã kéo về đi qua zod cũ, nên bị cắt mất `kind` và `optionGroupGids` của
+    // máy mới. Không sửa tại chỗ được (không biết giá trị thật), nên máy đã ghép dựng lại bản sao từ sổ chung.
+    this.version(6)
+      .stores({
+        optionGroups: '++id, &gid, sortOrder, isActive',
+      })
+      .upgrade(async (transaction) => {
+        const deviceState = transaction.table<DeviceState, string>('deviceState')
+        // Theo `connection`, không theo `sync`: máy đã rời sổ chung vẫn giữ hàng `sync`, mà không có kết nối thì
+        // không lượt kéo nào gỡ được cờ — `syncTransaction` sẽ chặn mọi lần ghi của máy đó mãi mãi.
+        const [connection, sync] = await Promise.all([deviceState.get('connection'), deviceState.get('sync')])
+        if (connection && sync?.key === 'sync') {
+          await deviceState.put({ ...sync, resyncRequired: true } satisfies DeviceSyncState)
+        }
+        await deviceState.put(DeviceSchemaStateSchema.parse({ key: 'schema', schemaGen: 6 }))
+      })
+
     stampTimestamps(this.itemGroups)
     stampTimestamps(this.items)
     stampTimestamps(this.customers)
@@ -204,8 +229,11 @@ export class BillerDb extends Dexie {
     stampTimestamps(this.orders)
     stampTimestamps(this.expenseCategories)
     stampTimestamps(this.expenses)
+    stampTimestamps(this.optionGroups)
     defaultArrayFields(this.orderLines, ['options', 'toppings'])
-    defaultArrayFields(this.itemGroups, ['optionGroups', 'toppingMenu'])
+    defaultArrayFields(this.itemGroups, ['optionGroups', 'toppingMenu', 'optionGroupGids'])
+    defaultArrayFields(this.items, ['optionGroupGids'])
+    defaultItemKind(this.items)
     installOutboxHooks(this)
 
     // `.upgrade()` không chạy khi IndexedDB được tạo mới thẳng ở version mới nhất.

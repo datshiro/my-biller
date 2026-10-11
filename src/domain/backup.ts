@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { formatVnd } from './money'
 import { BackupFileSchema, type BackupData, type BackupFile } from './schema'
 
-export const BACKUP_VERSION = 4
+export const BACKUP_VERSION = 5
 
 const idsOf = (rows: readonly { id: number }[]) => new Set(rows.map((row) => row.id))
 
