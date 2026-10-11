@@ -62,7 +62,7 @@ chờn. Mọi máy đã ghép ngang quyền; tài khoản người dùng và vai
   `toppings: [{ itemGid, price }]`, `price: null` = giá của món) **không thuộc chín bảng sổ chính**: máy bản cũ kẹt đồng
   bộ khi gặp bảng lạ, nên bảng này sẽ đi luồng danh mục riêng. Dexie `version(6)` thêm bảng và bật `resyncRequired` trên
   máy đã ghép để dựng lại bản sao (hàng đã đi qua zod của bản cũ bị cắt `kind`/`optionGroupGids`). Tham chiếu theo
-  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn khi còn nhóm topping đang bật dùng nó; lúc
+  gid: topping phải trỏ món `kind: 'topping'` khi ghi nhóm; xoá món bị chặn trên máy khi còn nhóm topping đang bật dùng nó (Worker chưa kiểm cho tới khi có luồng danh mục); lúc
   đọc, gid không còn hoặc nhóm đã tắt thì ẩn và không tính giá. File sao lưu lên `version: 5` có bảng `optionGroups`
   (file 1–4 được bù mảng rỗng; file 5 thiếu bảng là file hỏng); gộp file của máy cũ giữ `kind`/`optionGroupGids` của
   phía có trường.
