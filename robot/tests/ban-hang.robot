@@ -1286,6 +1286,62 @@ APK: Back khi đang lưu thu tiền bị nuốt, sổ ghi đúng một phiếu t
     Length Should Be    ${dòng_thu}    1    Sổ phải có đúng một dòng thu cho đơn vừa bán, không được ghi hai lần.
     Should Be Equal As Integers    ${dòng_thu}[0][amount]    ${đơn}[total]    Số tiền trong dòng thu không khớp tổng đơn.
 
+Mỗi lần món vào giỏ thì máy rung đúng một lần 10 ms, qua cả ba đường thêm
+    [Documentation]    Ba đường thêm: chạm món không có thực đơn, nút THÊM của sheet, Enter ở ô tìm. Chrome desktop
+    ...    không rung, nên ca gắn một hàm đếm lên `navigator.vibrate` trong trang rồi đọc lại. Gắn phải làm SAU
+    ...    `Mở Màn`, vì đi bằng URL là nạp lại trang và xoá hàm đếm. Enter hai cụm vẫn chỉ rung một lần.
+    Cài Thực Đơn Đồ Uống
+    Mở Màn    /
+    Evaluate JavaScript    ${None}
+    ...    () => { window.__rung = []; navigator.vibrate = (ms) => { window.__rung.push(ms); return true } }
+    Chọn Món    Cơm tấm
+    Chờ Thấy Chữ    Xem đơn · 1 món
+    ${sau_chạm}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${sau_chạm}    ${{[10]}}    Chạm món không có thực đơn phải rung đúng một lần 10 ms.
+
+    Chọn Món    Cà phê sữa
+    Wait For Elements State    ${SHEET} >> css=button:has-text("THÊM")    visible
+    ${mở_sheet}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${mở_sheet}    ${{[10]}}    Mới mở sheet, món chưa vào giỏ thì không được rung.
+    Click    ${SHEET} >> css=button:has-text("THÊM")
+    Chờ Thấy Chữ    Xem đơn · 2 món
+    ${sau_thêm}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${sau_thêm}    ${{[10, 10]}}    Bấm THÊM của sheet phải rung đúng một lần.
+
+    Gõ Vào Ô Tìm Món    2 com tam, 1 pho bo
+    Keyboard Key    press    Enter
+    Chờ Thấy Chữ    Xem đơn · 5 món
+    ${sau_enter}=    Evaluate JavaScript    ${None}    () => window.__rung
+    Lists Should Be Equal    ${sau_enter}    ${{[10, 10, 10]}}    Enter hai cụm là một lần vào giỏ, phải rung đúng một lần.
+
+Thứ hạng bán chạy giữ trong ca: quay lại bán đơn mới thì lưới không xếp lại, tải lại trang mới xếp theo đơn mới
+    [Documentation]    Mốc của bộ mẫu: không có đơn mới thì Cơm tấm sườn (135.000) đứng đầu lưới Tất cả, Phở bò đặc biệt
+    ...    (110.000) thứ hai. Thứ hạng đọc một lần cho mỗi lượt tải trang. Bán thêm một Phở bò đặc biệt (55.000) thì
+    ...    Phở lên 165.000 và vượt Cơm tấm, nhưng bấm BÁN ĐƠN MỚI trên phiếu (quay lại màn bán trong app, không tải lại
+    ...    trang) vẫn phải thấy Cơm tấm đầu lưới. Chỉ sau khi tải lại trang Phở mới lên đầu.
+    ...    Chọn nhóm Đồ ăn thì về thứ tự tên: Cơm tấm sườn trước Phở bò đặc biệt.
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+    Chọn Món    Phở bò
+    Mở Sheet Thu Tiền
+    Chốt Đơn
+
+    Click    css=button:text-is("BÁN ĐƠN MỚI")
+    Wait For Condition    Url    ==    ${BASE_URL}/
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+
+    Mở Màn    /
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Phở bò đặc biệt    visible
+    Click    css=[role=group][aria-label="Nhóm"] >> css=button:has-text("Đồ ăn")
+    Wait For Elements State    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=0 >> text=Cơm tấm sườn    visible
+    ${ô_thứ_hai}=    Get Text    ${LƯỚI_MẶT_HÀNG} >> css=button >> nth=1
+    Should Contain    ${ô_thứ_hai}    Phở bò đặc biệt
+
+    ${đơn}=    Đơn Mới Nhất
+    Should Be Equal As Integers    ${đơn}[total]    55000
+    Should Be Equal As Integers    ${đơn}[paidAmount]    55000
+    ${đơn_hàng}=    Đọc Bảng    orders
+    Length Should Be    ${đơn_hàng}    3    Phải có hai đơn của bộ mẫu và một đơn vừa bán.
 
 *** Keywords ***
 Nâng Version Sổ Trên Máy
