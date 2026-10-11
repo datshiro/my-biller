@@ -132,13 +132,14 @@ export const emptyCart = (): Cart => ({
  */
 const lineKey = (
   line: Pick<CartLine, 'itemId' | 'name' | 'unitPrice' | 'priceSource' | 'options' | 'toppings' | 'note'>,
-) => {
-  const extras = JSON.stringify([
+) => `${line.itemId ?? `x:${line.name}`}@${line.unitPrice}#${line.priceSource}+${extrasKey(line)}~${line.note}`
+
+/** Phần tuỳ chọn và topping của khoá dòng. Sheet sửa dòng dùng chung để nút "Thêm ly khác tuỳ chọn" khoá đúng lúc reducer coi là chưa đổi. */
+export const extrasKey = (line: Pick<CartLine, 'options' | 'toppings'>): string =>
+  JSON.stringify([
     [...line.options].sort(),
     line.toppings.map((t) => JSON.stringify([t.name, t.unitPrice, t.qty])).sort(),
   ])
-  return `${line.itemId ?? `x:${line.name}`}@${line.unitPrice}#${line.priceSource}+${extras}~${line.note}`
-}
 
 function upsert(lines: CartLine[], incoming: CartLine): CartLine[] {
   const at = lines.findIndex((line) => line.key === incoming.key)

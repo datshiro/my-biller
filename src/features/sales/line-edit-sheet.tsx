@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { CartLine } from '@/domain/cart'
+import { extrasKey, type CartLine } from '@/domain/cart'
 import {
   hasNotePhrase,
   isGroupMissing,
@@ -80,13 +80,6 @@ function groupHint(group: SaleOptionGroup): string {
 const priceOrigin = (line: CartLine) => {
   if (line.priceSource === 'manual') return 'giá riêng'
   return line.unitPrice === line.retailPrice ? 'danh mục' : 'giá sỉ'
-}
-
-/** Cùng tiêu chí với khoá dòng giỏ: thứ tự chọn không tính, nên "trân châu, thạch" và "thạch, trân châu" là một. */
-const sameExtras = (a: { options: string[]; toppings: LineTopping[] }, b: { options: string[]; toppings: LineTopping[] }) => {
-  const sig = (x: typeof a) =>
-    JSON.stringify([[...x.options].sort(), x.toppings.map((t) => JSON.stringify([t.name, t.unitPrice, t.qty])).sort()])
-  return sig(a) === sig(b)
 }
 
 /**
@@ -195,7 +188,7 @@ export function LineEditSheet({
   // Ô số lượng là của dòng gốc nên không tính: ly mới luôn là 1 ly. Khoá khi chưa đổi gì vì bấm lúc đó chỉ là nhân bản
   // y hệt dòng gốc — muốn thêm ly giống hệt thì tăng số lượng.
   const unchanged =
-    unitPrice === line.unitPrice && note.trim() === line.note && sameExtras({ options, toppings }, line)
+    unitPrice === line.unitPrice && note.trim() === line.note && extrasKey({ options, toppings }) === extrasKey(line)
   const cannotDuplicate = unitPrice === null || missing.length > 0 || unchanged
 
   const duplicate = () => {
