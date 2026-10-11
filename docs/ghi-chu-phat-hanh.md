@@ -39,9 +39,9 @@
 - **Thêm ly khác tuỳ chọn (#103).** Sheet sửa dòng có nút "Thêm ly khác tuỳ chọn": đổi đường, đá, topping, ghi chú hay
   giá rồi bấm thì giỏ thêm đúng một ly như vậy, dòng gốc giữ nguyên. Nút khoá khi chưa đổi gì. Đổi giá trong sheet thì
   ly mới là giá riêng; bật SỈ không đổi giá ly đó. Máy rung như các đường thêm món khác.
-- **Hoàn lại khi sửa dòng (#104).** Sửa dòng bằng sheet, hay gõ số vào ô số lượng rồi rời ô, có banner **Hoàn lại**
-  đưa dòng về đúng như trước khi sửa. Hoàn lại không xoá số lượng chạm thêm sau đó; sửa làm dòng gộp vào dòng khác thì
-  không có Hoàn lại. Cảnh báo giá và banner Hoàn lại hiện cùng lúc. Nút −/+ không có hoàn tác (bấm nút ngược lại).
+- **Hoàn lại khi sửa dòng (#104).** Sửa dòng bằng sheet hoặc gõ số lượng rồi rời ô đều có nút **Hoàn lại** đưa dòng
+  về như trước. Nút tự ẩn khi dòng đã đổi tiếp (chạm thêm, gộp dòng) để không xoá nhầm số lượng; cảnh báo giá vẫn hiện
+  cùng lúc. Nút −/+ không có hoàn tác (bấm nút ngược lại).
 - **Màn Máy** hiện cảnh báo khi máy 2.19.x sửa menu vượt giới hạn mô hình mới.
 
 ### Máy chạy lẫn bản (2.19.x / 2.20.0 cùng 2.21.0)
@@ -78,6 +78,7 @@
 - Bỏ "Là topping" trên một topping chỉ bán kèm thì món thành món thường đang "Ngừng bán", phải bấm "Bán lại".
 - Ghim đến qua đồng bộ khi người bán đang ở màn bán làm món đó nhảy lên ô đầu.
 - Hoàn lại chỉ giữ thay đổi gần nhất, không hoàn tác nhiều bước.
+- Bấm "Bỏ đi" (bỏ nháp giỏ) chưa ẩn nút Hoàn lại; sẽ sửa ở bản sau.
 - "Thêm ly khác tuỳ chọn": dòng gốc có số lượng lẻ thì sheet ẩn topping chưa chọn; hai dòng chỉ khác giá mang cùng nhãn
   "Sửa …"; nút hiện cả với món bán theo cân.
 
